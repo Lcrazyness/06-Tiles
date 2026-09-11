@@ -18,6 +18,7 @@
 
     <div id="game-hud" class="hidden">
         <div id="fps-display">60 FPS</div>
+        <div id="cps-display">0 CPS</div>
         <div class="hud-label">RHYTHM RUN</div>
         <div id="progress-display">0%</div>
     </div>
@@ -88,23 +89,35 @@
     </div>
 
     <div id="settings-menu" class="overlay hidden">
-        <h2>GAME SETTINGS</h2>
-        <div class="menu-content">
+        <div class="settings-shell">
+            <div class="settings-heading">
+                <span class="eyebrow">GAMEPLAY</span>
+                <h2>GAME SETTINGS</h2>
+                <p>Keep the game responsive and show only the information you want during play.</p>
+            </div>
+
             <div class="settings-row">
-                <span>Primary Theme Color</span>
-                <input type="color" id="primary-color-picker" value="#3c096c" onchange="updatePrimaryColor(this.value)">
+                <div><b>Show FPS</b><small>Display the current render rate.</small></div>
+                <input type="checkbox" id="setting-show-fps" checked>
             </div>
             <div class="settings-row">
-                <span>Main Levels BG Color</span>
-                <input type="color" id="bg-color-picker" value="#3c096c">
+                <div><b>Show CPS</b><small>Keys per second while playing.</small></div>
+                <input type="checkbox" id="setting-show-cps" checked>
             </div>
-            
             <div class="settings-row">
-                <span>Enable CBF (Sub-frame Clicks)</span>
+                <div><b>FPS Cap</b><small>Maximum render rate. Higher values use more CPU/GPU.</small></div>
+                <input type="number" id="setting-fps-cap" min="30" max="240" step="1" value="60" inputmode="numeric">
+            </div>
+            <div class="settings-row">
+                <div><b>CBF</b><small>Click Between Frames for tighter timing.</small></div>
                 <input type="checkbox" id="setting-cbf" checked>
             </div>
-            
-            <button class="nav-btn" onclick="toggleMenu('main-menu')">SAVE & BACK</button>
+            <div class="settings-row">
+                <div><b>Theme Color</b><small>Change the interface accent without changing the playfield.</small></div>
+                <input type="color" id="primary-color-picker" value="#3c096c" onchange="updatePrimaryColor(this.value)">
+            </div>
+
+            <button class="nav-btn" onclick="saveSettingsAndBack()">SAVE & BACK</button>
         </div>
     </div>
 
@@ -194,10 +207,10 @@
                 <div class="online-status"><span></span>COMING SOON</div>
             </div>
             <div class="online-tabs">
-                <button class="online-tab active">FEATURED</button>
-                <button class="online-tab">RECENT</button>
-                <button class="online-tab">TOP PLAYERS</button>
-                <button class="online-tab">LEADERBOARDS</button>
+                <button class="online-tab active" onclick="setOnlineTab(null, 'featured')">FEATURED</button>
+                <button class="online-tab" onclick="setOnlineTab(null, 'recent')">RECENT</button>
+                <button class="online-tab" onclick="showOnlinePreviewMessage()">TOP PLAYERS</button>
+                <button class="online-tab" onclick="showOnlinePreviewMessage()">LEADERBOARDS</button>
             </div>
             <div class="online-grid">
                 <article class="online-card online-hero-card">
@@ -206,7 +219,7 @@
                         <span class="online-badge">FEATURED</span>
                         <h3>Community levels are coming</h3>
                         <p>Explore player-made songs, earn ratings, climb global boards, and build your own profile.</p>
-                        <button class="online-action" disabled>ONLINE SERVICES SOON</button>
+                        <button class="online-action" onclick="showOnlinePreviewMessage()">ONLINE SERVICES SOON</button>
                     </div>
                 </article>
                 <article class="online-card stat-card">
@@ -267,22 +280,22 @@
                 <article class="online-level-card">
                     <div class="level-art level-art-a"><span>01</span></div>
                     <div class="level-card-copy"><b>Neon Rush</b><small>by Community</small><div class="level-meta"><span>★★★★★</span><span>EPIC</span></div></div>
-                    <button class="level-arrow" disabled>›</button>
+                    <button class="level-arrow" onclick="showOnlinePreviewMessage()">›</button>
                 </article>
                 <article class="online-level-card">
                     <div class="level-art level-art-b"><span>02</span></div>
                     <div class="level-card-copy"><b>Pulse Reactor</b><small>by Community</small><div class="level-meta"><span>★★★★☆</span><span>FEATURED</span></div></div>
-                    <button class="level-arrow" disabled>›</button>
+                    <button class="level-arrow" onclick="showOnlinePreviewMessage()">›</button>
                 </article>
                 <article class="online-level-card">
                     <div class="level-art level-art-c"><span>03</span></div>
                     <div class="level-card-copy"><b>Skyline</b><small>by Community</small><div class="level-meta"><span>★★★★★</span><span>NEW</span></div></div>
-                    <button class="level-arrow" disabled>›</button>
+                    <button class="level-arrow" onclick="showOnlinePreviewMessage()">›</button>
                 </article>
                 <article class="online-level-card">
                     <div class="level-art level-art-d"><span>04</span></div>
                     <div class="level-card-copy"><b>Afterglow</b><small>by Community</small><div class="level-meta"><span>★★★☆☆</span><span>RECENT</span></div></div>
-                    <button class="level-arrow" disabled>›</button>
+                    <button class="level-arrow" onclick="showOnlinePreviewMessage()">›</button>
                 </article>
             </div>
 
@@ -290,50 +303,65 @@
         </div>
     </div>
 
-    <div id="editor-ui" class="hidden">
-        <div id="editor-timer-panel" class="editor-panel">0.00s</div>
-        <div id="editor-timeline-panel" class="editor-panel">
-            <span style="font-size: 12px;">Time:</span>
-            <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.1" oninput="scrubTimeline(this.value)">
-        </div>
-        <div id="editor-left-panel" class="editor-panel">
-            <button class="editor-btn square-btn" style="background: #0055ff;" onclick="document.getElementById('audio-upload').click()">🎵<br>Load Song</button>
-            <button id="btn-song-test" class="editor-btn square-btn" onclick="toggleSongTester()">🎧<br>Song Tester</button>
-            <button id="btn-create-tiles" class="editor-btn square-btn" onclick="toggleRecording()">▶<br>Create Tiles</button>
-            <button id="btn-delete-mode" class="editor-btn square-btn" onclick="toggleDeleteMode()">🗑️<br>Delete</button>
-            <div style="border-top: 1px solid #555; padding-top: 10px; margin-top: 5px; display:flex; flex-direction:column; gap: 5px;">
-                <label style="font-size: 11px; text-align: center;">Starting Hearts:</label>
-                <input type="number" id="edit-lives" value="3" min="1" max="10" style="background:#222; color:white; border:1px solid #555; text-align:center; padding:2px; border-radius:4px;">
-                <button class="editor-btn small-bottom-btn" style="background: var(--play-blue); margin-top: 5px;" onclick="startPlaytest()">🎮 Play Test</button>
-                <div class="switch-container">
-                    <label>NoClip</label><input type="checkbox" id="edit-noclip">
-                </div>
+    <div id="editor-ui" class="hidden editor-workspace">
+        <div class="editor-topbar">
+            <div class="editor-brand"><span class="editor-brand-icon">ET</span><span><b>LEVEL EDITOR</b><small>R • T • Y • U</small></span></div>
+            <div id="editor-timer-panel" class="editor-panel editor-time-readout">0.00s</div>
+            <div class="editor-top-actions">
+                <button class="editor-icon-btn" onclick="openEditorSettingsMenu()" title="Level settings">⚙</button>
+                <button class="editor-icon-btn" onclick="openCreatorMenu()" title="Editor menu">☰</button>
             </div>
         </div>
-        <div id="editor-bottom-panel" class="editor-panel">
-            <button class="editor-btn small-bottom-btn active">Normal Tile</button>
-            <button class="editor-btn small-bottom-btn" onclick="alert('Hold a key for 1.1s while recording to create a Hold Tile!')">Hold Tile Info</button>
+
+        <div id="editor-timeline-panel" class="editor-panel editor-timeline-shell">
+            <div class="timeline-head">
+                <div><span class="eyebrow">TIMELINE</span><b id="timeline-mode-label">EDIT PLAYHEAD</b></div>
+                <div class="timeline-head-actions">
+                    <button class="timeline-action" onclick="jumpEditorToStart()">|◀</button>
+                    <button class="timeline-action" onclick="nudgeEditorTime(-0.10)">−0.10</button>
+                    <button class="timeline-action" onclick="nudgeEditorTime(0.10)">+0.10</button>
+                    <button class="timeline-action" onclick="jumpEditorToEnd()">▶|</button>
+                </div>
+            </div>
+            <div class="timeline-track-wrap">
+                <div id="editor-timeline-markers" class="timeline-markers"></div>
+                <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.01" oninput="scrubTimeline(this.value)">
+            </div>
+            <div class="timeline-foot"><span id="timeline-current-label">0.00s</span><span>Click the timeline to place effects exactly here.</span></div>
         </div>
-        <button id="editor-menu-btn" class="editor-btn editor-panel" onclick="openCreatorMenu()">☰</button>
-        <button id="editor-effect-btn" class="editor-btn editor-panel" onclick="openEffectsMenu()">✨</button>
-        <button id="editor-settings-btn" class="editor-btn editor-panel" onclick="openEditorSettingsMenu()">⚙</button>
+
+        <aside id="editor-left-panel" class="editor-panel editor-toolbar">
+            <div class="toolbar-title">TOOLS</div>
+            <button class="editor-tool primary" onclick="document.getElementById('audio-upload').click()"><span>♫</span><small>LOAD SONG</small></button>
+            <button id="btn-song-test" class="editor-tool" onclick="toggleSongTester()"><span>◉</span><small>SONG TESTER</small></button>
+            <button id="btn-create-tiles" class="editor-tool" onclick="toggleRecording()"><span>▶</span><small>RECORD TILES</small></button>
+            <button id="btn-delete-mode" class="editor-tool" onclick="toggleDeleteMode()"><span>⌫</span><small>DELETE</small></button>
+            <button id="btn-add-tile" class="editor-tool" onclick="placeTileAtPlayhead()"><span>＋</span><small>ADD TILE</small></button>
+            <button id="btn-hold-toggle" class="editor-tool" onclick="toggleHoldPlacement()"><span>↕</span><small id="hold-toggle-label">HOLD OFF</small></button>
+            <div class="toolbar-divider"></div>
+            <label class="editor-number"><span>STARTING HEARTS</span><input type="number" id="edit-lives" value="3" min="1" max="10"></label>
+            <button class="editor-tool playtest" onclick="startPlaytest()"><span>🎮</span><small>PLAY TEST</small></button>
+            <div class="editor-check"><label>NOCLIP</label><input type="checkbox" id="edit-noclip"></div>
+        </aside>
+
+        <section class="editor-canvas-shell">
+            <div id="editor-placement-hint" class="editor-placement-hint hidden">CLICK A LANE OR TIMELINE TO PLACE</div>
+        </section>
+
+        <div id="editor-bottom-panel" class="editor-panel editor-bottom-bar">
+            <div class="editor-bottom-status"><span id="editor-selection-status">No selection</span><small id="editor-selection-detail">Use the playhead and timeline to place or edit notes.</small></div>
+            <button class="editor-chip active" onclick="setTilePlacementMode(false)">NORMAL TILE</button>
+            <button class="editor-chip" onclick="setTilePlacementMode(true)">HOLD TILE</button>
+            <button class="editor-chip accent" onclick="openEffectsMenu()">✨ EFFECTS</button>
+        </div>
     </div>
 
     <div id="editor-level-settings" class="overlay hidden">
         <h2>LEVEL SETTINGS</h2>
-        <div class="menu-content">
-            <div class="settings-row">
-                <span>Target FPS</span>
-                <input type="number" id="edit-fps" value="60" min="10" max="240" style="width:60px; text-align:center; border-radius:4px; border:none; padding:4px;">
-            </div>
-            <div class="settings-row">
-                <span>Audio Offset (ms)</span>
-                <input type="number" id="edit-audio-offset" value="0" style="width:70px; text-align:center; background:#222; color:#fff; border:1px solid #555; border-radius:4px; padding: 4px;">
-            </div>
-            <div class="settings-row">
-                <span>Disable Hold Tiles</span>
-                <input type="checkbox" id="edit-disable-holds">
-            </div>
+        <div class="menu-content settings-shell">
+            <div class="settings-row"><div><b>Level FPS</b><small>Saved with this level; global FPS Cap still applies.</small></div><input type="number" id="edit-fps" value="60" min="30" max="240"></div>
+            <div class="settings-row"><div><b>Audio Offset</b><small>Shift music timing in milliseconds.</small></div><input type="number" id="edit-audio-offset" value="0"></div>
+            <div class="settings-row"><div><b>Disable Hold Tiles</b><small>Convert hold notes to normal notes when testing.</small></div><input type="checkbox" id="edit-disable-holds"></div>
             <button class="nav-btn secondary-btn" onclick="closeEditorSettingsMenu()">BACK TO EDITOR</button>
         </div>
     </div>
@@ -343,82 +371,78 @@
         <div class="menu-content">
             <button class="nav-btn" onclick="closeCreatorMenu()">RESUME</button>
             <button class="nav-btn" style="background: #9900ff; color: white;" onclick="verifyAndDownloadLevel()">▶ VERIFY & DOWNLOAD</button>
-            <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 PUBLISH TO CLOUD</button>
+            <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 PUBLISH LEVEL</button>
             <button class="nav-btn" style="background: #00cc66; color: white;" onclick="saveCustomLevel()">SAVE TO MY LEVELS</button>
             <button class="nav-btn" style="background: #cc0000; color: white;" onclick="exitEditorWithoutSaving()">QUIT</button>
         </div>
     </div>
 
     <div id="effects-menu" class="overlay hidden">
-        <h2>TIMELINE EFFECTS</h2>
-        <p style="text-align:center; font-size:12px; margin-bottom:10px; color:#aaa;">Placing effect at: <span id="effect-time-display" style="color:var(--accent-blue); font-weight:bold;">0.00</span>s</p>
-        
-        <div class="effect-menu-grid">
-            <div class="effect-group">
-                <button class="effect-btn-wide" onclick="addPulseEffect()">ADD PULSE / BG COLOR</button>
-                <div class="effect-settings">
-                    <label>Color: <input type="color" id="fx-pulse-color" value="#ff00ff"></label>
-                    <label>Layer: <select id="fx-pulse-layer"><option value="0">0 (Back)</option><option value="1">1 (Front)</option></select></label>
-                    <label>Dur (s): <input type="number" id="fx-pulse-dur" value="0.5" step="0.1" min="0.1"></label>
-                    <label>In (s): <input type="number" id="fx-pulse-in" value="0.1" step="0.1" min="0"></label>
-                    <label>Out (s): <input type="number" id="fx-pulse-out" value="0.4" step="0.1" min="0"></label>
+        <div class="effects-shell">
+            <div class="effects-heading">
+                <div><span class="eyebrow">TIMELINE FX</span><h2>EFFECTS</h2></div>
+                <div class="effect-playhead-badge"><span id="effect-time-display">0.00</span>s</div>
+            </div>
+            <div class="effects-helper">Every effect is placed at the <b>current playhead</b>. Move the playhead first, then press PLACE. No guessing coordinates.</div>
+
+            <div class="effect-tabs">
+                <button class="effect-tab active" data-effect-tab="visual" onclick="switchEffectTab('visual')">VISUAL</button>
+                <button class="effect-tab" data-effect-tab="speed" onclick="switchEffectTab('speed')">SPEED</button>
+                <button class="effect-tab" data-effect-tab="image" onclick="switchEffectTab('image')">IMAGE</button>
+                <button class="effect-tab" data-effect-tab="audio" onclick="switchEffectTab('audio')">AUDIO</button>
+            </div>
+
+            <div id="effect-pane-visual" class="effect-pane">
+                <div class="effect-card">
+                    <div class="effect-card-head"><div><b>Pulse / Flash</b><small>Quick color hit for the background or foreground.</small></div><button class="effect-place" onclick="addPulseEffect()">PLACE AT PLAYHEAD</button></div>
+                    <div class="effect-controls">
+                        <label>COLOR<input type="color" id="fx-pulse-color" value="#8b5cff"></label>
+                        <label>LAYER<select id="fx-pulse-layer"><option value="0">BACK</option><option value="1">FRONT</option></select></label>
+                        <label>DURATION<input type="number" id="fx-pulse-dur" value="0.35" min="0.05" step="0.05"></label>
+                        <label>FADE IN<input type="number" id="fx-pulse-in" value="0.08" min="0" step="0.02"></label>
+                        <label>FADE OUT<input type="number" id="fx-pulse-out" value="0.20" min="0" step="0.02"></label>
+                    </div>
+                    <div class="effect-presets"><button onclick="setPulsePreset('#38d9ff',0.25,0.05,0.18)">COOL</button><button onclick="setPulsePreset('#8b5cff',0.35,0.08,0.20)">PURPLE</button><button onclick="setPulsePreset('#ff4da6',0.25,0.05,0.18)">PINK</button></div>
+                </div>
+                <div class="effect-card">
+                    <div class="effect-card-head"><div><b>Tile Style</b><small>Normal gameplay tiles stay black unless a style change is placed.</small></div><button class="effect-place" onclick="addTileStyleEffect()">PLACE AT PLAYHEAD</button></div>
+                    <div class="effect-controls"><label>COLOR 1<input type="color" id="fx-tile-color1" value="#000000"></label><label>COLOR 2<input type="color" id="fx-tile-color2" value="#000000"></label><label>ALPHA<input type="number" id="fx-tile-alpha" value="1" min="0" max="1" step="0.05"></label></div>
                 </div>
             </div>
 
-            <div class="effect-group">
-                <button class="effect-btn-wide" onclick="addImageEffect()">ADD IMAGE (BG)</button>
-                <div class="effect-settings">
-                    <label style="grid-column: span 2;">Upload Image: <input type="file" id="fx-img-upload" accept="image/*"></label>
-                    <label>Layer: <select id="fx-img-layer"><option value="0">0 (Back)</option><option value="1">1 (Front)</option></select></label>
-                    <label>Transp. (0-1): <input type="number" id="fx-img-alpha" value="0.5" step="0.1" min="0" max="1"></label>
-                    <label>Dur (s): <input type="number" id="fx-img-dur" value="2.0" step="0.1" min="0.1"></label>
-                    <label>In (s): <input type="number" id="fx-img-in" value="0.5" step="0.1" min="0"></label>
-                    <label>Out (s): <input type="number" id="fx-img-out" value="0.5" step="0.1" min="0"></label>
+            <div id="effect-pane-speed" class="effect-pane hidden">
+                <div class="effect-card speed-editor-card">
+                    <div class="effect-card-head"><div><b>Speed Change</b><small>Choose a preset or type a target. The marker shows exactly where the change begins.</small></div><button class="effect-place speed-place" onclick="addSpeedEffect()">PLACE SPEED CHANGE</button></div>
+                    <div class="speed-preview"><span>CURRENT</span><strong id="speed-preview-current">18</strong><span>→</span><span>TARGET</span><strong id="speed-preview-target">18</strong><span>TRANSITION</span><strong id="speed-preview-transition">0.50s</strong></div>
+                    <div class="speed-presets"><button onclick="setSpeedPreset(8,0.25)">SLOW 8</button><button onclick="setSpeedPreset(12,0.35)">CALM 12</button><button onclick="setSpeedPreset(18,0.35)">NORMAL 18</button><button onclick="setSpeedPreset(24,0.45)">FAST 24</button><button onclick="setSpeedPreset(30,0.60)">RUSH 30</button></div>
+                    <div class="effect-controls"><label>TARGET SPEED<input type="number" id="fx-speed-target" value="18" min="5" max="50" step="1" oninput="updateSpeedPreview()"></label><label>TRANSITION<input type="number" id="fx-speed-trans" value="0.50" min="0" max="10" step="0.05" oninput="updateSpeedPreview()"></label></div>
+                    <div class="speed-help">Tip: place a second speed marker later to return to normal. The editor keeps each marker visible on the timeline.</div>
                 </div>
             </div>
 
-            <div class="effect-group">
-                <button class="effect-btn-wide" style="background: #00cc66; border-color: #00ff88;" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button>
-                <div class="effect-settings">
-                    <label style="grid-column: span 2;">Upload Image: <input type="file" id="fx-extra-upload" accept="image/*"></label>
-                    <label>Layer: <select id="fx-extra-layer"><option value="0">0 (Back)</option><option value="1">1 (Front)</option></select></label>
-                    <label>Alpha (0-1): <input type="number" id="fx-extra-alpha" value="1.0" step="0.1" min="0" max="1"></label>
-                    <label>Width (px): <input type="number" id="fx-extra-w" value="150"></label>
-                    <label>Height (px): <input type="number" id="fx-extra-h" value="150"></label>
-                    <label>Pos X (px): <input type="number" id="fx-extra-x" value="180"></label>
-                    <label>Pos Y (px): <input type="number" id="fx-extra-y" value="320"></label>
-                    <label>Dur (s): <input type="number" id="fx-extra-dur" value="2.0" step="0.1" min="0.1"></label>
-                    <label style="grid-column: span 2;"><button class="nav-btn secondary-btn" style="padding: 8px; font-size: 12px; font-weight:bold;" onclick="previewExtraImage()">PREVIEW IMAGE</button></label>
+            <div id="effect-pane-image" class="effect-pane hidden">
+                <div class="effect-card">
+                    <div class="effect-card-head"><div><b>Image Effect</b><small>Fade a background/foreground image in at the playhead.</small></div><button class="effect-place" onclick="addImageEffect()">PLACE AT PLAYHEAD</button></div>
+                    <div class="effect-controls"><label class="wide">IMAGE<input type="file" id="fx-img-upload" accept="image/*"></label><label>LAYER<select id="fx-img-layer"><option value="0">BACK</option><option value="1">FRONT</option></select></label><label>ALPHA<input type="number" id="fx-img-alpha" value="0.5" min="0" max="1" step="0.05"></label><label>DURATION<input type="number" id="fx-img-dur" value="2" min="0.1" step="0.1"></label><label>FADE IN<input type="number" id="fx-img-in" value="0.25" min="0" step="0.05"></label><label>FADE OUT<input type="number" id="fx-img-out" value="0.50" min="0" step="0.05"></label></div>
+                </div>
+                <div class="effect-card">
+                    <div class="effect-card-head"><div><b>Extra Image</b><small>Pick the position from the playfield instead of guessing X/Y.</small></div><button class="effect-place" onclick="addExtraImageEffect()">PLACE AT PLAYHEAD</button></div>
+                    <div class="effect-controls"><label class="wide">IMAGE<input type="file" id="fx-extra-upload" accept="image/*"></label><label>ALPHA<input type="number" id="fx-extra-alpha" value="1" min="0" max="1" step="0.05"></label><label>WIDTH<input type="number" id="fx-extra-w" value="150" min="10"></label><label>HEIGHT<input type="number" id="fx-extra-h" value="150" min="10"></label><label>DURATION<input type="number" id="fx-extra-dur" value="2" min="0.1" step="0.1"></label></div>
+                    <div class="position-actions"><button onclick="pickExtraPosition()">PICK POSITION FROM STAGE</button><button onclick="setExtraPreset('center')">CENTER</button><button onclick="setExtraPreset('top')">TOP</button><button onclick="setExtraPreset('bottom')">BOTTOM</button></div>
+                    <div class="position-readout">Position: <b id="extra-position-readout">180, 320</b></div>
                 </div>
             </div>
 
-            <div class="effect-group">
-                <button class="effect-btn-wide" style="background: #0055ff; border-color: #00a2ff;" onclick="addTileStyleEffect()">CHANGE TILE STYLE</button>
-                <div class="effect-settings">
-                    <label>Color 1: <input type="color" id="fx-tile-color1" value="#000000"></label>
-                    <label>Color 2: <input type="color" id="fx-tile-color2" value="#000000"></label>
-                    <label>Transp. (0-1): <input type="number" id="fx-tile-alpha" value="1.0" step="0.1" min="0" max="1"></label>
-                    <label>Dur (s): <input type="number" id="fx-tile-dur" value="2.0" step="0.1" min="0.1"></label>
+            <div id="effect-pane-audio" class="effect-pane hidden">
+                <div class="effect-card">
+                    <div class="effect-card-head"><div><b>Extra SFX</b><small>Place a short sound cue exactly on the timeline.</small></div><button class="effect-place" onclick="addSfxEffect()">PLACE AT PLAYHEAD</button></div>
+                    <div class="effect-controls"><label class="wide">SOUND<input type="file" id="fx-sfx-upload" accept="audio/*"></label></div>
                 </div>
             </div>
 
-            <div class="effect-group">
-                <button class="effect-btn-wide" style="background: #ff5500; border-color: #ffaa00;" onclick="addSpeedEffect()">ADD SPEED CHANGE</button>
-                <div class="effect-settings">
-                    <label>Target Speed: <input type="number" id="fx-speed-target" value="25" step="1" min="5" max="50"></label>
-                    <label>Trans. Dur: <input type="number" id="fx-speed-trans" value="1.0" step="0.1" min="0"></label>
-                </div>
-            </div>
-
-            <div class="effect-group">
-                <button class="effect-btn-wide" style="background: #9900cc; border-color: #ff00ff;" onclick="addSfxEffect()">ADD EXTRA SFX</button>
-                <div class="effect-settings">
-                    <label style="grid-column: span 2;">Upload Sound: <input type="file" id="fx-sfx-upload" accept="audio/*"></label>
-                </div>
-            </div>
-        </div>
-        <div class="menu-content" style="margin-top: 15px;">
-            <button class="nav-btn secondary-btn" onclick="closeEffectsMenu()">BACK</button>
+            <div class="effect-list-head"><span>PLACED EFFECTS</span><button onclick="refreshEffectTimeline()">REFRESH MARKERS</button></div>
+            <div id="placed-effects-list" class="placed-effects-list"></div>
+            <button class="nav-btn secondary-btn" onclick="closeEffectsMenu()">BACK TO EDITOR</button>
         </div>
     </div>
 
@@ -426,11 +450,10 @@
         <div id="score">0</div>
         <div id="rest-msg">BREATHE</div>
     </div>
+    <section class="game-canvas-shell"><canvas id="gameCanvas" width="360" height="640"></canvas></section>
     <div id="control-guide" class="hidden" aria-label="Keyboard controls">
         <span>R</span><span>T</span><span>Y</span><span>U</span>
     </div>
-    <canvas id="gameCanvas" width="360" height="640"></canvas>
-
     <div id="death-screen" class="overlay hidden">
         <h1 id="death-title" style="color: #ff3333; font-size: 48px;">FAILED</h1>
         <p id="final-score" style="font-size: 26px; margin-bottom: 20px;">Score: 0</p>
@@ -458,8 +481,9 @@
             fgImage: document.getElementById('fg-image-container'),
             bgFlash: document.getElementById('bg-flash'),
             fgFlash: document.getElementById('fg-flash'),
-            extraBg: dom.extraBg,
-            extraFg: dom.extraFg
+            extraBg: document.getElementById('extra-images-bg'),
+            extraFg: document.getElementById('extra-images-fg'),
+            cps: document.getElementById('cps-display')
         };
 
         let stageBgGradient, stageGlowGradient, tileGradientCache = new Map();
@@ -476,7 +500,19 @@
         
         let frameCount = 0;
         let lastFpsTime = 0;
+        let cpsCount = 0;
+        let cpsWindowStart = performance.now();
         let levelEndTime = 0;
+        let fpsCap = parseInt(localStorage.getItem('extremeTilesFpsCap') || '60', 10);
+        let showFps = localStorage.getItem('extremeTilesShowFps') !== 'false';
+        let showCps = localStorage.getItem('extremeTilesShowCps') !== 'false';
+        let pendingTiles = [];
+        let pendingEffects = [];
+        let currentDisableHolds = false;
+        let holdPlacementMode = false;
+        let extraImageX = 180;
+        let extraImageY = 320;
+        let pickingExtraPosition = false;
         let lastRenderedScore = -1;
         let stageCache = null;
         let stageCacheContext = null;
@@ -542,6 +578,33 @@
             document.documentElement.style.setProperty('--primary-theme', val);
             document.documentElement.style.setProperty('--play-blue', val);
         }
+
+        function loadSettings() {
+            const fpsInput = document.getElementById('setting-fps-cap');
+            const fpsToggle = document.getElementById('setting-show-fps');
+            const cpsToggle = document.getElementById('setting-show-cps');
+            const cbfToggle = document.getElementById('setting-cbf');
+            if (fpsInput) fpsInput.value = fpsCap;
+            if (fpsToggle) fpsToggle.checked = showFps;
+            if (cpsToggle) cpsToggle.checked = showCps;
+            if (cbfToggle) cbfToggle.checked = localStorage.getItem('extremeTilesCBF') !== 'false';
+            if (dom.fps) dom.fps.classList.toggle('hidden', !showFps);
+            if (dom.cps) dom.cps.classList.toggle('hidden', !showCps);
+        }
+
+        function saveSettingsAndBack() {
+            fpsCap = Math.max(30, Math.min(240, parseInt(document.getElementById('setting-fps-cap').value, 10) || 60));
+            showFps = !!document.getElementById('setting-show-fps').checked;
+            showCps = !!document.getElementById('setting-show-cps').checked;
+            localStorage.setItem('extremeTilesFpsCap', String(fpsCap));
+            localStorage.setItem('extremeTilesShowFps', String(showFps));
+            localStorage.setItem('extremeTilesShowCps', String(showCps));
+            localStorage.setItem('extremeTilesCBF', String(document.getElementById('setting-cbf').checked));
+            if (dom.fps) dom.fps.classList.toggle('hidden', !showFps);
+            if (dom.cps) dom.cps.classList.toggle('hidden', !showCps);
+            toggleMenu('main-menu');
+        }
+        loadSettings();
 
         function handleAuth() {
             if (currentUser !== 'Guest') {
@@ -632,11 +695,12 @@
             
             dom.fps.innerText = "60 FPS";
             dom.progress.innerText = "0%";
+            dom.cps.innerText = "0 CPS";
+            cpsCount = 0; cpsWindowStart = performance.now();
             frameCount = 0;
             lastFpsTime = performance.now();
             levelEndTime = 0;
             
-            document.body.style.background = document.getElementById('bg-color-picker').value || 'var(--custom-bg)';
             dom.bgImage.style.opacity = 0;
             dom.fgImage.style.opacity = 0;
             dom.bgFlash.style.opacity = 0;
@@ -649,7 +713,7 @@
             targetSpeed = speed; speedTransitionTime = 0; speedTransitionDuration = 0;
 
             bgAudio.pause(); bgAudio.currentTime = 0;
-            if(customGameInterval) clearInterval(customGameInterval);
+            if(customGameInterval) { clearInterval(customGameInterval); customGameInterval = null; }
             invalidateStageCache();
             lastTime = performance.now();
         }
@@ -684,8 +748,10 @@
                 speed = 18; targetSpeed = 18; customPlayTime = 0;
                 
                 let sourceArray = isCommunity ? communityLevels : customLevels;
-                let pendingTiles = testTiles ? JSON.parse(JSON.stringify(testTiles)) : JSON.parse(JSON.stringify(sourceArray[customIndex].data));
-                let pendingEffects = testEffects ? JSON.parse(JSON.stringify(testEffects)) : (sourceArray[customIndex].effects ? JSON.parse(JSON.stringify(sourceArray[customIndex].effects)) : []);
+                pendingTiles = testTiles ? JSON.parse(JSON.stringify(testTiles)) : JSON.parse(JSON.stringify(sourceArray[customIndex].data));
+                pendingEffects = testEffects ? JSON.parse(JSON.stringify(testEffects)) : (sourceArray[customIndex].effects ? JSON.parse(JSON.stringify(sourceArray[customIndex].effects)) : []);
+                pendingTiles.sort((a,b) => a.time - b.time);
+                pendingEffects.sort((a,b) => a.time - b.time);
                 
                 let allTimes = [0];
                 pendingTiles.forEach(t => allTimes.push(t.time + (t.holdDuration || 0)));
@@ -707,7 +773,7 @@
                 if (!windowLevelFPS || windowLevelFPS < 10) windowLevelFPS = 60;
 
                 let currentAudioOffset = loadedLevelObj && loadedLevelObj.audioOffset !== undefined ? loadedLevelObj.audioOffset : (customIndex !== -1 && sourceArray[customIndex].audioOffset !== undefined ? sourceArray[customIndex].audioOffset : (testTiles ? parseInt(document.getElementById('edit-audio-offset').value) : 0));
-                let currentDisableHolds = loadedLevelObj && loadedLevelObj.disableHolds !== undefined ? loadedLevelObj.disableHolds : (customIndex !== -1 && sourceArray[customIndex].disableHolds !== undefined ? sourceArray[customIndex].disableHolds : (testTiles ? document.getElementById('edit-disable-holds').checked : false));
+                currentDisableHolds = loadedLevelObj && loadedLevelObj.disableHolds !== undefined ? loadedLevelObj.disableHolds : (customIndex !== -1 && sourceArray[customIndex].disableHolds !== undefined ? sourceArray[customIndex].disableHolds : (testTiles ? document.getElementById('edit-disable-holds').checked : false));
 
                 let offsetMs = parseInt(currentAudioOffset) || 0;
                 if (bgAudio.src) {
@@ -723,53 +789,12 @@
                 }
 
                 customGameInterval = setInterval(() => {
-                    if(isDead || !gameActive) { clearInterval(customGameInterval); bgAudio.pause(); return; }
-                    customPlayTime += 0.016; 
-                    let spawnOffset = 690 / (speed * 60); 
-
-                    for(let i=pendingTiles.length-1; i>=0; i--) {
-                        if(customPlayTime >= pendingTiles[i].time - spawnOffset) {
-                            let isHold = pendingTiles[i].isHold;
-                            if (currentDisableHolds) isHold = false;
-                            
-                            tiles.push(new Tile(pendingTiles[i].lane, -TILE_H, isHold, pendingTiles[i].holdDuration)); 
-                            pendingTiles.splice(i, 1);
-                        }
-                    }
-
-                    for(let i=pendingEffects.length-1; i>=0; i--) {
-                        if(customPlayTime >= pendingEffects[i].time) {
-                            let fx = pendingEffects[i];
-                            if(fx.type === 'pulse') fireAdvancedPulse(fx);
-                            if(fx.type === 'image') fireAdvancedImage(fx);
-                            if(fx.type === 'extra_image') fireExtraImage(fx);
-                            if(fx.type === 'tile_style') fireTileStyle(fx);
-                            if(fx.type === 'speed') fireSpeedChange(fx);
-                            if(fx.type === 'sfx') fireSFX(fx);
-                            pendingEffects.splice(i, 1);
-                        }
-                    }
-
-                    if (levelEndTime > 0) {
-                        let pct = Math.min(100, Math.floor((customPlayTime / levelEndTime) * 100));
-                        dom.progress.innerText = pct + '%';
-                    }
-
-                    if (isVerifying && customPlayTime >= verifyEndTime && tiles.length === 0 && !isDead) {
+                    if (isDead || !gameActive) {
                         clearInterval(customGameInterval);
-                        gameActive = false;
-                        alert("Verification Complete! Level will now download.");
-                        downloadLevelData();
-                        quitPlaytestOrGame();
+                        customGameInterval = null;
                     }
+                }, 100);
 
-                    if(speedTransitionDuration > 0) {
-                        speedTransitionTime += 0.016;
-                        let progress = Math.min(speedTransitionTime / speedTransitionDuration, 1.0);
-                        speed = initialSpeed + (targetSpeed - initialSpeed) * progress;
-                        if(progress >= 1.0) speedTransitionDuration = 0;
-                    }
-                }, 16);
             }
             startRenderLoop();
         }
@@ -905,32 +930,33 @@
         }
 
         canvas.addEventListener("mousedown", (e) => {
-            if (inEditor && deleteMode) {
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const mouseX = (e.clientX - rect.left) * scaleX;
-                const mouseY = (e.clientY - rect.top) * scaleY;
-                
-                const clickedLane = Math.floor(mouseX / laneW);
-                
-                for(let i = recordedTiles.length - 1; i >= 0; i--) {
-                    let t = recordedTiles[i];
-                    if (t.lane === clickedLane) {
-                        let yOffset = (editorTimer - t.time) * (18 * 60); 
-                        let y = lineY + yOffset;
-                        let holdLen = t.isHold ? (t.holdDuration * 18 * 60) : 0;
-                        let h = TILE_H + holdLen;
-                        let drawY = y - holdLen; // the true top boundary of the combined tile
-                        
-                        if (mouseY >= drawY && mouseY <= drawY + h) {
-                            recordedTiles.splice(i, 1);
-                            editorVisualTiles = editorVisualTiles.filter(vt => vt.ref !== t);
-                            break; 
-                        }
-                    }
-                }
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            if (pickingExtraPosition) {
+                extraImageX = Math.round(mouseX); extraImageY = Math.round(mouseY); pickingExtraPosition = false;
+                const r = document.getElementById('extra-position-readout'); if (r) r.textContent = `${extraImageX}, ${extraImageY}`;
+                document.getElementById('editor-placement-hint').classList.add('hidden');
+                openEffectsMenu(); switchEffectTab('image');
+                return;
             }
+            if (!inEditor) return;
+            const clickedLane = Math.max(0, Math.min(3, Math.floor(mouseX / laneW)));
+            if (deleteMode) {
+                for (let i = recordedTiles.length - 1; i >= 0; i--) {
+                    const t = recordedTiles[i];
+                    if (t.lane !== clickedLane) continue;
+                    const yOffset = (editorTimer - t.time) * (18 * 60);
+                    const y = lineY + yOffset;
+                    const holdLen = t.isHold ? (t.holdDuration * 18 * 60) : 0;
+                    const h = TILE_H + holdLen;
+                    const drawY = y - holdLen;
+                    if (mouseY >= drawY && mouseY <= drawY + h) { recordedTiles.splice(i,1); refreshEditorTimeline(); return; }
+                }
+                return;
+            }
+            // A click anywhere on the lane adds/removes a note at the exact playhead.
+            placeTileAtPlayhead(clickedLane);
         });
 
         window.addEventListener("keydown", (e) => {
@@ -941,9 +967,10 @@
                 if (inEditor && isRecording && laneIndex !== -1 && !deleteMode) {
                     if (editorKeyTimes[laneIndex] === null) {
                         editorKeyTimes[laneIndex] = editorTimer;
-                        let newTile = { lane: laneIndex, time: editorTimer, isHold: false, holdDuration: 0 };
-                        recordedTiles.push(newTile); 
-                        editorVisualTiles.push({ lane: laneIndex, y: lineY, alpha: 1.0, ref: newTile }); 
+                        if (!holdPlacementMode) {
+                            const newTile = { lane: laneIndex, time: Math.round(editorTimer*1000)/1000, isHold:false, holdDuration:0 };
+                            recordedTiles.push(newTile); recordedTiles.sort((a,b)=>a.time-b.time); refreshEditorTimeline();
+                        }
                     }
                     return;
                 }
@@ -956,8 +983,8 @@
                         let targetY = target ? target.y : 0;
                         let firstTileY = activeTiles[0] ? activeTiles[0].y : 0;
                         
-                        const cbfToggle = document.getElementById('setting-cbf');
-                        if (cbfToggle && cbfToggle.checked) {
+                        const cbfEnabled = localStorage.getItem('extremeTilesCBF') !== 'false';
+                        if (cbfEnabled) {
                             const timeSinceLastFrame = performance.now() - lastTime;
                             const subFrameDt = timeSinceLastFrame / 16.666;
                             
@@ -967,6 +994,7 @@
 
                         if (target && (target === activeTiles[0] || targetY > firstTileY - TILE_H)) {
                             target.interacted = true; score += 10;
+                            cpsCount++;
                             addHitParticles(laneIndex);
                         } else if (firstTileY + TILE_H > 0) { 
                             if(!handleHit()) die("WRONG ORDER!"); 
@@ -982,15 +1010,17 @@
             const laneIndex = keyMap.indexOf(k);
             
             if (inEditor && isRecording && laneIndex !== -1 && editorKeyTimes[laneIndex] !== null) {
-                let duration = editorTimer - editorKeyTimes[laneIndex];
-                if (duration >= 1.1) {
+                const duration = editorTimer - editorKeyTimes[laneIndex];
+                if (holdPlacementMode) {
+                    const newTile = { lane: laneIndex, time: Math.round(editorKeyTimes[laneIndex]*1000)/1000, isHold: true, holdDuration: Math.max(0.10, duration) };
+                    recordedTiles.push(newTile); recordedTiles.sort((a,b)=>a.time-b.time); refreshEditorTimeline();
+                } else if (duration >= 1.1) {
                     for(let i = recordedTiles.length - 1; i >= 0; i--) {
-                        if(recordedTiles[i].lane === laneIndex) {
-                            recordedTiles[i].isHold = true;
-                            recordedTiles[i].holdDuration = duration;
-                            break;
+                        if(recordedTiles[i].lane === laneIndex && Math.abs(recordedTiles[i].time - editorKeyTimes[laneIndex]) < 0.05) {
+                            recordedTiles[i].isHold = true; recordedTiles[i].holdDuration = duration; break;
                         }
                     }
+                    refreshEditorTimeline();
                 }
                 editorKeyTimes[laneIndex] = null;
             }
@@ -1242,7 +1272,7 @@
         function gameLoop(timestamp) {
             if (isDead || (!gameActive && !inEditor)) return;
 
-            const targetFps = Math.max(30, Math.min(120, windowLevelFPS || 60));
+            const targetFps = Math.max(30, Math.min(240, Math.min(windowLevelFPS || 60, fpsCap)));
             const frameInterval = 1000 / targetFps;
             if (!lastFrameTimestamp) lastFrameTimestamp = timestamp;
             const elapsed = Math.min(80, timestamp - lastFrameTimestamp);
@@ -1271,6 +1301,33 @@
                 if (distanceTraveled >= nextSpawnDistance) spawnTile();
             }
 
+            if (isCustomGame && gameActive && !inEditor) {
+                customPlayTime += dt;
+                const spawnOffset = 690 / Math.max(speed * 60, 1);
+                while (pendingTiles.length && customPlayTime >= pendingTiles[0].time - spawnOffset) {
+                    const note = pendingTiles.shift();
+                    let isHold = !!note.isHold;
+                    if (currentDisableHolds) isHold = false;
+                    tiles.push(new Tile(note.lane, -TILE_H, isHold, note.holdDuration || 0));
+                }
+                while (pendingEffects.length && customPlayTime >= pendingEffects[0].time) {
+                    const fx = pendingEffects.shift();
+                    if (fx.type === 'pulse') fireAdvancedPulse(fx);
+                    else if (fx.type === 'image') fireAdvancedImage(fx);
+                    else if (fx.type === 'extra_image') fireExtraImage(fx);
+                    else if (fx.type === 'tile_style') fireTileStyle(fx);
+                    else if (fx.type === 'speed') fireSpeedChange(fx);
+                    else if (fx.type === 'sfx') fireSFX(fx);
+                }
+                if (levelEndTime > 0) dom.progress.innerText = Math.min(100, Math.floor((customPlayTime / levelEndTime) * 100)) + '%';
+                if (speedTransitionDuration > 0) {
+                    speedTransitionTime += dt;
+                    const progress = Math.min(speedTransitionTime / speedTransitionDuration, 1);
+                    speed = initialSpeed + (targetSpeed - initialSpeed) * progress;
+                    if (progress >= 1) speedTransitionDuration = 0;
+                }
+            }
+
             if (inEditor) {
                 for (const t of recordedTiles) {
                     const yOffset = (editorTimer - t.time) * (18 * 60);
@@ -1279,9 +1336,9 @@
                     const h = TILE_H + holdLen;
                     const drawY = y - holdLen;
                     if (drawY < canvas.height + TILE_H && drawY + h > -TILE_H) {
-                        ctx.fillStyle = t.isHold ? 'rgba(255,120,70,0.46)' : 'rgba(65,230,255,0.42)';
+                        ctx.fillStyle = t.isHold ? 'rgba(26,26,36,0.92)' : 'rgba(5,5,8,0.90)';
                         ctx.fillRect(t.lane * laneW + 5, drawY, laneW - 10, h);
-                        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                        ctx.fillStyle = 'rgba(255,255,255,0.12)';
                         ctx.fillRect(t.lane * laneW + 7, drawY, 3, h);
                     }
                 }
@@ -1332,6 +1389,22 @@
                     lastRenderedScore = shownScore;
                     scoreEl.innerText = shownScore;
                 }
+                if (showFps) dom.fps.classList.remove('hidden'); else dom.fps.classList.add('hidden');
+                if (showCps && timestamp - cpsWindowStart >= 250) {
+                    const cpsWindow = Math.max((timestamp - cpsWindowStart) / 1000, 0.001);
+                    dom.cps.innerText = (cpsCount / cpsWindow).toFixed(1) + ' CPS';
+                    cpsCount = 0;
+                    cpsWindowStart = timestamp;
+                }
+            }
+
+            if (isVerifying && isCustomGame && customPlayTime >= verifyEndTime && tiles.length === 0 && pendingTiles.length === 0 && !isDead) {
+                isVerifying = false;
+                gameActive = false;
+                alert("Verification Complete! Level will now download.");
+                downloadLevelData();
+                quitPlaytestOrGame();
+                return;
             }
 
             renderLoopId = requestAnimationFrame(gameLoop);
@@ -1362,7 +1435,7 @@
         function quitPlaytestOrGame() { 
             stopRenderLoop();
             gameActive = false; isPlaytesting = false; isVerifying = false; inEditor = false; isDead = false; 
-            if(customGameInterval) clearInterval(customGameInterval); 
+            if(customGameInterval) { clearInterval(customGameInterval); customGameInterval = null; } 
             if(editorInterval) clearInterval(editorInterval); 
             bgAudio.pause(); bgAudio.currentTime = 0; 
             resetState(); 
@@ -1394,48 +1467,208 @@
             } 
         }
 
-        function startEditor() { 
-            clearInterval(editorInterval); editorInterval = null; stopRenderLoop();
-            overlays.forEach(id => document.getElementById(id).classList.add('hidden')); 
-            document.getElementById('editor-ui').classList.remove('hidden'); 
-            inEditor = true; recordedTiles = []; recordedEffects = []; editorTimer = 0; currentEditingName = ""; 
-            deleteMode = false; document.getElementById('btn-delete-mode').style.background = '#333';
-            document.getElementById('editor-timer-panel').innerText = "0.00s"; 
-            document.getElementById('timeline-slider').value = 0; 
-            document.getElementById('edit-fps').value = 60; windowLevelFPS = 60; 
+        function startEditor() {
+            stopRenderLoop();
+            overlays.forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById('editor-ui').classList.remove('hidden');
+            inEditor = true; isRecording = false; isSongTesting = false; deleteMode = false;
+            recordedTiles = []; recordedEffects = []; editorVisualTiles = []; editorKeyTimes = [null,null,null,null];
+            editorTimer = 0; currentEditingName = ""; holdPlacementMode = false;
+            document.getElementById('btn-delete-mode').classList.remove('active');
+            setTilePlacementMode(false);
+            document.getElementById('edit-lives').value = 3;
+            document.getElementById('edit-fps').value = 60; windowLevelFPS = 60;
             document.getElementById('edit-audio-offset').value = 0;
             document.getElementById('edit-disable-holds').checked = false;
-            lastTime = performance.now(); startRenderLoop(); 
-        }
-        
-        function editLevel(sourceArray, index) { 
-            clearInterval(editorInterval); editorInterval = null; stopRenderLoop();
-            let lvl = sourceArray[index]; 
-            recordedTiles = JSON.parse(JSON.stringify(lvl.data)); 
-            recordedEffects = lvl.effects ? JSON.parse(JSON.stringify(lvl.effects)) : []; 
-            currentEditingName = lvl.name; 
-            deleteMode = false; document.getElementById('btn-delete-mode').style.background = '#333';
-            document.getElementById('edit-lives').value = lvl.lives || 3; 
-            document.getElementById('edit-fps').value = lvl.fps || 60; windowLevelFPS = lvl.fps || 60; 
-            document.getElementById('edit-audio-offset').value = lvl.audioOffset || 0;
-            document.getElementById('edit-disable-holds').checked = lvl.disableHolds || false;
-            toggleMenu(null); document.getElementById('editor-ui').classList.remove('hidden'); 
-            inEditor = true; editorTimer = 0; 
-            document.getElementById('editor-timer-panel').innerText = "0.00s"; 
-            document.getElementById('timeline-slider').value = 0; 
-            lastTime = performance.now(); startRenderLoop(); 
+            document.getElementById('timeline-slider').value = 0;
+            lastTime = performance.now();
+            refreshEditorTimeline();
+            startRenderLoop();
         }
 
-        function toggleRecording() { const btn = document.getElementById('btn-create-tiles'); if(!isRecording) { clearInterval(editorInterval); editorInterval = null; isRecording = true; btn.innerHTML = "⏹<br>Stop Tiles"; btn.classList.add('active'); if(bgAudio.src) bgAudio.play(); editorInterval = setInterval(() => { editorTimer += 0.016; if (Math.floor(editorTimer * 30) !== Math.floor((editorTimer - 0.016) * 30)) { document.getElementById('editor-timer-panel').innerText = editorTimer.toFixed(2) + "s"; document.getElementById('timeline-slider').value = editorTimer; } }, 16); } else { isRecording = false; btn.innerHTML = "▶<br>Create Tiles"; btn.classList.remove('active'); if(bgAudio.src) bgAudio.pause(); clearInterval(editorInterval); } }
-        function toggleSongTester() { const btn = document.getElementById('btn-song-test'); if(!isSongTesting) { clearInterval(editorInterval); editorInterval = null; isSongTesting = true; btn.innerHTML = "⏹<br>Stop Test"; btn.classList.add('active'); if(bgAudio.src) bgAudio.play(); editorInterval = setInterval(() => { editorTimer += 0.016; if (Math.floor(editorTimer * 30) !== Math.floor((editorTimer - 0.016) * 30)) { document.getElementById('editor-timer-panel').innerText = editorTimer.toFixed(2) + "s"; document.getElementById('timeline-slider').value = editorTimer; } }, 16); } else { isSongTesting = false; btn.innerHTML = "🎧<br>Song Tester"; btn.classList.remove('active'); if(bgAudio.src) bgAudio.pause(); clearInterval(editorInterval); } }
-        function scrubTimeline(val) { editorTimer = parseFloat(val); document.getElementById('editor-timer-panel').innerText = editorTimer.toFixed(2) + "s"; if(bgAudio.src) bgAudio.currentTime = editorTimer; }
+        function editLevel(sourceArray, index) {
+            const lvl = sourceArray[index];
+            recordedTiles = JSON.parse(JSON.stringify(lvl.data || []));
+            recordedEffects = lvl.effects ? JSON.parse(JSON.stringify(lvl.effects)) : [];
+            currentEditingName = lvl.name || '';
+            deleteMode = false; holdPlacementMode = false;
+            document.getElementById('btn-delete-mode').classList.remove('active');
+            setTilePlacementMode(false);
+            document.getElementById('edit-lives').value = lvl.lives || 3;
+            document.getElementById('edit-fps').value = lvl.fps || 60; windowLevelFPS = lvl.fps || 60;
+            document.getElementById('edit-audio-offset').value = lvl.audioOffset || 0;
+            document.getElementById('edit-disable-holds').checked = !!lvl.disableHolds;
+            toggleMenu(null); document.getElementById('editor-ui').classList.remove('hidden');
+            inEditor = true; editorTimer = 0;
+            document.getElementById('timeline-slider').value = 0;
+            refreshEditorTimeline(); startRenderLoop();
+        }
+
+        function toggleRecording() {
+            const btn = document.getElementById('btn-create-tiles');
+            if (!isRecording) {
+                if (isSongTesting) toggleSongTester();
+                clearInterval(editorInterval); editorInterval = null;
+                isRecording = true; btn.classList.add('active'); btn.querySelector('small').textContent = 'STOP RECORDING';
+                if (bgAudio.src) bgAudio.play().catch(()=>{});
+                editorClockStart = performance.now() - editorTimer * 1000;
+                editorInterval = setInterval(() => {
+                    if (!isRecording) return;
+                    editorTimer = (performance.now() - editorClockStart) / 1000;
+                    updateEditorTimeUI();
+                }, 16);
+            } else {
+                isRecording = false; btn.classList.remove('active'); btn.querySelector('small').textContent = 'RECORD TILES';
+                if (bgAudio.src) bgAudio.pause(); clearInterval(editorInterval); editorInterval = null;
+            }
+        }
+
+        function toggleSongTester() {
+            const btn = document.getElementById('btn-song-test');
+            if (!isSongTesting) {
+                if (isRecording) toggleRecording();
+                isSongTesting = true; btn.classList.add('active'); btn.querySelector('small').textContent = 'STOP TEST';
+                if (bgAudio.src) bgAudio.play().catch(()=>{});
+                editorClockStart = performance.now() - editorTimer * 1000;
+                editorInterval = setInterval(() => {
+                    if (!isSongTesting) return;
+                    editorTimer = (performance.now() - editorClockStart) / 1000;
+                    updateEditorTimeUI();
+                }, 16);
+            } else {
+                isSongTesting = false; btn.classList.remove('active'); btn.querySelector('small').textContent = 'SONG TESTER';
+                if (bgAudio.src) bgAudio.pause(); clearInterval(editorInterval); editorInterval = null;
+            }
+        }
+
+        let editorClockStart = performance.now();
+
+        function updateEditorTimeUI() {
+            const t = Math.max(0, editorTimer);
+            document.getElementById('editor-timer-panel').textContent = t.toFixed(2) + 's';
+            document.getElementById('timeline-current-label').textContent = t.toFixed(2) + 's';
+            document.getElementById('effect-time-display').textContent = t.toFixed(2);
+            const slider = document.getElementById('timeline-slider');
+            slider.value = Math.min(parseFloat(slider.max || 60), t);
+        }
+
+        function scrubTimeline(val) {
+            editorTimer = Math.max(0, parseFloat(val) || 0);
+            if (bgAudio.src && Number.isFinite(bgAudio.duration)) bgAudio.currentTime = Math.min(editorTimer, bgAudio.duration);
+            updateEditorTimeUI();
+        }
+        function nudgeEditorTime(amount) { scrubTimeline(editorTimer + amount); }
+        function jumpEditorToStart() { scrubTimeline(0); }
+        function jumpEditorToEnd() {
+            const lastTile = recordedTiles.reduce((m,t)=>Math.max(m, (t.time||0)+(t.holdDuration||0)), 0);
+            const lastFx = recordedEffects.reduce((m,e)=>Math.max(m, e.time||0), 0);
+            scrubTimeline(Math.max(lastTile, lastFx, 0));
+        }
+
+        function setTilePlacementMode(hold) {
+            holdPlacementMode = !!hold;
+            document.querySelectorAll('.editor-chip').forEach(b=>b.classList.remove('active'));
+            const buttons = document.querySelectorAll('.editor-chip');
+            if (holdPlacementMode) buttons[1]?.classList.add('active'); else buttons[0]?.classList.add('active');
+            document.getElementById('hold-toggle-label').textContent = holdPlacementMode ? 'HOLD ON' : 'HOLD OFF';
+            document.getElementById('editor-placement-hint').classList.toggle('hidden', false);
+            document.getElementById('editor-placement-hint').textContent = holdPlacementMode ? 'SELECT A LANE • HOLD TILE' : 'SELECT A LANE • NORMAL TILE';
+        }
+        function toggleHoldPlacement() { setTilePlacementMode(!holdPlacementMode); }
+
+        function placeTileAtPlayhead(lane = null) {
+            const selectedLane = lane === null ? 0 : Math.max(0, Math.min(3, lane));
+            const existing = recordedTiles.findIndex(t => t.lane === selectedLane && Math.abs(t.time - editorTimer) < 0.035);
+            if (existing !== -1) {
+                recordedTiles.splice(existing, 1);
+                refreshEditorTimeline();
+                return;
+            }
+            const tile = { lane: selectedLane, time: Math.round(editorTimer * 1000) / 1000, isHold: holdPlacementMode, holdDuration: holdPlacementMode ? 1.0 : 0 };
+            recordedTiles.push(tile); recordedTiles.sort((a,b)=>a.time-b.time);
+            document.getElementById('editor-selection-status').textContent = `Lane ${selectedLane + 1}`;
+            document.getElementById('editor-selection-detail').textContent = `${tile.isHold ? 'Hold' : 'Normal'} note at ${tile.time.toFixed(2)}s`;
+            refreshEditorTimeline();
+        }
+
+        function selectEditorLaneFromCanvas(e) {
+            if (!inEditor || pickingExtraPosition) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            if (deleteMode) return;
+            if (mouseY < 0 || mouseY > canvas.height) return;
+            placeTileAtPlayhead(Math.floor(mouseX / laneW));
+        }
+
+        function refreshEditorTimeline() {
+            refreshEffectTimeline();
+            const markers = document.getElementById('editor-timeline-markers');
+            const slider = document.getElementById('timeline-slider');
+            if (!markers || !slider) return;
+            const maxTime = Math.max(60, ...recordedTiles.map(t => (t.time||0)+(t.holdDuration||0)), ...recordedEffects.map(e => e.time||0), bgAudio.duration || 0);
+            slider.max = Math.ceil(maxTime);
+            const all = [];
+            recordedTiles.forEach(t => all.push({time:t.time, cls:t.isHold?'note hold':'note', title:`Lane ${t.lane+1}`}));
+            recordedEffects.forEach((e,i) => all.push({time:e.time, cls:'fx', title:e.type}));
+            markers.innerHTML = all.map(m => `<button class="timeline-marker ${m.cls}" style="left:${(m.time / slider.max) * 100}%" title="${m.title} at ${m.time.toFixed(2)}s" onclick="scrubTimeline(${m.time})"></button>`).join('');
+            updateEditorTimeUINoRefresh();
+        }
+        function updateEditorTimeUINoRefresh() {
+            const t = Math.max(0, editorTimer);
+            document.getElementById('editor-timer-panel').textContent = t.toFixed(2) + 's';
+            document.getElementById('timeline-current-label').textContent = t.toFixed(2) + 's';
+            document.getElementById('effect-time-display').textContent = t.toFixed(2);
+        }
+
+        function toggleDeleteMode() {
+            deleteMode = !deleteMode;
+            document.getElementById('btn-delete-mode').classList.toggle('active', deleteMode);
+            document.getElementById('editor-placement-hint').textContent = deleteMode ? 'CLICK A NOTE TO DELETE IT' : (holdPlacementMode ? 'SELECT A LANE • HOLD TILE' : 'SELECT A LANE • NORMAL TILE');
+        }
 
         function openCreatorMenu() { document.getElementById('creator-menu').classList.remove('hidden'); }
         function closeCreatorMenu() { document.getElementById('creator-menu').classList.add('hidden'); }
-        function openEffectsMenu() { document.getElementById('effects-menu').classList.remove('hidden'); document.getElementById('effect-time-display').innerText = editorTimer.toFixed(2); }
-        function closeEffectsMenu() { document.getElementById('effects-menu').classList.add('hidden'); }
+        function openEffectsMenu() { document.getElementById('effects-menu').classList.remove('hidden'); refreshEffectTimeline(); updateSpeedPreview(); }
+        function closeEffectsMenu() { document.getElementById('effects-menu').classList.add('hidden'); pickingExtraPosition = false; }
         function openEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.remove('hidden'); }
-        function closeEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.add('hidden'); windowLevelFPS = parseInt(document.getElementById('edit-fps').value) || 60; }
+        function closeEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.add('hidden'); windowLevelFPS = Math.max(30, Math.min(240, parseInt(document.getElementById('edit-fps').value,10) || 60)); }
+
+        function switchEffectTab(tab) {
+            document.querySelectorAll('.effect-tab').forEach(b => b.classList.toggle('active', b.dataset.effectTab === tab));
+            document.querySelectorAll('.effect-pane').forEach(p => p.classList.add('hidden'));
+            document.getElementById('effect-pane-' + tab)?.classList.remove('hidden');
+        }
+        function setPulsePreset(color,dur,inn,out) { document.getElementById('fx-pulse-color').value=color; document.getElementById('fx-pulse-dur').value=dur; document.getElementById('fx-pulse-in').value=inn; document.getElementById('fx-pulse-out').value=out; }
+        function setSpeedPreset(target,trans) { document.getElementById('fx-speed-target').value=target; document.getElementById('fx-speed-trans').value=trans; updateSpeedPreview(); }
+        function updateSpeedPreview() {
+            const curr = Math.round(speed || 18);
+            const target = parseFloat(document.getElementById('fx-speed-target')?.value || curr);
+            const trans = parseFloat(document.getElementById('fx-speed-trans')?.value || 0);
+            document.getElementById('speed-preview-current').textContent = curr;
+            document.getElementById('speed-preview-target').textContent = Math.round(target);
+            document.getElementById('speed-preview-transition').textContent = trans.toFixed(2) + 's';
+        }
+
+        function pickExtraPosition() {
+            pickingExtraPosition = true;
+            closeEffectsMenu();
+            document.getElementById('editor-placement-hint').textContent = 'CLICK THE PLAYFIELD TO PICK IMAGE POSITION';
+            document.getElementById('editor-placement-hint').classList.remove('hidden');
+        }
+        function setExtraPreset(pos) {
+            const presets = { center:[180,320], top:[180,130], bottom:[180,500] };
+            [extraImageX,extraImageY] = presets[pos] || presets.center;
+            const r = document.getElementById('extra-position-readout'); if (r) r.textContent = `${extraImageX}, ${extraImageY}`;
+        }
+
+        function refreshEffectTimeline() {
+            const list = document.getElementById('placed-effects-list'); if (!list) return;
+            if (!recordedEffects.length) { list.innerHTML = '<div class="empty-effects">No effects yet. Move the playhead and place one.</div>'; return; }
+            list.innerHTML = recordedEffects.map((e,i)=>`<div class="placed-effect"><span class="effect-dot ${e.type}"></span><b>${e.type.replace('_',' ').toUpperCase()}</b><span>${(e.time||0).toFixed(2)}s</span><button onclick="deleteEffect(${i})">×</button></div>`).join('');
+            document.getElementById('effect-time-display').textContent = editorTimer.toFixed(2);
+        }
+        function deleteEffect(i) { recordedEffects.splice(i,1); refreshEditorTimeline(); }
 
         function saveCustomLevel(isPublishing = false) { 
             let name = prompt("Enter level name:", currentEditingName || ""); 
@@ -1494,53 +1727,71 @@
             const title = document.getElementById('online-tab-title');
             const titles = { featured: 'Featured levels', recent: 'Recent uploads', liked: 'Most liked', search: 'Search levels' };
             if (title) title.textContent = titles[tab] || 'Featured levels';
+            document.querySelectorAll('.online-level-card').forEach((card, i) => {
+                card.style.display = tab === 'liked' && i > 1 ? 'none' : 'grid';
+            });
+            if (tab === 'search') {
+                const existing = document.getElementById('online-search-box');
+                if (!existing) {
+                    const box = document.createElement('div');
+                    box.id = 'online-search-box'; box.className = 'online-search-box';
+                    box.innerHTML = '<input placeholder="Search community levels..." oninput="filterOnlineCards(this.value)"><button onclick="showOnlinePreviewMessage()">SEARCH</button>';
+                    document.querySelector('.online-section-head')?.after(box);
+                }
+            } else {
+                document.getElementById('online-search-box')?.remove();
+                filterOnlineCards('');
+            }
+        }
+        function filterOnlineCards(query) {
+            const q = String(query || '').toLowerCase().trim();
+            document.querySelectorAll('.online-level-card').forEach(card => {
+                const text = card.textContent.toLowerCase(); card.style.display = (!q || text.includes(q)) ? 'grid' : 'none';
+            });
+        }
+        function showOnlinePreviewMessage() {
+            alert('Online services are prepared in the UI. Cloud accounts, uploads, ratings and leaderboards will be connected in the next update.');
         }
 
         function openMyLevels() { const container = document.getElementById('custom-levels-container'); container.innerHTML = ""; if(customLevels.length === 0) { container.innerHTML = "<p style='text-align:center; grid-column: span 2;'>No custom levels yet.</p>"; } else { customLevels.forEach((level, index) => { container.innerHTML += ` <div class="song-card"> <div class="song-main"> <div class="song-thumb">🌟</div> <div class="song-info"> <span class="song-title">${level.name}</span> <span class="song-author">By: You</span> </div> <button class="play-btn" onclick="startGame('${level.name}', true, ${index})">PLAY (Lives: ${level.lives})</button> <button class="play-btn edit-btn" onclick="editLevel(customLevels, ${index})">EDIT</button> </div> </div>`; }); } toggleMenu('my-levels-menu'); }
         
         function openBrowseLevels(filter = 'recent') { const container = document.getElementById('community-levels-container'); container.innerHTML = ""; document.querySelectorAll('#browse-levels-menu .small-tab').forEach(t => t.style.background = '#333'); if(document.getElementById('tab-' + filter)) { document.getElementById('tab-' + filter).style.background = 'var(--play-blue)'; } let displayList = [...communityLevels]; if (filter === 'recent') { displayList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)); } else if (filter === 'rated') { displayList = displayList.filter(l => l.ratings && l.ratings.length > 0); displayList.sort((a, b) => getAvgRating(b) - getAvgRating(a)); } else if (filter === 'list') { displayList = displayList.filter(l => l.listRank > 0); displayList.sort((a, b) => a.listRank - b.listRank); } if(displayList.length === 0) { container.innerHTML = "<p style='text-align:center; grid-column: span 2;'>No levels found in this category.</p>"; } else { displayList.forEach((level) => { let canEdit = (level.author === currentUser); let avgRating = getAvgRating(level); let originalIndex = communityLevels.findIndex(l => l.name === level.name); container.innerHTML += ` <div class="song-card"> <div class="song-main"> <div class="song-thumb">🌐</div> <div class="song-info"> <span class="song-title">${level.name}</span> <span class="song-author">By: ${level.author || "Unknown"}</span> <div> <span style="font-size: 10px; color: gold; font-weight: bold;">⭐ ${avgRating > 0 ? avgRating : 'Unrated'}</span> ${level.listRank > 0 ? `<span style="font-size: 10px; color: #ff00ff; font-weight: bold; margin-left: 5px;">🏆 Top ${level.listRank}</span>` : ''} </div> </div> <button class="play-btn" onclick="startGame('${level.name}', true, ${originalIndex}, null, null, true)">PLAY</button> ${canEdit ? `<button class="play-btn edit-btn" onclick="editLevel(communityLevels, ${originalIndex})">EDIT</button>` : ''} </div> </div>`; }); } toggleMenu('browse-levels-menu'); }
 
-        // --- NEW EFFECT FUNCTIONS ---
-        function addPulseEffect() { recordedEffects.push({ type: 'pulse', time: editorTimer, color: document.getElementById('fx-pulse-color').value, layer: parseInt(document.getElementById('fx-pulse-layer').value), duration: parseFloat(document.getElementById('fx-pulse-dur').value), inTrans: parseFloat(document.getElementById('fx-pulse-in').value), outTrans: parseFloat(document.getElementById('fx-pulse-out').value) }); alert("Pulse/Color effect added at " + editorTimer.toFixed(2) + "s"); }
-        function addImageEffect() { if(!loadedImageDataUrl) { alert("Please upload an image first!"); return; } recordedEffects.push({ type: 'image', time: editorTimer, src: loadedImageDataUrl, layer: parseInt(document.getElementById('fx-img-layer').value), alpha: parseFloat(document.getElementById('fx-img-alpha').value), duration: parseFloat(document.getElementById('fx-img-dur').value), inTrans: parseFloat(document.getElementById('fx-img-in').value), outTrans: parseFloat(document.getElementById('fx-img-out').value) }); alert("Image effect added at " + editorTimer.toFixed(2) + "s"); }
-        
+        // --- EFFECT FUNCTIONS ---
+        function addPulseEffect() {
+            const duration = Math.max(0.05, parseFloat(document.getElementById('fx-pulse-dur').value) || 0.35);
+            const inTrans = Math.max(0, parseFloat(document.getElementById('fx-pulse-in').value) || 0.08);
+            const outTrans = Math.min(duration, Math.max(0, parseFloat(document.getElementById('fx-pulse-out').value) || 0.20));
+            recordedEffects.push({ type:'pulse', time:Math.round(editorTimer*1000)/1000, color:document.getElementById('fx-pulse-color').value, layer:parseInt(document.getElementById('fx-pulse-layer').value,10), duration, inTrans, outTrans });
+            refreshEditorTimeline();
+        }
+        function addImageEffect() {
+            if (!loadedImageDataUrl) { alert('Choose an image first.'); switchEffectTab('image'); return; }
+            recordedEffects.push({ type:'image', time:Math.round(editorTimer*1000)/1000, src:loadedImageDataUrl, layer:parseInt(document.getElementById('fx-img-layer').value,10), alpha:parseFloat(document.getElementById('fx-img-alpha').value), duration:parseFloat(document.getElementById('fx-img-dur').value), inTrans:parseFloat(document.getElementById('fx-img-in').value), outTrans:parseFloat(document.getElementById('fx-img-out').value) });
+            refreshEditorTimeline();
+        }
         function addExtraImageEffect() {
-            if(!loadedExtraImageDataUrl) { alert("Please upload an image first!"); return; }
-            let count = recordedEffects.filter(e => e.type === 'extra_image').length;
-            if (count >= 30) {
-                alert("Maximum limit reached! You can only add up to 30 Extra Images per level to prevent lag.");
-                return;
-            }
-            recordedEffects.push({ 
-                type: 'extra_image', time: editorTimer, src: loadedExtraImageDataUrl, 
-                layer: parseInt(document.getElementById('fx-extra-layer').value), 
-                alpha: parseFloat(document.getElementById('fx-extra-alpha').value),
-                w: parseInt(document.getElementById('fx-extra-w').value),
-                h: parseInt(document.getElementById('fx-extra-h').value),
-                x: parseInt(document.getElementById('fx-extra-x').value),
-                y: parseInt(document.getElementById('fx-extra-y').value),
-                duration: parseFloat(document.getElementById('fx-extra-dur').value) 
-            }); 
-            alert(`Extra Image added at ${editorTimer.toFixed(2)}s. (${count + 1}/30)`); 
+            if (!loadedExtraImageDataUrl) { alert('Choose an image first.'); switchEffectTab('image'); return; }
+            const count = recordedEffects.filter(e=>e.type==='extra_image').length; if (count >= 30) { alert('Maximum 30 extra images per level.'); return; }
+            recordedEffects.push({ type:'extra_image', time:Math.round(editorTimer*1000)/1000, src:loadedExtraImageDataUrl, layer:0, alpha:parseFloat(document.getElementById('fx-extra-alpha').value), w:parseInt(document.getElementById('fx-extra-w').value,10), h:parseInt(document.getElementById('fx-extra-h').value,10), x:extraImageX, y:extraImageY, duration:parseFloat(document.getElementById('fx-extra-dur').value) });
+            refreshEditorTimeline();
         }
-
-        function previewExtraImage() {
-            if(!loadedExtraImageDataUrl) { alert("Please upload an image first!"); return; }
-            fireExtraImage({
-                src: loadedExtraImageDataUrl,
-                layer: parseInt(document.getElementById('fx-extra-layer').value),
-                alpha: parseFloat(document.getElementById('fx-extra-alpha').value),
-                w: parseInt(document.getElementById('fx-extra-w').value),
-                h: parseInt(document.getElementById('fx-extra-h').value),
-                x: parseInt(document.getElementById('fx-extra-x').value),
-                y: parseInt(document.getElementById('fx-extra-y').value),
-                duration: parseFloat(document.getElementById('fx-extra-dur').value)
-            });
+        function previewExtraImage() { fireExtraImage({src:loadedExtraImageDataUrl,layer:0,alpha:parseFloat(document.getElementById('fx-extra-alpha').value),w:parseInt(document.getElementById('fx-extra-w').value,10),h:parseInt(document.getElementById('fx-extra-h').value,10),x:extraImageX,y:extraImageY,duration:2}); }
+        function addTileStyleEffect() {
+            recordedEffects.push({ type:'tile_style', time:Math.round(editorTimer*1000)/1000, c1:document.getElementById('fx-tile-color1').value, c2:document.getElementById('fx-tile-color2').value, alpha:parseFloat(document.getElementById('fx-tile-alpha').value) });
+            refreshEditorTimeline();
         }
-
-        function addTileStyleEffect() { recordedEffects.push({ type: 'tile_style', time: editorTimer, c1: document.getElementById('fx-tile-color1').value, c2: document.getElementById('fx-tile-color2').value, alpha: parseFloat(document.getElementById('fx-tile-alpha').value), duration: parseFloat(document.getElementById('fx-tile-dur').value) }); alert("Tile Style change added at " + editorTimer.toFixed(2) + "s"); }
-        function addSpeedEffect() { recordedEffects.push({ type: 'speed', time: editorTimer, target: parseInt(document.getElementById('fx-speed-target').value), transDuration: parseFloat(document.getElementById('fx-speed-trans').value) }); alert("Speed change added at " + editorTimer.toFixed(2) + "s"); }
-        function addSfxEffect() { if(!loadedSfxDataUrl) { alert("Please upload a sound file first!"); return; } recordedEffects.push({ type: 'sfx', time: editorTimer, src: loadedSfxDataUrl }); alert("Extra SFX added at " + editorTimer.toFixed(2) + "s"); loadedSfxDataUrl = null; document.getElementById('fx-sfx-upload').value = ""; }
+        function addSpeedEffect() {
+            const target = Math.max(5, Math.min(50, parseInt(document.getElementById('fx-speed-target').value,10) || 18));
+            const transDuration = Math.max(0, parseFloat(document.getElementById('fx-speed-trans').value) || 0.5);
+            recordedEffects.push({ type:'speed', time:Math.round(editorTimer*1000)/1000, target, transDuration });
+            refreshEditorTimeline();
+        }
+        function addSfxEffect() {
+            if (!loadedSfxDataUrl) { alert('Choose a sound first.'); switchEffectTab('audio'); return; }
+            recordedEffects.push({ type:'sfx', time:Math.round(editorTimer*1000)/1000, src:loadedSfxDataUrl });
+            loadedSfxDataUrl = null; document.getElementById('fx-sfx-upload').value = ''; refreshEditorTimeline();
+        }
     </script>
 </body>
 </html>
