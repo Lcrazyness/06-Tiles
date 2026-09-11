@@ -271,6 +271,9 @@
         <div id="score">0</div>
         <div id="rest-msg">BREATHE</div>
     </div>
+    <div id="control-guide" class="hidden" aria-label="Keyboard controls">
+        <span>R</span><span>T</span><span>Y</span><span>U</span>
+    </div>
     <canvas id="gameCanvas" width="360" height="640"></canvas>
 
     <div id="death-screen" class="overlay hidden">
@@ -482,6 +485,7 @@
             document.getElementById('editor-ui').classList.add('hidden');
             document.getElementById('lives-display').classList.remove('hidden');
             document.getElementById('game-hud').classList.remove('hidden');
+            document.getElementById('control-guide').classList.remove('hidden');
             
             if (!isCustom) {
                 const customSpeed = document.getElementById('speed-' + mode);
@@ -599,6 +603,7 @@
             document.getElementById('stop-playtest-btn').classList.add('hidden');
             document.getElementById('lives-display').classList.add('hidden');
             document.getElementById('game-hud').classList.add('hidden');
+            document.getElementById('control-guide').classList.add('hidden');
             document.getElementById('editor-ui').classList.remove('hidden');
             inEditor = true; requestAnimationFrame(gameLoop);
         }
@@ -812,11 +817,85 @@
                 }
             }
 
+            // --- POLISHED RHYTHM-GAME STAGE ---
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 1;
-            for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, canvas.height); ctx.stroke(); }
-            ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 4;
-            ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(canvas.width, lineY); ctx.stroke();
+
+            const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            bg.addColorStop(0, "#08071b");
+            bg.addColorStop(0.46, "#17105b");
+            bg.addColorStop(1, "#050414");
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Soft center glow.
+            const glow = ctx.createRadialGradient(canvas.width / 2, lineY * 0.72, 30, canvas.width / 2, lineY * 0.72, canvas.width * 0.78);
+            glow.addColorStop(0, "rgba(93, 184, 255, 0.18)");
+            glow.addColorStop(0.45, "rgba(124, 74, 255, 0.08)");
+            glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+            ctx.fillStyle = glow;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Lane fills and separators.
+            for (let lane = 0; lane < 4; lane++) {
+                const x = lane * laneW;
+                const laneGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                laneGrad.addColorStop(0, lane % 2 === 0 ? "rgba(255,255,255,0.025)" : "rgba(70,120,255,0.025)");
+                laneGrad.addColorStop(1, lane % 2 === 0 ? "rgba(120,70,255,0.035)" : "rgba(0,210,255,0.025)");
+                ctx.fillStyle = laneGrad;
+                ctx.fillRect(x, 0, laneW, canvas.height);
+            }
+
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 4; i++) {
+                const x = i * laneW;
+                const separator = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                separator.addColorStop(0, "rgba(255,255,255,0.10)");
+                separator.addColorStop(0.55, "rgba(255,255,255,0.22)");
+                separator.addColorStop(1, "rgba(255,255,255,0.07)");
+                ctx.strokeStyle = separator;
+                ctx.beginPath();
+                ctx.moveTo(x + 0.5, 0);
+                ctx.lineTo(x + 0.5, canvas.height);
+                ctx.stroke();
+            }
+
+            // Perspective runway lines to give the board depth.
+            ctx.save();
+            ctx.globalAlpha = 0.16;
+            ctx.strokeStyle = "#8fdcff";
+            ctx.lineWidth = 1;
+            for (let y = 60; y < lineY; y += 45) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // Premium-looking hit line.
+            ctx.save();
+            ctx.shadowColor = "rgba(90,220,255,0.95)";
+            ctx.shadowBlur = 18;
+            const hitGrad = ctx.createLinearGradient(0, lineY - 2, canvas.width, lineY + 2);
+            hitGrad.addColorStop(0, "#66dcff");
+            hitGrad.addColorStop(0.5, "#ffffff");
+            hitGrad.addColorStop(1, "#b06bff");
+            ctx.strokeStyle = hitGrad;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, lineY);
+            ctx.lineTo(canvas.width, lineY);
+            ctx.stroke();
+            ctx.restore();
+
+            // Small timing markers below the hit line.
+            ctx.fillStyle = "rgba(255,255,255,0.60)";
+            for (let lane = 0; lane < 4; lane++) {
+                const cx = lane * laneW + laneW / 2;
+                ctx.beginPath();
+                ctx.arc(cx, lineY + 10, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
             
             if(!isCustomGame && !inEditor && gameActive) {
                 distanceTraveled += speed * dt;
@@ -873,31 +952,64 @@
 
                 // 1. Draw Tail (if hold tile)
                 if (t.isHold) {
-                    // Tail Background
-                    ctx.fillStyle = t.interacted ? "rgba(100, 100, 100, 0.4)" : "rgba(0, 150, 255, 0.3)";
-                    ctx.fillRect(t.lane * laneW + 12, tailTop, laneW - 24, holdLength);
-                    
-                    // Tail Center Glowing Line
-                    ctx.fillStyle = t.interacted ? "rgba(200, 200, 200, 0.8)" : "rgba(0, 255, 255, 0.8)";
-                    ctx.fillRect(t.lane * laneW + (laneW/2) - 2, tailTop, 4, holdLength);
-                    
-                    // Tail Start Cap
-                    ctx.fillRect(t.lane * laneW + 16, tailTop, laneW - 32, 8);
+                    const tailX = t.lane * laneW + 13;
+                    const tailW = laneW - 26;
+                    ctx.save();
+                    ctx.globalAlpha = t.interacted ? 0.18 : 0.88 * currentTileStyle.alpha;
+                    ctx.shadowColor = "#38d9ff";
+                    ctx.shadowBlur = 12;
+                    const tailGrad = ctx.createLinearGradient(tailX, 0, tailX + tailW, 0);
+                    tailGrad.addColorStop(0, "rgba(40,170,255,0.35)");
+                    tailGrad.addColorStop(0.5, "rgba(115,245,255,0.95)");
+                    tailGrad.addColorStop(1, "rgba(110,95,255,0.35)");
+                    ctx.fillStyle = tailGrad;
+                    ctx.fillRect(tailX, tailTop, tailW, holdLength);
+                    ctx.globalAlpha = t.interacted ? 0.15 : 0.95;
+                    ctx.fillStyle = "rgba(255,255,255,0.85)";
+                    ctx.fillRect(t.lane * laneW + (laneW/2) - 1.5, tailTop, 3, holdLength);
+                    ctx.fillStyle = "rgba(255,255,255,0.9)";
+                    ctx.fillRect(t.lane * laneW + 17, tailTop, laneW - 34, 6);
+                    ctx.restore();
                 }
 
                 // 2. Draw Head (Main Block)
-                ctx.globalAlpha = t.interacted ? 0.2 : currentTileStyle.alpha;
-                if (t === firstUnclicked) { ctx.shadowBlur = 15; ctx.shadowColor = "#00ffff"; }
-                ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-                ctx.fillRect(t.lane * laneW + 4, headTop, laneW - 8, TILE_H);
-                
-                let grad = ctx.createLinearGradient(0, headTop, 0, headTop + TILE_H);
-                grad.addColorStop(0, t.interacted ? "#444" : currentTileStyle.c1);
-                grad.addColorStop(1, t.interacted ? "#222" : currentTileStyle.c2);
+                ctx.save();
+                ctx.globalAlpha = t.interacted ? 0.16 : currentTileStyle.alpha;
+                const x = t.lane * laneW + 6;
+                const w = laneW - 12;
+                const r = 9;
+                if (t === firstUnclicked) {
+                    ctx.shadowBlur = 24;
+                    ctx.shadowColor = "#6be7ff";
+                }
+                const grad = ctx.createLinearGradient(0, headTop, 0, headTop + TILE_H);
+                grad.addColorStop(0, t.interacted ? "#41445d" : currentTileStyle.c1);
+                grad.addColorStop(0.45, t.interacted ? "#171a2b" : currentTileStyle.c2);
+                grad.addColorStop(1, t.interacted ? "#090b16" : "#05060d");
                 ctx.fillStyle = grad;
-                
-                ctx.fillRect(t.lane * laneW + 8, headTop + 4, laneW - 16, TILE_H - 8);
-                ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
+
+                ctx.beginPath();
+                ctx.roundRect(x, headTop, w, TILE_H, r);
+                ctx.fill();
+
+                // Glass highlight.
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = t.interacted ? 0.05 : 0.28 * currentTileStyle.alpha;
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.roundRect(x + 2, headTop + 2, w - 4, Math.min(26, TILE_H * 0.20), 7);
+                ctx.fill();
+
+                // Bottom edge glow.
+                ctx.globalAlpha = t.interacted ? 0.06 : 0.8 * currentTileStyle.alpha;
+                const edge = ctx.createLinearGradient(x, 0, x + w, 0);
+                edge.addColorStop(0, "rgba(70,220,255,0)");
+                edge.addColorStop(0.5, "rgba(130,245,255,0.95)");
+                edge.addColorStop(1, "rgba(175,105,255,0)");
+                ctx.fillStyle = edge;
+                ctx.fillRect(x + 8, headTop + TILE_H - 5, w - 16, 3);
+
+                ctx.restore();
             }
 
             if(inEditor) {
@@ -911,7 +1023,17 @@
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i]; p.update();
                 if (p.life <= 0) particles.splice(i, 1);
-                else { ctx.fillStyle = `rgba(0,255,255,${p.life})`; ctx.fillRect(p.x, p.y, 6, 6); }
+                else {
+                    ctx.save();
+                    ctx.globalAlpha = p.life;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = "#65e8ff";
+                    ctx.fillStyle = "#ffffff";
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate((1 - p.life) * 2.8);
+                    ctx.fillRect(-2, -2, 5, 5);
+                    ctx.restore();
+                }
             }
             
             if(!inEditor && gameActive) scoreEl.innerText = Math.floor(score);
@@ -949,6 +1071,7 @@
             tempLoadedLevel = null; // Clear loaded level
             ctx.clearRect(0, 0, canvas.width, canvas.height); 
             document.getElementById('game-hud').classList.add('hidden');
+            document.getElementById('control-guide').classList.add('hidden');
             document.getElementById('editor-ui').classList.add('hidden'); 
             document.getElementById('death-screen').classList.add('hidden'); 
             document.getElementById('lives-display').classList.add('hidden'); 
