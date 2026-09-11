@@ -155,15 +155,7 @@
                 <div id="editor-marker-layer"></div>
             </div>
             <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.01" oninput="scrubTimeline(this.value)">
-            <div class="editor-grid-controls">
-                <span class="grid-label">SNAP GRID</span>
-                <button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
-                <button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
-                <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
-                <button class="grid-btn" data-grid="12" onclick="setEditorGrid(12)">1/12</button>
-                <span id="grid-readout" class="grid-readout">0.500s</span>
-            </div>
-            <div class="timeline-hint">Tiles snap to the selected grid • Shift temporarily disables snapping</div>
+            <div class="timeline-hint">Use the timeline to position the playhead. Tiles can be snapped from Editor Settings.</div>
         </div>
         <div id="editor-left-panel" class="editor-panel">
             <button class="editor-btn square-btn" style="background: #0055ff;" onclick="document.getElementById('audio-upload').click()">🎵<br>Load Song</button>
@@ -218,6 +210,18 @@
             <div class="settings-row">
                 <span>Disable Hold Tiles</span>
                 <input type="checkbox" id="edit-disable-holds">
+            </div>            <div class="editor-settings-section">
+                <div class="editor-settings-title">TIMING GRID</div>
+                <div class="editor-settings-subtitle">Choose how tile placement snaps on the editor timeline.</div>
+                <div class="editor-grid-controls settings-grid-controls">
+                    <span class="grid-label">SNAP</span>
+                    <button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
+                    <button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
+                    <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
+                    <button class="grid-btn" data-grid="12" onclick="setEditorGrid(12)">1/12</button>
+                    <span id="grid-readout" class="grid-readout">0.250s</span>
+                </div>
+                <div class="editor-settings-subtitle">Hold Shift while placing a tile to bypass snapping.</div>
             </div>
             <button class="nav-btn secondary-btn" onclick="closeEditorSettingsMenu()">BACK TO EDITOR</button>
         </div>
@@ -235,74 +239,50 @@
     </div>
 
     <div id="effects-menu" class="overlay hidden">
-        <div class="effects-window">
-            <div class="effects-topbar">
-                <div><span class="eyebrow">LEVEL EDITOR</span><h2>Effects</h2></div>
-                <div class="effects-current-time">PLAYHEAD <strong id="effect-time-display">0.00s</strong></div>
-            </div>
-
-            <div class="effect-tabs">
-                <button class="effect-tab active" onclick="switchEffectCategory('visual')">VISUAL</button>
-                <button class="effect-tab" onclick="switchEffectCategory('speed')">SPEED</button>
-                <button class="effect-tab" onclick="switchEffectCategory('image')">IMAGE</button>
-                <button class="effect-tab" onclick="switchEffectCategory('audio')">AUDIO</button>
-            </div>
-
-            <div class="effect-workspace">
-                <div class="effect-library" id="effect-library-visual">
-                    <button class="effect-card pulse-card" onclick="addPulseEffect()"><b>Pulse</b><span>Flash / color hit</span></button>
-                    <button class="effect-card tile-card" onclick="addTileStyleEffect()"><b>Tile Style</b><span>Change tile look</span></button>
+        <div class="effects-studio">
+            <div class="effects-studio-header">
+                <div class="effects-studio-title">
+                    <span class="eyebrow">EXTREME TILES EDITOR</span>
+                    <h2>Effect Editor</h2>
+                    <p>Drag effects on the timeline. Drag the edges to change duration.</p>
                 </div>
-                <div class="effect-library hidden" id="effect-library-speed">
-                    <button class="effect-card speed-card" onclick="setSpeedPreset(0.5)"><b>0.5× Slow</b><span>Smooth slowdown</span></button>
-                    <button class="effect-card speed-card" onclick="setSpeedPreset(1)"><b>1× Normal</b><span>Return to normal</span></button>
-                    <button class="effect-card speed-card" onclick="setSpeedPreset(1.5)"><b>1.5× Fast</b><span>Increase pressure</span></button>
-                    <button class="effect-card speed-card" onclick="setSpeedPreset(2)"><b>2× Extreme</b><span>Hard section</span></button>
-                    <div class="speed-custom-box">
-                        <label>Target speed<input id="fx-speed-target" type="number" value="25" min="5" max="50" step="1"></label>
-                        <label>Transition<input id="fx-speed-trans" type="number" value="0.50" min="0" step="0.05"></label>
-                        <button class="primary-effect-btn" onclick="addSpeedEffect()">PLACE SPEED CHANGE</button>
-                    </div>
-                </div>
-                <div class="effect-library hidden" id="effect-library-image">
-                    <div class="upload-effect-card">
-                        <b>Background image</b><span>Use the current playhead time.</span>
-                        <input type="file" id="fx-img-upload" accept="image/*">
-                        <div class="two-col-effect">
-                            <label>Opacity<input type="number" id="fx-img-alpha" value="0.5" min="0" max="1" step="0.05"></label>
-                            <label>Duration<input type="number" id="fx-img-dur" value="2" min="0.1" step="0.1"></label>
-                            <label>Fade in<input type="number" id="fx-img-in" value="0.3" min="0" step="0.05"></label>
-                            <label>Fade out<input type="number" id="fx-img-out" value="0.3" min="0" step="0.05"></label>
-                        </div>
-                        <button class="primary-effect-btn" onclick="addImageEffect()">PLACE IMAGE</button>
-                    </div>
-                    <div class="upload-effect-card">
-                        <b>Extra image</b><span>Pick a position visually after placement.</span>
-                        <input type="file" id="fx-extra-upload" accept="image/*">
-                        <div class="two-col-effect">
-                            <label>Width<input type="number" id="fx-extra-w" value="150"></label>
-                            <label>Height<input type="number" id="fx-extra-h" value="150"></label>
-                            <label>Opacity<input type="number" id="fx-extra-alpha" value="1" min="0" max="1" step="0.05"></label>
-                            <label>Duration<input type="number" id="fx-extra-dur" value="2" min="0.1" step="0.1"></label>
-                        </div>
-                        <div class="quick-position-row">
-                            <button onclick="setExtraImagePosition('center')">CENTER</button><button onclick="setExtraImagePosition('top')">TOP</button><button onclick="setExtraImagePosition('bottom')">BOTTOM</button>
-                        </div>
-                        <button class="primary-effect-btn" onclick="addExtraImageEffect()">PLACE EXTRA IMAGE</button>
-                    </div>
-                </div>
-                <div class="effect-library hidden" id="effect-library-audio">
-                    <div class="upload-effect-card">
-                        <b>Extra SFX</b><span>Trigger a sound exactly at the playhead.</span>
-                        <input type="file" id="fx-sfx-upload" accept="audio/*">
-                        <button class="primary-effect-btn" onclick="addSfxEffect()">PLACE SFX</button>
-                    </div>
+                <div class="effects-studio-header-actions">
+                    <div class="effect-playhead-pill">PLAYHEAD <strong id="effect-time-display">0.00s</strong></div>
+                    <button class="mini-editor-btn" onclick="closeEffectsMenu()">DONE</button>
                 </div>
             </div>
-
-            <div class="effects-footer">
-                <div><b>How placement works</b><span>Move the playhead → choose an effect → place it. Click a marker later to edit it.</span></div>
-                <button class="nav-btn secondary-btn" onclick="closeEffectsMenu()">BACK TO EDITOR</button>
+            <div class="effects-studio-body">
+                <aside class="effect-library-panel">
+                    <div class="effect-panel-heading"><span>ADD EFFECT</span><small>Placed at the playhead</small></div>
+                    <div class="effect-category-tabs">
+                        <button class="effect-tab active" onclick="switchEffectCategory('visual')">VISUAL</button>
+                        <button class="effect-tab" onclick="switchEffectCategory('speed')">SPEED</button>
+                        <button class="effect-tab" onclick="switchEffectCategory('image')">IMAGE</button>
+                        <button class="effect-tab" onclick="switchEffectCategory('audio')">AUDIO</button>
+                    </div>
+                    <div class="effect-library-list" id="effect-library-visual">
+                        <button class="effect-library-card pulse-card" onclick="addPulseEffect()"><span class="effect-library-icon">✦</span><span><b>Pulse</b><small>Timed flash / color</small></span><strong>+</strong></button>
+                        <button class="effect-library-card tile-card" onclick="addTileStyleEffect()"><span class="effect-library-icon">■</span><span><b>Tile Style</b><small>Change tile colors</small></span><strong>+</strong></button>
+                    </div>
+                    <div class="effect-library-list hidden" id="effect-library-speed">
+                        <button class="effect-library-card speed-card" onclick="setSpeedPreset(0.5)"><span class="effect-library-icon">½</span><span><b>0.5× Slow</b><small>Quick slowdown</small></span><strong>+</strong></button>
+                        <button class="effect-library-card speed-card" onclick="setSpeedPreset(1)"><span class="effect-library-icon">1×</span><span><b>1× Normal</b><small>Return to normal</small></span><strong>+</strong></button>
+                        <button class="effect-library-card speed-card" onclick="setSpeedPreset(1.5)"><span class="effect-library-icon">1.5×</span><span><b>1.5× Fast</b><small>Build pressure</small></span><strong>+</strong></button>
+                        <button class="effect-library-card speed-card" onclick="setSpeedPreset(2)"><span class="effect-library-icon">2×</span><span><b>2× Extreme</b><small>High-speed section</small></span><strong>+</strong></button>
+                        <div class="effect-library-form"><label>Target speed<input id="fx-speed-target" type="number" value="25" min="5" max="50" step="1"></label><label>Transition<input id="fx-speed-trans" type="number" value="0.50" min="0" step="0.05"></label><button class="primary-effect-btn" onclick="addSpeedEffect()">ADD SPEED</button></div>
+                    </div>
+                    <div class="effect-library-list hidden" id="effect-library-image">
+                        <div class="effect-library-form"><div class="form-block-title">BACKGROUND IMAGE</div><input type="file" id="fx-img-upload" accept="image/*"><div class="two-col-effect"><label>Opacity<input type="number" id="fx-img-alpha" value="0.5" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-img-dur" value="2" min="0.1" step="0.1"></label><label>Fade in<input type="number" id="fx-img-in" value="0.3" min="0" step="0.05"></label><label>Fade out<input type="number" id="fx-img-out" value="0.3" min="0" step="0.05"></label></div><button class="primary-effect-btn" onclick="addImageEffect()">ADD IMAGE</button></div>
+                        <div class="effect-library-form"><div class="form-block-title">EXTRA IMAGE</div><input type="file" id="fx-extra-upload" accept="image/*"><div class="two-col-effect"><label>Width<input type="number" id="fx-extra-w" value="150"></label><label>Height<input type="number" id="fx-extra-h" value="150"></label><label>Opacity<input type="number" id="fx-extra-alpha" value="1" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-extra-dur" value="2" min="0.1" step="0.1"></label></div><div class="quick-position-row"><button onclick="setExtraImagePosition('center')">CENTER</button><button onclick="setExtraImagePosition('top')">TOP</button><button onclick="setExtraImagePosition('bottom')">BOTTOM</button></div><button class="primary-effect-btn" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button></div>
+                    </div>
+                    <div class="effect-library-list hidden" id="effect-library-audio"><div class="effect-library-form"><div class="form-block-title">EXTRA SFX</div><input type="file" id="fx-sfx-upload" accept="audio/*"><button class="primary-effect-btn" onclick="addSfxEffect()">ADD SFX</button></div></div>
+                </aside>
+                <main class="effect-editor-main">
+                    <div class="effect-timeline-toolbar"><div><b>EVENT TIMELINE</b><span>Drag blocks to move them · drag handles to resize</span></div><div class="effect-toolbar-actions"><button class="mini-editor-btn" onclick="nudgeSelectedEffect(-0.10)">−0.10s</button><button class="mini-editor-btn" onclick="nudgeSelectedEffect(0.10)">+0.10s</button><button class="mini-editor-btn" onclick="setSelectedEffectToPlayhead()">ALIGN TO PLAYHEAD</button><button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button></div></div>
+                    <div class="effect-timeline-wrap" id="effect-timeline-wrap"><div class="effect-time-ruler" id="effect-time-ruler"></div><div class="effect-tracks" id="effect-tracks"></div><div class="effect-timeline-playhead" id="effect-timeline-playhead"></div></div>
+                    <div class="effect-timeline-footer"><span id="effect-selection-summary">Nothing selected</span><span>Shift = free drag · click empty timeline to move playhead</span></div>
+                </main>
+                <aside class="effect-inspector"><div class="effect-panel-heading"><span>INSPECTOR</span><small id="effect-inspector-subtitle">Select an effect</small></div><div id="effect-inspector-content" class="effect-inspector-content"><div class="effect-inspector-empty"><div class="inspector-empty-icon">✦</div><b>Select an effect</b><span>Pick a block from the timeline to edit its timing, duration and properties.</span></div></div></aside>
             </div>
         </div>
     </div>
@@ -1260,153 +1240,40 @@
             playhead.style.left = (editorTimer / max * 100) + '%';
         }
 
-        function refreshSelectedEffectEditor() {
-            const empty = document.getElementById('selected-effect-empty');
-            const editor = document.getElementById('selected-effect-editor');
-            const fields = document.getElementById('selected-effect-fields');
-            if (!empty || !editor || !fields) return;
-            if (selectedEffectIndex < 0 || !recordedEffects[selectedEffectIndex]) {
-                empty.classList.remove('hidden'); editor.classList.add('hidden'); refreshEditorTimeline(); return;
-            }
-            const fx = recordedEffects[selectedEffectIndex];
-            empty.classList.add('hidden'); editor.classList.remove('hidden');
-            document.getElementById('selected-effect-kind').textContent = fx.type.toUpperCase();
-            document.getElementById('selected-effect-time').textContent = fx.time.toFixed(2) + 's';
-            fields.innerHTML = `
-                <div class="selected-field-row">
-                    <label>Time<input id="selected-time-input" type="number" value="${fx.time}" step="0.01" min="0"></label>
-                    <label>Duration<input id="selected-duration-input" type="number" value="${fx.duration ?? fx.transDuration ?? 0}" step="0.05" min="0"></label>
-                </div>
-                <div class="selected-field-actions">
-                    <button class="mini-editor-btn" onclick="applySelectedEffectTiming()">APPLY TIMING</button>
-                    ${fx.type === 'speed' ? '<span class="selected-help">Speed uses a transition from the active speed to the target.</span>' : '<span class="selected-help">Move the playhead or drag the time value precisely.</span>'}
-                </div>`;
-        }
-
-        function selectEffect(index) {
-            selectedEffectIndex = index;
-            const fx = recordedEffects[index];
-            if (fx) editorTimer = fx.time;
-            refreshSelectedEffectEditor();
-            refreshEditorTimeline();
-            updateEditorView();
-        }
-
-        function deleteSelectedEffect() {
-            if (selectedEffectIndex < 0) return;
-            recordedEffects.splice(selectedEffectIndex, 1);
-            selectedEffectIndex = -1;
-            refreshSelectedEffectEditor();
-            refreshEditorTimeline();
-        }
-
-        function setSelectedEffectToPlayhead() {
-            if (selectedEffectIndex < 0 || !recordedEffects[selectedEffectIndex]) return;
-            recordedEffects[selectedEffectIndex].time = Math.max(0, editorTimer);
-            recordedEffects.sort((a,b)=>a.time-b.time);
-            selectedEffectIndex = -1;
-            selectEffect(recordedEffects.findIndex(e => e.time === editorTimer));
-        }
-
-        function applySelectedEffectTiming() {
-            if (selectedEffectIndex < 0 || !recordedEffects[selectedEffectIndex]) return;
-            const fx = recordedEffects[selectedEffectIndex];
-            fx.time = Math.max(0, parseFloat(document.getElementById('selected-time-input').value) || 0);
-            if ('duration' in fx && document.getElementById('selected-duration-input')) fx.duration = Math.max(0, parseFloat(document.getElementById('selected-duration-input').value) || 0);
-            if (fx.type === 'speed' && document.getElementById('selected-duration-input')) fx.transDuration = Math.max(0, parseFloat(document.getElementById('selected-duration-input').value) || 0);
-            recordedEffects.sort((a,b)=>a.time-b.time);
-            selectedEffectIndex = recordedEffects.indexOf(fx);
-            editorTimer = fx.time;
-            refreshSelectedEffectEditor(); refreshEditorTimeline(); updateEditorView();
-        }
-
-        function updateEditorView() {
-            const max = Number(document.getElementById('timeline-slider')?.max || 60);
-            document.getElementById('editor-timeline-time').textContent = editorTimer.toFixed(2) + 's';
-            document.getElementById('effect-time-display').textContent = editorTimer.toFixed(2) + 's';
-            const playhead = document.getElementById('editor-playhead');
-            if (playhead) playhead.style.left = Math.min(100, Math.max(0, editorTimer/max*100)) + '%';
-        }
-
-        function scrubTimeline(val) {
-            editorTimer = Math.max(0, parseFloat(val) || 0);
-            document.getElementById('editor-timeline-time').textContent = editorTimer.toFixed(2) + 's';
-            document.getElementById('effect-time-display').textContent = editorTimer.toFixed(2) + 's';
-            if(bgAudio.src) bgAudio.currentTime = editorTimer;
-            updateEditorView();
-        }
-
-        function nudgeEditorTime(delta) { scrubTimeline(editorTimer + delta); }
-
-        function cycleEditorGrid(direction){
-            const values=[2,4,8,12];
-            let idx=values.indexOf(editorGridDivision);
-            idx=(idx + direction + values.length) % values.length;
-            setEditorGrid(values[idx]);
-        }
-
-        function jumpEditorEnd() {
-            const max = Number(document.getElementById('timeline-slider')?.max || 60);
-            scrubTimeline(max);
-        }
-        function toggleEditorTransport() {
-            editorPlaying = !editorPlaying;
-            const b = document.getElementById('editor-transport-btn');
-            if (b) b.textContent = editorPlaying ? '❚❚' : '▶';
-            if (editorPlaying) {
-                if (!bgAudio.src) editorPlaying = false;
-                else { bgAudio.currentTime = editorTimer; bgAudio.play().catch(()=>{}); editorLastTick = performance.now(); requestAnimationFrame(editorTransportTick); }
-            } else bgAudio.pause();
-        }
-        function editorTransportTick(ts) {
-            if (!editorPlaying) return;
-            editorTimer = bgAudio.src ? bgAudio.currentTime : editorTimer + (ts-editorLastTick)/1000;
-            editorLastTick = ts;
-            const max = Number(document.getElementById('timeline-slider')?.max || 60);
-            if (editorTimer >= max) { editorTimer = max; toggleEditorTransport(); }
-            document.getElementById('timeline-slider').value = editorTimer;
-            updateEditorView();
-            requestAnimationFrame(editorTransportTick);
-        }
-
-        function switchEffectCategory(cat) {
-            document.querySelectorAll('.effect-tab').forEach(b => b.classList.remove('active'));
-            const btn = [...document.querySelectorAll('.effect-tab')].find(b => b.textContent.toLowerCase() === cat);
-            if (btn) btn.classList.add('active');
-            ['visual','speed','image','audio'].forEach(c => document.getElementById('effect-library-'+c)?.classList.toggle('hidden', c !== cat));
-        }
-
-        function setSpeedPreset(mult) {
-            const target = Math.max(5, Math.min(50, Math.round((speed || 18) * mult)));
-            document.getElementById('fx-speed-target').value = target;
-            document.getElementById('fx-speed-trans').value = mult === 1 ? '0.25' : '0.50';
-            addSpeedEffect();
-        }
-
-        function setExtraImagePosition(mode) {
-            const positions = {
-                center:[180,320],
-                top:[180,120],
-                bottom:[180,500]
-            };
-            const p=positions[mode]||positions.center;
-            document.getElementById('fx-extra-x').value=p[0];
-            document.getElementById('fx-extra-y').value=p[1];
-        }
-
-        function afterEffectAdded(index) {
-            selectedEffectIndex = index;
-            refreshEditorTimeline();
-            refreshSelectedEffectEditor();
-        }
-
-        // --- EFFECT FUNCTIONS ---
+        function getEffectDuration(fx){ if(!fx)return .08; if(fx.type==='speed')return Math.max(.05,Number(fx.transDuration??fx.duration??.25)); if(fx.type==='sfx'||fx.type==='tile_style')return Math.max(.08,Number(fx.duration??.08)); return Math.max(.05,Number(fx.duration??.5)); }
+        function setEffectDuration(fx,value){const d=Math.max(.05,Number(value)||.05);fx.duration=d;if(fx.type==='speed')fx.transDuration=d;}
+        function effectLabel(fx){return ({pulse:'Pulse',tile_style:'Tile Style',speed:'Speed',image:'Background Image',extra_image:'Extra Image',sfx:'SFX'})[fx?.type]||'Effect';}
+        function effectColor(fx){return ({pulse:'#61d8ff',tile_style:'#a78bfa',speed:'#ff9d5c',image:'#5eead4',extra_image:'#8bff8b',sfx:'#f472b6'})[fx?.type]||'#72dcff';}
+        function openEffectsMenu(){document.getElementById('effects-menu').classList.remove('hidden');renderEffectEditor();}
+        function closeEffectsMenu(){document.getElementById('effects-menu').classList.add('hidden');}
+        function refreshSelectedEffectEditor(){renderEffectEditor();}
+        function selectEffect(index,syncPlayhead=true){if(index<0||!recordedEffects[index]){selectedEffectIndex=-1;renderEffectEditor();return;}selectedEffectIndex=index;if(syncPlayhead){editorTimer=Math.max(0,Number(recordedEffects[index].time)||0);updateEditorView();}renderEffectEditor();}
+        function deleteSelectedEffect(){if(selectedEffectIndex<0||!recordedEffects[selectedEffectIndex])return;recordedEffects.splice(selectedEffectIndex,1);selectedEffectIndex=-1;refreshEditorTimeline();renderEffectEditor();}
+        function setSelectedEffectToPlayhead(){if(selectedEffectIndex<0||!recordedEffects[selectedEffectIndex])return;const fx=recordedEffects[selectedEffectIndex];fx.time=Math.max(0,editorTimer);recordedEffects.sort((a,b)=>a.time-b.time);selectedEffectIndex=recordedEffects.indexOf(fx);refreshEditorTimeline();renderEffectEditor();}
+        function nudgeSelectedEffect(delta){if(selectedEffectIndex<0||!recordedEffects[selectedEffectIndex])return;const fx=recordedEffects[selectedEffectIndex];fx.time=Math.max(0,fx.time+delta);editorTimer=fx.time;recordedEffects.sort((a,b)=>a.time-b.time);selectedEffectIndex=recordedEffects.indexOf(fx);refreshEditorTimeline();renderEffectEditor();updateEditorView();}
+        function updateEffectProperty(name,value){if(selectedEffectIndex<0||!recordedEffects[selectedEffectIndex])return;const fx=recordedEffects[selectedEffectIndex];if(name==='time')fx.time=Math.max(0,Number(value)||0);else if(name==='duration')setEffectDuration(fx,value);else if(name==='color')fx.color=value;else if(name==='layer')fx.layer=Number(value);else if(name==='alpha')fx.alpha=Math.max(0,Math.min(1,Number(value)||0));else if(name==='inTrans')fx.inTrans=Math.max(0,Number(value)||0);else if(name==='outTrans')fx.outTrans=Math.max(0,Number(value)||0);else if(name==='target')fx.target=Math.max(5,Math.min(50,Number(value)||5));else if(name==='w')fx.w=Math.max(10,Number(value)||10);else if(name==='h')fx.h=Math.max(10,Number(value)||10);else if(name==='x')fx.x=Number(value)||0;else if(name==='y')fx.y=Number(value)||0;else if(name==='c1')fx.c1=value;else if(name==='c2')fx.c2=value;recordedEffects.sort((a,b)=>a.time-b.time);selectedEffectIndex=recordedEffects.indexOf(fx);editorTimer=fx.time;renderEffectEditor();refreshEditorTimeline();updateEditorView();}
+        function field(label,id,type,value,step='0.01',extra=''){return `<label class="inspector-field">${label}<input id="${id}" type="${type}" value="${value}" step="${step}" ${extra} oninput="updateEffectProperty('${id.replace('effect-inspector-','')}', this.value)"></label>`;}
+        function renderEffectInspector(){const root=document.getElementById('effect-inspector-content'),sub=document.getElementById('effect-inspector-subtitle');if(!root||!sub)return;const fx=recordedEffects[selectedEffectIndex];if(!fx){sub.textContent='Select an effect';root.innerHTML=`<div class="effect-inspector-empty"><div class="inspector-empty-icon">✦</div><b>Select an effect</b><span>Pick a block from the timeline to edit its timing, duration and properties.</span></div>`;return;}sub.textContent=effectLabel(fx);const d=getEffectDuration(fx);let h=`<div class="inspector-effect-banner" style="--effect-accent:${effectColor(fx)}"><div class="inspector-effect-icon">${fx.type==='speed'?'↯':fx.type==='sfx'?'♫':fx.type==='image'||fx.type==='extra_image'?'▧':'✦'}</div><div><b>${effectLabel(fx)}</b><span>${fx.time.toFixed(2)}s → ${(fx.time+d).toFixed(2)}s</span></div></div><div class="inspector-section"><div class="inspector-section-title">TIMING</div><div class="inspector-grid">${field('Start time','effect-inspector-time','number',Number(fx.time).toFixed(2),'0.01','min="0"')}${fx.type!=='sfx'?field('Duration','effect-inspector-duration','number',Number(d).toFixed(2),'0.01','min="0.05"'):''}</div></div>`;
+        if(fx.type==='pulse')h+=`<div class="inspector-section"><div class="inspector-section-title">PULSE</div><div class="inspector-grid">${field('Color','effect-inspector-color','color',fx.color||'#61d8ff')}<label class="inspector-field">Layer<select id="effect-inspector-layer" onchange="updateEffectProperty('layer',this.value)"><option value="0" ${Number(fx.layer)===0?'selected':''}>Back</option><option value="1" ${Number(fx.layer)===1?'selected':''}>Front</option></select></label>${field('Fade in','effect-inspector-inTrans','number',Number(fx.inTrans||0).toFixed(2),'0.01','min="0"')}${field('Fade out','effect-inspector-outTrans','number',Number(fx.outTrans||0).toFixed(2),'0.01','min="0"')}</div></div>`;
+        else if(fx.type==='speed')h+=`<div class="inspector-section"><div class="inspector-section-title">SPEED</div><div class="inspector-grid">${field('Target speed','effect-inspector-target','number',Number(fx.target||25).toFixed(1),'0.1','min="5" max="50"')}</div><div class="inspector-note">The block length is the transition duration. Drag its right edge to make the transition longer or shorter.</div></div>`;
+        else if(fx.type==='image')h+=`<div class="inspector-section"><div class="inspector-section-title">IMAGE</div><div class="inspector-grid">${field('Opacity','effect-inspector-alpha','number',Number(fx.alpha??.5).toFixed(2),'0.05','min="0" max="1"')}<label class="inspector-field">Layer<select id="effect-inspector-layer" onchange="updateEffectProperty('layer',this.value)"><option value="0" ${Number(fx.layer)===0?'selected':''}>Back</option><option value="1" ${Number(fx.layer)===1?'selected':''}>Front</option></select></label>${field('Fade in','effect-inspector-inTrans','number',Number(fx.inTrans||0).toFixed(2),'0.01','min="0"')}${field('Fade out','effect-inspector-outTrans','number',Number(fx.outTrans||0).toFixed(2),'0.01','min="0"')}</div></div>`;
+        else if(fx.type==='extra_image')h+=`<div class="inspector-section"><div class="inspector-section-title">POSITION & SIZE</div><div class="inspector-grid">${field('X','effect-inspector-x','number',Number(fx.x||0),'1')}${field('Y','effect-inspector-y','number',Number(fx.y||0),'1')}${field('Width','effect-inspector-w','number',Number(fx.w||150),'1','min="10"')}${field('Height','effect-inspector-h','number',Number(fx.h||150),'1','min="10"')}${field('Opacity','effect-inspector-alpha','number',Number(fx.alpha??1).toFixed(2),'0.05','min="0" max="1"')}<label class="inspector-field">Layer<select id="effect-inspector-layer" onchange="updateEffectProperty('layer',this.value)"><option value="0" ${Number(fx.layer)===0?'selected':''}>Back</option><option value="1" ${Number(fx.layer)===1?'selected':''}>Front</option></select></label></div></div>`;
+        else if(fx.type==='tile_style')h+=`<div class="inspector-section"><div class="inspector-section-title">TILE STYLE</div><div class="inspector-grid">${field('Color 1','effect-inspector-c1','color',fx.c1||'#000000')}${field('Color 2','effect-inspector-c2','color',fx.c2||'#111111')}${field('Opacity','effect-inspector-alpha','number',Number(fx.alpha??1).toFixed(2),'0.05','min="0" max="1"')}</div><div class="inspector-note">Tile Style is a state change. Later tile-style effects replace the active style.</div></div>`;
+        else if(fx.type==='sfx')h+=`<div class="inspector-section"><div class="inspector-section-title">AUDIO</div><div class="inspector-note">SFX triggers at its start time, so dragging changes exactly when it plays.</div></div>`;
+        h+=`<div class="inspector-actions"><button class="primary-effect-btn" onclick="setSelectedEffectToPlayhead()">ALIGN TO PLAYHEAD</button><button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button></div>`;root.innerHTML=h;}
+        function renderEffectEditor(){const ruler=document.getElementById('effect-time-ruler'),tracks=document.getElementById('effect-tracks'),ph=document.getElementById('effect-timeline-playhead'),summary=document.getElementById('effect-selection-summary');if(!ruler||!tracks||!ph)return;const max=Math.max(1,Number(document.getElementById('timeline-slider')?.max||60));ruler.innerHTML='';const tickCount=Math.min(30,Math.max(10,Math.ceil(max/2)));for(let i=0;i<=tickCount;i++){const t=max*i/tickCount,el=document.createElement('div');el.className='effect-ruler-tick';el.style.left=`${i/tickCount*100}%`;el.innerHTML=`<span>${t.toFixed(1)}s</span>`;ruler.appendChild(el);}tracks.innerHTML='<div class="effect-track-row"><div class="effect-track-label">EVENTS</div><div class="effect-track-content"></div></div>';const content=tracks.querySelector('.effect-track-content');recordedEffects.forEach((fx,index)=>{const d=Math.min(getEffectDuration(fx),Math.max(.05,max-fx.time));const b=document.createElement('div');b.className=`effect-block ${index===selectedEffectIndex?'selected':''}`;b.dataset.index=index;b.style.left=`${Math.max(0,Math.min(100,fx.time/max*100))}%`;b.style.width=`${Math.max(.5,Math.min(100-fx.time/max*100,d/max*100))}%`;b.style.setProperty('--effect-accent',effectColor(fx));b.innerHTML=`<span class="effect-resize-handle left"></span><span class="effect-block-content"><b>${effectLabel(fx)}</b><small>${fx.time.toFixed(2)}s</small></span><span class="effect-resize-handle right"></span>`;b.addEventListener('pointerdown',ev=>beginEffectDrag(ev,index));b.addEventListener('click',ev=>{if(!effectDragState.moved)selectEffect(index,false);effectDragState.moved=false;});content.appendChild(b);});ph.style.left=`${Math.max(0,Math.min(100,editorTimer/max*100))}%`;const fx=recordedEffects[selectedEffectIndex];if(summary)summary.textContent=fx?`${effectLabel(fx)} · ${fx.time.toFixed(2)}s · ${getEffectDuration(fx).toFixed(2)}s`:'Nothing selected';renderEffectInspector();const et=document.getElementById('effect-time-display');if(et)et.textContent=editorTimer.toFixed(2)+'s';}
+        const effectDragState={index:-1,mode:null,startX:0,startTime:0,startDuration:0,moved:false};
+        document.getElementById('effect-timeline-wrap')?.addEventListener('pointerdown',e=>{if(e.target.closest('.effect-block'))return;const wrap=document.getElementById('effect-timeline-wrap'),rect=wrap.getBoundingClientRect(),max=Math.max(1,Number(document.getElementById('timeline-slider')?.max||60));editorTimer=e.shiftKey?Math.max(0,Math.min(max,((e.clientX-rect.left)/rect.width)*max)):getSnappedEditorTime(Math.max(0,Math.min(max,((e.clientX-rect.left)/rect.width)*max)),false);updateEditorView();renderEffectEditor();});
+        function beginEffectDrag(event,index){if(event.button!==undefined&&event.button!==0)return;event.preventDefault();const isLeft=event.target.classList.contains('left'),isRight=event.target.classList.contains('right');effectDragState.index=index;effectDragState.mode=isLeft?'resize-left':isRight?'resize-right':'move';effectDragState.startX=event.clientX;effectDragState.startTime=recordedEffects[index].time;effectDragState.startDuration=getEffectDuration(recordedEffects[index]);effectDragState.moved=false;selectedEffectIndex=index;document.body.classList.add('dragging-effect');document.addEventListener('pointermove',updateEffectDrag);document.addEventListener('pointerup',endEffectDrag,{once:true});}
+        function updateEffectDrag(event){if(effectDragState.index<0)return;const wrap=document.getElementById('effect-timeline-wrap');const rect=wrap.getBoundingClientRect(),fx=recordedEffects[effectDragState.index];if(!wrap||!fx)return;const max=Math.max(1,Number(document.getElementById('timeline-slider')?.max||60));const raw=((event.clientX-effectDragState.startX)/rect.width)*max;const delta=event.shiftKey?raw:getSnappedEditorTime(Math.abs(raw),false)*Math.sign(raw);if(Math.abs(raw)>1)effectDragState.moved=true;if(effectDragState.mode==='move')fx.time=Math.max(0,Math.min(max-.01,effectDragState.startTime+delta));else if(effectDragState.mode==='resize-right'&&fx.type!=='sfx')setEffectDuration(fx,Math.max(.05,Math.min(max-fx.time,effectDragState.startDuration+delta)));else if(effectDragState.mode==='resize-left'&&fx.type!=='sfx'){const end=effectDragState.startTime+effectDragState.startDuration;const newStart=Math.max(0,Math.min(end-.05,effectDragState.startTime+delta));fx.time=event.shiftKey?newStart:getSnappedEditorTime(newStart,false);setEffectDuration(fx,end-fx.time);}recordedEffects.sort((a,b)=>a.time-b.time);effectDragState.index=recordedEffects.indexOf(fx);selectedEffectIndex=effectDragState.index;editorTimer=fx.time;renderEffectEditor();refreshEditorTimeline();updateEditorView();}
+        function endEffectDrag(){document.body.classList.remove('dragging-effect');document.removeEventListener('pointermove',updateEffectDrag);effectDragState.index=-1;effectDragState.mode=null;}
+        function afterEffectAdded(index){recordedEffects.sort((a,b)=>a.time-b.time);selectedEffectIndex=recordedEffects.indexOf(recordedEffects[index]||recordedEffects[recordedEffects.length-1]);refreshEditorTimeline();renderEffectEditor();}
         function addPulseEffect() {
             const fx={type:'pulse',time:Math.max(0,editorTimer),color:'#6ee7ff',layer:0,duration:0.5,inTrans:0.08,outTrans:0.25};
             recordedEffects.push(fx); recordedEffects.sort((a,b)=>a.time-b.time); afterEffectAdded(recordedEffects.indexOf(fx));
         }
         function addTileStyleEffect() {
-            const fx={type:'tile_style',time:Math.max(0,editorTimer),c1:'#000000',c2:'#111111',alpha:1,duration:0};
+            const fx={type:'tile_style',time:Math.max(0,editorTimer),c1:'#000000',c2:'#111111',alpha:1,duration:0.25};
             recordedEffects.push(fx); recordedEffects.sort((a,b)=>a.time-b.time); afterEffectAdded(recordedEffects.indexOf(fx));
         }
         function addSpeedEffect() {
