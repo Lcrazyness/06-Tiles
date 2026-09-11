@@ -155,7 +155,15 @@
                 <div id="editor-marker-layer"></div>
             </div>
             <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.01" oninput="scrubTimeline(this.value)">
-            <div class="timeline-hint">Click a marker to select it • Click the lane to place a tile at the playhead</div>
+            <div class="editor-grid-controls">
+                <span class="grid-label">SNAP GRID</span>
+                <button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
+                <button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
+                <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
+                <button class="grid-btn" data-grid="12" onclick="setEditorGrid(12)">1/12</button>
+                <span id="grid-readout" class="grid-readout">0.500s</span>
+            </div>
+            <div class="timeline-hint">Tiles snap to the selected grid • Shift temporarily disables snapping</div>
         </div>
         <div id="editor-left-panel" class="editor-panel">
             <button class="editor-btn square-btn" style="background: #0055ff;" onclick="document.getElementById('audio-upload').click()">🎵<br>Load Song</button>
@@ -739,14 +747,56 @@
             document.getElementById('editor-tool-normal')?.classList.toggle('active', mode==='normal');
             document.getElementById('editor-tool-hold')?.classList.toggle('active', mode==='hold');
         }
-        function placeTileAtPlayhead(lane){
-            const t={ lane, time:Math.max(0,editorTimer), isHold:editorTileMode==='hold', holdDuration:editorTileMode==='hold'?1:0 };
-            recordedTiles.push(t); recordedTiles.sort((a,b)=>a.time-b.time);
+        // --- EDITOR SNAP GRID ---
+        let editorGridDivision = 2;
+        const EDITOR_GRID_BEAT_SECONDS = 0.5; // 120 BPM reference beat; only used for editor snapping.
+
+        function getEditorGridStep(){
+            return EDITOR_GRID_BEAT_SECONDS / editorGridDivision;
+        }
+
+        function snapEditorTime(time, force = false){
+            const raw = Math.max(0, Number(time) || 0);
+            if (force || !window.event?.shiftKey) {
+                const step = getEditorGridStep();
+                return Math.max(0, Math.round(raw / step) * step);
+            }
+            return raw;
+        }
+
+        function setEditorGrid(division){
+            editorGridDivision = [2,4,8,12].includes(Number(division)) ? Number(division) : 2;
+            document.querySelectorAll('.grid-btn').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.grid) === editorGridDivision));
+            const readout = document.getElementById('grid-readout');
+            if(readout) readout.textContent = getEditorGridStep().toFixed(3) + 's';
             refreshEditorTimeline();
         }
 
+        function getSnappedEditorTime(time, bypassSnap=false){
+            const raw=Math.max(0, Number(time)||0);
+            if(bypassSnap) return raw;
+            const step=getEditorGridStep();
+            return Math.max(0, Math.round(raw/step)*step);
+        }
+
+        function tileAlreadyAt(lane, time){
+            const epsilon = getEditorGridStep() * 0.25;
+            return recordedTiles.some(t => t.lane === lane && Math.abs(t.time - time) < epsilon);
+        }
+
+        function placeTileAtPlayhead(lane, bypassSnap=false){
+            const snapped = getSnappedEditorTime(editorTimer, bypassSnap);
+            editorTimer = snapped;
+            if (tileAlreadyAt(lane, snapped)) return;
+            const t={ lane, time:snapped, isHold:editorTileMode==='hold', holdDuration:editorTileMode==='hold'?Math.max(getEditorGridStep()*2, 1):0 };
+            recordedTiles.push(t);
+            recordedTiles.sort((a,b)=>a.time-b.time || a.lane-b.lane);
+            refreshEditorTimeline();
+            updateEditorView();
+        }
+
         canvas.addEventListener("mousedown", (e) => {
-            if (inEditor && deleteMode) {
+            if (inEditor) {
                 const rect = canvas.getBoundingClientRect();
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
@@ -756,10 +806,11 @@
                 const clickedLane = Math.floor(mouseX / laneW);
 
                 if (!deleteMode && mouseY >= 0 && mouseY <= canvas.height) {
-                    placeTileAtPlayhead(Math.max(0, Math.min(3, clickedLane)));
+                    placeTileAtPlayhead(Math.max(0, Math.min(3, clickedLane)), e.shiftKey);
                     return;
                 }
                 
+                if (!deleteMode) return;
                 for(let i = recordedTiles.length - 1; i >= 0; i--) {
                     let t = recordedTiles[i];
                     if (t.lane === clickedLane) {
@@ -786,9 +837,14 @@
                 
                 if (inEditor && isRecording && laneIndex !== -1 && !deleteMode) {
                     if (editorKeyTimes[laneIndex] === null) {
-                        editorKeyTimes[laneIndex] = editorTimer;
-                        let newTile = { lane: laneIndex, time: editorTimer, isHold: false, holdDuration: 0 };
-                        recordedTiles.push(newTile); 
+                        const snappedTime = getSnappedEditorTime(editorTimer, e.shiftKey);
+                        editorKeyTimes[laneIndex] = snappedTime;
+                        if (!tileAlreadyAt(laneIndex, snappedTime)) {
+                            let newTile = { lane: laneIndex, time: snappedTime, isHold: false, holdDuration: 0 };
+                            recordedTiles.push(newTile);
+                            recordedTiles.sort((a,b)=>a.time-b.time || a.lane-b.lane);
+                            editorTimer = snappedTime;
+                        } 
                         editorVisualTiles.push({ lane: laneIndex, y: lineY, alpha: 1.0, ref: newTile }); 
                     }
                     return;
@@ -828,7 +884,7 @@
             const laneIndex = keyMap.indexOf(k);
             
             if (inEditor && isRecording && laneIndex !== -1 && editorKeyTimes[laneIndex] !== null) {
-                let duration = editorTimer - editorKeyTimes[laneIndex];
+                let duration = Math.max(0, editorTimer - editorKeyTimes[laneIndex]);
                 if (duration >= 1.1) {
                     for(let i = recordedTiles.length - 1; i >= 0; i--) {
                         if(recordedTiles[i].lane === laneIndex) {
@@ -874,6 +930,23 @@
             }
 
             if(inEditor) {
+                // Visual snap grid: horizontal lines show exact placement intervals.
+                ctx.save();
+                ctx.globalAlpha = 0.16;
+                ctx.strokeStyle = "#78bfff";
+                ctx.lineWidth = 1;
+                const gridStep = getEditorGridStep();
+                const pixelsPerSecond = 18 * 60;
+                const firstGridIndex = Math.floor((editorTimer - lineY / pixelsPerSecond) / gridStep) - 2;
+                const lastGridIndex = Math.ceil((editorTimer + (canvas.height-lineY) / pixelsPerSecond) / gridStep) + 2;
+                for(let gi=firstGridIndex; gi<=lastGridIndex; gi++){
+                    const gt = gi * gridStep;
+                    const gy = lineY + (editorTimer - gt) * pixelsPerSecond;
+                    if(gy < 0 || gy > canvas.height) continue;
+                    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(canvas.width, gy); ctx.stroke();
+                }
+                ctx.restore();
+
                 recordedTiles.forEach(t => {
                     let yOffset = (editorTimer - t.time) * (18 * 60); 
                     let y = lineY + yOffset;
@@ -1034,6 +1107,7 @@
             document.getElementById('edit-fps').value = 60; windowLevelFPS = 60; 
             document.getElementById('edit-audio-offset').value = 0;
             document.getElementById('edit-disable-holds').checked = false;
+            setEditorGrid(editorGridDivision);
             lastTime = performance.now(); requestAnimationFrame(gameLoop); 
         }
         
@@ -1263,6 +1337,14 @@
         }
 
         function nudgeEditorTime(delta) { scrubTimeline(editorTimer + delta); }
+
+        function cycleEditorGrid(direction){
+            const values=[2,4,8,12];
+            let idx=values.indexOf(editorGridDivision);
+            idx=(idx + direction + values.length) % values.length;
+            setEditorGrid(values[idx]);
+        }
+
         function jumpEditorEnd() {
             const max = Number(document.getElementById('timeline-slider')?.max || 60);
             scrubTimeline(max);
