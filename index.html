@@ -1,0 +1,1230 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Extreme Tiles: Hyper Edition</title>
+    <style>
+        :root {
+            --bg-purple: #1a0033;
+            --card-purple: #2d1b5a;
+            --accent-blue: #00ffff;
+            --play-blue: #00a2ff;
+            --btn-pink: #ff007f;
+            --primary-theme: #3c096c;
+            --custom-bg: linear-gradient(180deg, #10002b 0%, var(--primary-theme) 50%, #10002b 100%);
+        }
+
+        body { 
+            background: var(--custom-bg);
+            color: #fff; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            height: 100vh; margin: 0; overflow: hidden; transition: background 0.1s; 
+            user-select: none;
+        }
+
+        /* --- UI Containers --- */
+        #score-container { position: absolute; top: 20px; width: 100%; display: flex; flex-direction: column; align-items: center; z-index: 5; pointer-events: none; }
+        #score { font-size: 48px; font-weight: 900; }
+        #rest-msg { font-size: 22px; color: #ff00ff; font-weight: bold; opacity: 0; }
+
+        /* Lives Display */
+        #lives-display {
+            position: absolute; bottom: 20px; left: 20px; font-size: 24px; font-weight: bold;
+            background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 8px; border: 2px solid #ff3333; z-index: 5;
+        }
+
+        /* Game HUD (FPS and Progress) */
+        #game-hud {
+            position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column;
+            align-items: flex-end; z-index: 5; pointer-events: none; font-size: 22px; font-weight: 900;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8); color: var(--accent-blue);
+        }
+        #progress-display { font-size: 18px; color: #fff; margin-top: 2px; }
+
+        /* Layer 0: Background Effects */
+        #red-flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: red; opacity: 0; pointer-events: none; z-index: 99; transition: opacity 0.1s ease-out; }
+        #bg-image-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background-size: cover; background-position: center; opacity: 0; pointer-events: none; }
+        #bg-flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; opacity: 0; pointer-events: none; }
+        #extra-images-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; overflow: hidden; }
+
+        /* Layer 1: Foreground Effects (Above Canvas) */
+        #fg-image-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 11; background-size: cover; background-position: center; opacity: 0; pointer-events: none; }
+        #fg-flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 11; opacity: 0; pointer-events: none; }
+        #extra-images-fg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 12; pointer-events: none; overflow: hidden; }
+
+        canvas { background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); border: 2px solid rgba(255, 255, 255, 0.1); border-radius: 12px; box-shadow: 0 0 30px rgba(0,0,0,0.5); position: relative; z-index: 1; cursor: crosshair; }
+
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 20;
+        }
+        .hidden { display: none !important; }
+
+        .menu-content { width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 12px; }
+
+        /* Tabs Menu */
+        .tabs-container { display: flex; justify-content: center; gap: 5px; margin-bottom: 15px; flex-wrap: wrap; }
+        .small-tab { background: #333; color: white; border: 1px solid #555; padding: 6px 10px; font-size: 11px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .small-tab:hover { background: var(--play-blue); border-color: #fff; }
+
+        .grid-levels { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+
+        /* --- Cards & Buttons --- */
+        .song-card { background: linear-gradient(90deg, var(--primary-theme), #5a189a); border-radius: 8px; display: flex; flex-direction: column; padding: 10px; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border-left: 5px solid var(--accent-blue); }
+        .song-main { display: flex; align-items: center; width: 100%; flex-wrap: wrap; }
+        .song-thumb { width: 40px; height: 40px; background: rgba(0,0,0,0.5); margin-right: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; border-radius: 6px; }
+        .song-info { flex-grow: 1; display: flex; flex-direction: column; gap: 2px; }
+        .song-title { font-size: 14px; font-weight: bold; color: #fff; }
+        .song-author { font-size: 10px; color: #ccc; }
+        
+        .speed-control { margin-top: 8px; display: flex; align-items: center; gap: 5px; font-size: 10px; background: rgba(0,0,0,0.4); padding: 4px 6px; border-radius: 6px; }
+        .speed-control input { flex-grow: 1; cursor: pointer; height: 4px; }
+
+        .play-btn { background: linear-gradient(135deg, var(--play-blue), #0055ff); color: white; border: none; padding: 6px 12px; font-weight: bold; cursor: pointer; margin-top: 5px; border-radius: 20px; font-size: 12px; box-shadow: 0 4px 10px rgba(0, 162, 255, 0.4); text-transform: uppercase; letter-spacing: 1px; transition: transform 0.1s; width: 100%; }
+        .play-btn:active { transform: scale(0.95); }
+        .edit-btn { background: linear-gradient(135deg, #ffaa00, #ff8800); box-shadow: 0 4px 10px rgba(255, 170, 0, 0.3); }
+
+        .nav-btn { background: linear-gradient(135deg, #e0e0e0, #ffffff); color: #000; border: none; padding: 14px; font-weight: 900; cursor: pointer; width: 100%; border-radius: 8px; font-size: 16px; letter-spacing: 1px; box-shadow: 0 4px 15px rgba(255,255,255,0.1); transition: transform 0.1s; }
+        .nav-btn:active { transform: scale(0.98); }
+        .secondary-btn { background: linear-gradient(135deg, #444, #222); color: #fff; }
+        .pink-btn { background: linear-gradient(135deg, #ff007f, #99004d); color: #fff; box-shadow: 0 4px 15px rgba(255,0,127,0.3); }
+
+        .settings-row { display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; }
+        
+        /* --- Editor Specific UI --- */
+        #editor-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 15; }
+        .editor-panel { pointer-events: auto; background: rgba(0, 0, 0, 0.85); border-radius: 8px; padding: 10px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(5px); }
+        
+        #editor-timer-panel { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); font-size: 24px; font-weight: bold; color: var(--accent-blue); }
+        #editor-timeline-panel { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); width: 80%; max-width: 400px; display: flex; align-items: center; gap: 10px; }
+        #timeline-slider { flex-grow: 1; cursor: pointer; }
+
+        #editor-left-panel { position: absolute; top: 50%; left: 15px; transform: translateY(-50%); display: flex; flex-direction: column; gap: 10px; }
+        .editor-btn { background: #333; color: white; border: 1px solid #555; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .editor-btn:hover { background: #444; }
+        .editor-btn.active { background: var(--play-blue); border-color: #fff; box-shadow: 0 0 10px var(--play-blue); }
+        .square-btn { width: 55px; height: 55px; padding: 5px; font-size: 11px; flex-direction: column; }
+        .small-bottom-btn { padding: 5px 10px; font-size: 12px; }
+
+        #editor-bottom-panel { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+        #editor-menu-btn { position: absolute; top: 15px; right: 15px; font-size: 20px; padding: 5px 12px; }
+        #editor-effect-btn { position: absolute; top: 60px; right: 15px; font-size: 20px; padding: 5px 12px; }
+        #editor-settings-btn { position: absolute; top: 105px; right: 15px; font-size: 20px; padding: 5px 12px; }
+        #stop-playtest-btn { position: absolute; top: 15px; right: 15px; z-index: 100; background: red; color: white; padding: 15px; font-weight: bold; border-radius: 8px; border: 2px solid white; cursor: pointer; }
+
+        .switch-container { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-top: 5px; background: rgba(255,255,255,0.1); padding: 5px; border-radius: 4px; flex-direction: column;}
+        .beta-tag { font-size: 9px; background: #ff00ff; color: white; padding: 2px 4px; border-radius: 3px; vertical-align: top; margin-left: 5px; }
+
+        .effect-menu-grid { display: flex; flex-direction: column; gap: 15px; max-height: 60vh; overflow-y: auto; padding-right: 5px; }
+        .effect-group { background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border: 1px solid #444; }
+        .effect-btn-wide { width: 100%; padding: 12px; background: #333; border: 2px solid #555; color: white; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+        .effect-btn-wide:hover { background: #444; border-color: var(--accent-blue); }
+        .effect-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
+        .effect-settings label { display: flex; flex-direction: column; gap: 2px; }
+        .effect-settings input, .effect-settings select { background: #222; color: #fff; border: 1px solid #555; padding: 4px; border-radius: 4px; width: 100%; box-sizing: border-box; }
+
+    </style>
+</head>
+<body>
+
+    <div id="red-flash"></div>
+    <div id="bg-flash"></div>
+    <div id="bg-image-container"></div>
+    <div id="extra-images-bg"></div>
+    <div id="fg-flash"></div>
+    <div id="fg-image-container"></div>
+    <div id="extra-images-fg"></div>
+
+    <div id="game-hud" class="hidden">
+        <div id="fps-display">60 FPS</div>
+        <div id="progress-display">0%</div>
+    </div>
+
+    <audio id="bg-audio"></audio>
+    <input type="file" id="audio-upload" accept="audio/*" style="display:none" onchange="loadAudioFile(event)">
+
+    <div id="lives-display" class="hidden">❤️ <span id="lives-count">3</span></div>
+    <button id="stop-playtest-btn" class="hidden" onclick="stopPlaytest()">🛑 STOP PLAYTESTING</button>
+
+    <div id="main-menu" class="overlay">
+        <h1 style="letter-spacing: 5px; font-style: italic;">EXTREME TILES</h1>
+        <div class="menu-content">
+            <button class="nav-btn" style="background: linear-gradient(135deg, var(--play-blue), #0055ff); color: #fff;" onclick="toggleMenu('levels-menu')">▶ MAIN LEVELS</button>
+            <button class="nav-btn" onclick="openBrowseLevels('recent')">🌐 BROWSE LEVELS</button>
+            <button class="nav-btn" style="background: linear-gradient(135deg, #9d4edd, #5a189a); color: #fff;" onclick="openMyLevels()">📁 MY LEVELS</button>
+            <button class="nav-btn pink-btn" onclick="startEditor()">🛠 CREATE LEVEL</button>
+            <button class="nav-btn secondary-btn" onclick="toggleMenu('settings-menu')">⚙ SETTINGS</button>
+            <button class="nav-btn secondary-btn" id="signup-btn" onclick="handleAuth()">👤 LOGIN / SIGN UP (GUEST)</button>
+        </div>
+    </div>
+
+    <div id="settings-menu" class="overlay hidden">
+        <h2>GAME SETTINGS</h2>
+        <div class="menu-content">
+            <div class="settings-row">
+                <span>Primary Theme Color</span>
+                <input type="color" id="primary-color-picker" value="#3c096c" onchange="updatePrimaryColor(this.value)">
+            </div>
+            <div class="settings-row">
+                <span>Main Levels BG Color</span>
+                <input type="color" id="bg-color-picker" value="#3c096c">
+            </div>
+            
+            <div class="settings-row">
+                <span>Enable CBF (Sub-frame Clicks)</span>
+                <input type="checkbox" id="setting-cbf" checked>
+            </div>
+            
+            <button class="nav-btn" onclick="toggleMenu('main-menu')">SAVE & BACK</button>
+        </div>
+    </div>
+
+    <div id="levels-menu" class="overlay hidden">
+        <h2 style="margin-bottom: 5px;">MAIN LEVELS</h2>
+        <div class="menu-content" style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+            <div class="grid-levels">
+                
+                <div class="song-card" style="border-left: 5px solid #ff0000;">
+                    <div class="song-main">
+                        <div class="song-thumb" style="background: #2a0000; color: #ff3333;">🔃</div>
+                        <div class="song-info">
+                            <span class="song-title">Level Loader</span>
+                            <span class="song-author">Load any JSON</span>
+                        </div>
+                        <input type="file" id="level-upload" accept=".json" style="display:none" onchange="loadCustomLevelFile(event)">
+                        <button class="play-btn" style="background: linear-gradient(135deg, #ff0000, #aa0000);" onclick="document.getElementById('level-upload').click()">LOAD .JSON</button>
+                    </div>
+                    <div class="speed-control" style="justify-content: center; background: rgba(255,0,0,0.1);">
+                        <span style="color: #ffaaaa; font-weight: bold; font-size: 11px;">Extracts Lives & Effects</span>
+                    </div>
+                </div>
+
+                <div class="song-card">
+                    <div class="song-main">
+                        <div class="song-thumb">🎹</div>
+                        <div class="song-info">
+                            <span class="song-title">The Scale</span>
+                            <span class="song-author">By: System</span>
+                        </div>
+                        <button class="play-btn" onclick="startGame('scale')">PLAY</button>
+                    </div>
+                    <div class="speed-control">
+                        <span>Spd:</span>
+                        <input type="range" id="speed-scale" min="5" max="40" value="18">
+                        <span id="val-scale">18</span>
+                    </div>
+                </div>
+                <div class="song-card">
+                    <div class="song-main">
+                        <div class="song-thumb">🥁</div>
+                        <div class="song-info">
+                            <span class="song-title">Bam Bam</span>
+                            <span class="song-author">By: System</span>
+                        </div>
+                        <button class="play-btn" onclick="startGame('bambam')">PLAY</button>
+                    </div>
+                    <div class="speed-control">
+                        <span>Spd:</span>
+                        <input type="range" id="speed-bambam" min="5" max="40" value="19">
+                        <span id="val-bambam">19</span>
+                    </div>
+                </div>
+            </div>
+            <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <div id="my-levels-menu" class="overlay hidden">
+        <h2 style="margin-bottom: 15px;">MY CREATIONS</h2>
+        <div class="menu-content" style="max-height: 75vh; overflow-y: auto; padding-right: 5px;">
+            <div class="grid-levels" id="custom-levels-container"></div>
+            <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <div id="browse-levels-menu" class="overlay hidden">
+        <h2 style="margin-bottom: 15px;">COMMUNITY LEVELS</h2>
+        <div class="tabs-container">
+            <button id="tab-recent" class="small-tab" onclick="openBrowseLevels('recent')">Recent</button>
+            <button id="tab-rated" class="small-tab" onclick="openBrowseLevels('rated')">Rated Tab</button>
+            <button id="tab-list" class="small-tab" onclick="openBrowseLevels('list')">Level List</button>
+        </div>
+        <div class="menu-content" style="max-height: 70vh; overflow-y: auto; padding-right: 5px;">
+            <div class="grid-levels" id="community-levels-container"></div>
+            <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <div id="editor-ui" class="hidden">
+        <div id="editor-timer-panel" class="editor-panel">0.00s</div>
+        <div id="editor-timeline-panel" class="editor-panel">
+            <span style="font-size: 12px;">Time:</span>
+            <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.1" oninput="scrubTimeline(this.value)">
+        </div>
+        <div id="editor-left-panel" class="editor-panel">
+            <button class="editor-btn square-btn" style="background: #0055ff;" onclick="document.getElementById('audio-upload').click()">🎵<br>Load Song</button>
+            <button id="btn-song-test" class="editor-btn square-btn" onclick="toggleSongTester()">🎧<br>Song Tester</button>
+            <button id="btn-create-tiles" class="editor-btn square-btn" onclick="toggleRecording()">▶<br>Create Tiles</button>
+            <button id="btn-delete-mode" class="editor-btn square-btn" onclick="toggleDeleteMode()">🗑️<br>Delete</button>
+            <div style="border-top: 1px solid #555; padding-top: 10px; margin-top: 5px; display:flex; flex-direction:column; gap: 5px;">
+                <label style="font-size: 11px; text-align: center;">Starting Hearts:</label>
+                <input type="number" id="edit-lives" value="3" min="1" max="10" style="background:#222; color:white; border:1px solid #555; text-align:center; padding:2px; border-radius:4px;">
+                <button class="editor-btn small-bottom-btn" style="background: var(--play-blue); margin-top: 5px;" onclick="startPlaytest()">🎮 Play Test</button>
+                <div class="switch-container">
+                    <label>NoClip</label><input type="checkbox" id="edit-noclip">
+                </div>
+            </div>
+        </div>
+        <div id="editor-bottom-panel" class="editor-panel">
+            <button class="editor-btn small-bottom-btn active">Normal Tile</button>
+            <button class="editor-btn small-bottom-btn" onclick="alert('Hold a key for 1.1s while recording to create a Hold Tile!')">Hold Tile Info</button>
+        </div>
+        <button id="editor-menu-btn" class="editor-btn editor-panel" onclick="openCreatorMenu()">☰</button>
+        <button id="editor-effect-btn" class="editor-btn editor-panel" onclick="openEffectsMenu()">✨</button>
+        <button id="editor-settings-btn" class="editor-btn editor-panel" onclick="openEditorSettingsMenu()">⚙</button>
+    </div>
+
+    <div id="editor-level-settings" class="overlay hidden">
+        <h2>LEVEL SETTINGS</h2>
+        <div class="menu-content">
+            <div class="settings-row">
+                <span>Target FPS</span>
+                <input type="number" id="edit-fps" value="60" min="10" max="240" style="width:60px; text-align:center; border-radius:4px; border:none; padding:4px;">
+            </div>
+            <div class="settings-row">
+                <span>Audio Offset (ms)</span>
+                <input type="number" id="edit-audio-offset" value="0" style="width:70px; text-align:center; background:#222; color:#fff; border:1px solid #555; border-radius:4px; padding: 4px;">
+            </div>
+            <div class="settings-row">
+                <span>Disable Hold Tiles</span>
+                <input type="checkbox" id="edit-disable-holds">
+            </div>
+            <button class="nav-btn secondary-btn" onclick="closeEditorSettingsMenu()">BACK TO EDITOR</button>
+        </div>
+    </div>
+
+    <div id="creator-menu" class="overlay hidden">
+        <h2>EDITOR MENU</h2>
+        <div class="menu-content">
+            <button class="nav-btn" onclick="closeCreatorMenu()">RESUME</button>
+            <button class="nav-btn" style="background: #9900ff; color: white;" onclick="verifyAndDownloadLevel()">▶ VERIFY & DOWNLOAD</button>
+            <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 PUBLISH TO CLOUD</button>
+            <button class="nav-btn" style="background: #00cc66; color: white;" onclick="saveCustomLevel()">SAVE TO MY LEVELS</button>
+            <button class="nav-btn" style="background: #cc0000; color: white;" onclick="exitEditorWithoutSaving()">QUIT</button>
+        </div>
+    </div>
+
+    <div id="effects-menu" class="overlay hidden">
+        <h2>TIMELINE EFFECTS</h2>
+        <p style="text-align:center; font-size:12px; margin-bottom:10px; color:#aaa;">Placing effect at: <span id="effect-time-display" style="color:var(--accent-blue); font-weight:bold;">0.00</span>s</p>
+        
+        <div class="effect-menu-grid">
+            <div class="effect-group">
+                <button class="effect-btn-wide" onclick="addPulseEffect()">ADD PULSE / BG COLOR</button>
+                <div class="effect-settings">
+                    <label>Color: <input type="color" id="fx-pulse-color" value="#ff00ff"></label>
+                    <label>Layer: <select id="fx-pulse-layer"><option value="0">0 (Back)</option><option value="1">1 (Front)</option></select></label>
+                    <label>Dur (s): <input type="number" id="fx-pulse-dur" value="0.5" step="0.1" min="0.1"></label>
+                    <label>In (s): <input type="number" id="fx-pulse-in" value="0.1" step="0.1" min="0"></label>
+                    <label>Out (s): <input type="number" id="fx-pulse-out" value="0.4" step="0.1" min="0"></label>
+                </div>
+            </div>
+
+            <div class="effect-group">
+                <button class="effect-btn-wide" onclick="addImageEffect()">ADD IMAGE (BG)</button>
+                <div class="effect-settings">
+                    <label style="grid-column: span 2;">Upload Image: <input type="file" id="fx-img-upload" accept="image/*"></label>
+                    <label>Layer: <select id="fx-img-layer"><option value="0">0 (Back)</option><option value="1">1 (Front)</option></select></label>
+                    <label>Transp. (0-1): <input type="number" id="fx-img-alpha" value="0.5" step="0.1" min="0" max="1"></label>
+                    <label>Dur (s): <input type="number" id="fx-img-dur" value="2.0" step="0.1" min="0.1"></label>
+                    <label>In (s): <input type="number" id="fx-img-in" value="0.5" step="0.1" min="0"></label>
+                    <label>Out (s): <input type="number" id="fx-img-out" value="0.5" step="0.1" min="0"></label>
+                </div>
+            </div>
+
+            <div class="effect-group">
+                <button class="effect-btn-wide" style="background: #00cc66; border-color: #00ff88;" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button>
+                <div class="effect-settings">
+                    <label style="grid-column: span 2;">Upload Image: <input type="file" id="fx-extra-upload" accept="image/*"></label>
+                    <label>Layer: <select id="fx-extra-layer"><option value="0">0 (Back)</option><option value="1">1 (Front)</option></select></label>
+                    <label>Alpha (0-1): <input type="number" id="fx-extra-alpha" value="1.0" step="0.1" min="0" max="1"></label>
+                    <label>Width (px): <input type="number" id="fx-extra-w" value="150"></label>
+                    <label>Height (px): <input type="number" id="fx-extra-h" value="150"></label>
+                    <label>Pos X (px): <input type="number" id="fx-extra-x" value="180"></label>
+                    <label>Pos Y (px): <input type="number" id="fx-extra-y" value="320"></label>
+                    <label>Dur (s): <input type="number" id="fx-extra-dur" value="2.0" step="0.1" min="0.1"></label>
+                    <label style="grid-column: span 2;"><button class="nav-btn secondary-btn" style="padding: 8px; font-size: 12px; font-weight:bold;" onclick="previewExtraImage()">PREVIEW IMAGE</button></label>
+                </div>
+            </div>
+
+            <div class="effect-group">
+                <button class="effect-btn-wide" style="background: #0055ff; border-color: #00a2ff;" onclick="addTileStyleEffect()">CHANGE TILE STYLE</button>
+                <div class="effect-settings">
+                    <label>Color 1: <input type="color" id="fx-tile-color1" value="#000000"></label>
+                    <label>Color 2: <input type="color" id="fx-tile-color2" value="#000000"></label>
+                    <label>Transp. (0-1): <input type="number" id="fx-tile-alpha" value="1.0" step="0.1" min="0" max="1"></label>
+                    <label>Dur (s): <input type="number" id="fx-tile-dur" value="2.0" step="0.1" min="0.1"></label>
+                </div>
+            </div>
+
+            <div class="effect-group">
+                <button class="effect-btn-wide" style="background: #ff5500; border-color: #ffaa00;" onclick="addSpeedEffect()">ADD SPEED CHANGE</button>
+                <div class="effect-settings">
+                    <label>Target Speed: <input type="number" id="fx-speed-target" value="25" step="1" min="5" max="50"></label>
+                    <label>Trans. Dur: <input type="number" id="fx-speed-trans" value="1.0" step="0.1" min="0"></label>
+                </div>
+            </div>
+
+            <div class="effect-group">
+                <button class="effect-btn-wide" style="background: #9900cc; border-color: #ff00ff;" onclick="addSfxEffect()">ADD EXTRA SFX</button>
+                <div class="effect-settings">
+                    <label style="grid-column: span 2;">Upload Sound: <input type="file" id="fx-sfx-upload" accept="audio/*"></label>
+                </div>
+            </div>
+        </div>
+        <div class="menu-content" style="margin-top: 15px;">
+            <button class="nav-btn secondary-btn" onclick="closeEffectsMenu()">BACK</button>
+        </div>
+    </div>
+
+    <div id="score-container">
+        <div id="score">0</div>
+        <div id="rest-msg">BREATHE</div>
+    </div>
+    <canvas id="gameCanvas" width="360" height="640"></canvas>
+
+    <div id="death-screen" class="overlay hidden">
+        <h1 id="death-title" style="color: #ff3333; font-size: 48px;">FAILED</h1>
+        <p id="final-score" style="font-size: 26px; margin-bottom: 20px;">Score: 0</p>
+        <button id="death-retry-btn" class="play-btn" style="padding: 15px 50px; font-size: 18px;" onclick="restartGame()">RETRY</button>
+        <button id="death-quit-btn" class="nav-btn" style="max-width: 200px; margin-top: 15px;" onclick="quitPlaytestOrGame()">QUIT TO MENU</button>
+        <button id="death-stop-playtest-btn" class="nav-btn hidden" style="max-width: 200px; margin-top: 15px; background: red; color: white;" onclick="stopPlaytestFromDeath()">STOP PLAYTESTING</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreEl = document.getElementById("score");
+        const restEl = document.getElementById("rest-msg");
+        const bgAudio = document.getElementById("bg-audio");
+        const overlays = ['main-menu', 'levels-menu', 'settings-menu', 'death-screen', 'my-levels-menu', 'creator-menu', 'effects-menu', 'browse-levels-menu', 'editor-level-settings'];
+
+        let score = 0, speed = 18, lastTime = 0; 
+        let tiles = [], particles = [], isDead = false, gameActive = false;
+        let currentMode = 'practice', patternStep = 0;
+        let distanceTraveled = 0, nextSpawnDistance = 0;
+
+        let maxLives = 3; let currentLives = 3;
+        let windowLevelFPS = 60;
+        
+        let frameCount = 0;
+        let lastFpsTime = 0;
+        let levelEndTime = 0;
+
+        const laneW = canvas.width / 4;
+        const keyMap = ['r', 't', 'y', 'u'];
+        const keys = { r: false, t: false, y: false, u: false };
+        const lineY = 540;
+        const TILE_H = 150, GAP = 35;
+
+        let currentTileStyle = { c1: "#000000", c2: "#000000", alpha: 1.0 };
+        let targetSpeed = 18, speedTransitionTime = 0, speedTransitionDuration = 0, initialSpeed = 18;
+
+        const patterns = {
+            scale: [3, 2, 1, 0],
+            bambam: [[0, 2], 1, [0, 2], 1, [0, 2], 1, 0, [1, 3], 2, [1, 3], 2, [1, 3], 2, 3]
+        };
+
+        // Holds our externally loaded level temporarily so "Restart" works smoothly
+        let tempLoadedLevel = null;
+
+        // --- ACCOUNT LOGIC (NO LOGIN REQUIRED) ---
+        let users = JSON.parse(localStorage.getItem('extremeTilesUsers')) || { 'Guest': { customLevels: [] } };
+        let currentUser = localStorage.getItem('extremeTilesUser') || 'Guest';
+        if (!users['Guest']) users['Guest'] = { customLevels: [] };
+        
+        let customLevels = users[currentUser] ? users[currentUser].customLevels : users['Guest'].customLevels;
+        let communityLevels = JSON.parse(localStorage.getItem('communityLevels')) || [];
+
+        if(currentUser !== 'Guest') {
+            document.getElementById('signup-btn').innerText = `👤 ${currentUser} (Log Out)`;
+        } else {
+            document.getElementById('signup-btn').innerText = `👤 LOGIN / SIGN UP (GUEST)`;
+        }
+
+        // --- FILE LOADER (PULLS EVERYTHING DYNAMICALLY) ---
+        function loadCustomLevelFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const levelData = JSON.parse(e.target.result);
+                    tempLoadedLevel = levelData;
+                    
+                    // Start game with all settings populated straight from the JSON
+                    startGame(levelData.name || 'Loaded Level', true, -1, levelData.data, levelData.effects || [], false, levelData);
+                    
+                    event.target.value = ""; // Reset input so they can click it again if needed
+                } catch (err) {
+                    alert("Error parsing level file. Make sure it's a valid JSON format.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function updatePrimaryColor(val) {
+            document.documentElement.style.setProperty('--primary-theme', val);
+            document.documentElement.style.setProperty('--play-blue', val);
+        }
+
+        function handleAuth() {
+            if (currentUser !== 'Guest') {
+                if (confirm("Log out of " + currentUser + "?")) {
+                    currentUser = 'Guest'; localStorage.removeItem('extremeTilesUser'); 
+                    customLevels = users['Guest'].customLevels;
+                    document.getElementById('signup-btn').innerText = `👤 LOGIN / SIGN UP (GUEST)`; 
+                    alert("Logged out successfully. You are now playing as a Guest.");
+                } return;
+            }
+            let action = prompt("Type 'login' to Log In, or 'signup' to Create an Account:");
+            if (!action) return; action = action.toLowerCase();
+            if (action === 'signup') {
+                let user = prompt("Create a Username:"); if (!user || user === 'Guest') return;
+                if (users[user]) { alert("Username already taken!"); return; }
+                let pass = prompt("Create a Password:"); if (!pass) return;
+                users[user] = { password: pass, customLevels: [] };
+                localStorage.setItem('extremeTilesUsers', JSON.stringify(users)); login(user, pass);
+            } else if (action === 'login') {
+                let user = prompt("Enter Username:"); let pass = prompt("Enter Password:");
+                if (users[user] && users[user].password === pass) login(user, pass);
+                else alert("Invalid Username or Password.");
+            }
+        }
+
+        function login(user, pass) {
+            currentUser = user; localStorage.setItem('extremeTilesUser', user);
+            customLevels = users[user].customLevels;
+            document.getElementById('signup-btn').innerText = `👤 ${user} (Log Out)`; alert("Logged in as " + user);
+        }
+
+        let isCustomGame = false, customPlayTime = 0, customGameInterval = null, isPlaytesting = false, isVerifying = false; 
+        let inEditor = false, isRecording = false, isSongTesting = false, deleteMode = false; 
+        let editorTimer = 0, editorInterval = null;
+        let recordedTiles = [], recordedEffects = [], editorVisualTiles = []; 
+        let loadedImageDataUrl = null, loadedSfxDataUrl = null, loadedExtraImageDataUrl = null, currentEditingName = "";
+        let verifyEndTime = 0;
+        let editorKeyTimes = [null, null, null, null]; 
+
+        document.getElementById('fx-img-upload').addEventListener('change', function(e) {
+            const reader = new FileReader(); reader.onload = (ev) => loadedImageDataUrl = ev.target.result; reader.readAsDataURL(e.target.files[0]);
+        });
+        document.getElementById('fx-extra-upload').addEventListener('change', function(e) {
+            const reader = new FileReader(); reader.onload = (ev) => loadedExtraImageDataUrl = ev.target.result; reader.readAsDataURL(e.target.files[0]);
+        });
+        document.getElementById('fx-sfx-upload').addEventListener('change', function(e) {
+            const reader = new FileReader(); reader.onload = (ev) => loadedSfxDataUrl = ev.target.result; reader.readAsDataURL(e.target.files[0]);
+        });
+
+        function toggleMenu(menuId) {
+            overlays.forEach(id => document.getElementById(id).classList.add('hidden'));
+            if(menuId) document.getElementById(menuId).classList.remove('hidden');
+        }
+
+        document.querySelectorAll('.speed-control input').forEach(input => {
+            input.addEventListener('input', (e) => {
+                const id = e.target.id.replace('speed-', 'val-'); document.getElementById(id).innerText = e.target.value;
+            });
+        });
+
+        function loadAudioFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const maxSize = 10 * 1024 * 1024; 
+            if (file.size > maxSize) {
+                alert("File is too large! Please select a song under 10MB.");
+                event.target.value = ""; 
+                return;
+            }
+            const url = URL.createObjectURL(file); 
+            bgAudio.src = url; bgAudio.load();
+            bgAudio.onloadedmetadata = () => { document.getElementById('timeline-slider').max = bgAudio.duration; alert("Song loaded successfully!"); };
+        }
+
+        function getAvgRating(level) {
+            if (!level.ratings || level.ratings.length === 0) return 0;
+            return (level.ratings.reduce((a, b) => a + b, 0) / level.ratings.length).toFixed(1);
+        }
+
+        function resetState() {
+            score = 0; tiles = []; particles = []; isDead = false; patternStep = 0; scoreEl.innerText = "0";
+            distanceTraveled = 0; nextSpawnDistance = 0; currentLives = maxLives;
+            document.getElementById('lives-count').innerText = currentLives;
+            
+            document.getElementById('fps-display').innerText = "60 FPS";
+            document.getElementById('progress-display').innerText = "0%";
+            frameCount = 0;
+            lastFpsTime = performance.now();
+            levelEndTime = 0;
+            
+            document.body.style.background = document.getElementById('bg-color-picker').value || 'var(--custom-bg)';
+            document.getElementById('bg-image-container').style.opacity = 0;
+            document.getElementById('fg-image-container').style.opacity = 0;
+            document.getElementById('bg-flash').style.opacity = 0;
+            document.getElementById('fg-flash').style.opacity = 0;
+
+            document.getElementById('extra-images-bg').innerHTML = "";
+            document.getElementById('extra-images-fg').innerHTML = "";
+
+            currentTileStyle = { c1: "#000000", c2: "#000000", alpha: 1.0 };
+            targetSpeed = speed; speedTransitionTime = 0; speedTransitionDuration = 0;
+
+            bgAudio.pause(); bgAudio.currentTime = 0;
+            if(customGameInterval) clearInterval(customGameInterval);
+            lastTime = performance.now();
+        }
+
+        function triggerRedFlash() {
+            const flash = document.getElementById('red-flash'); flash.style.opacity = 0.8;
+            setTimeout(() => { flash.style.opacity = 0; }, 150);
+        }
+
+        function handleHit() {
+            if(document.getElementById('edit-noclip') && document.getElementById('edit-noclip').checked && (inEditor || isPlaytesting || isVerifying)) return true;
+            if (currentLives > 1) { currentLives--; document.getElementById('lives-count').innerText = currentLives; triggerRedFlash(); return true; } 
+            return false; 
+        }
+
+        function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, testEffects = null, isCommunity = false, loadedLevelObj = null) {
+            currentMode = mode; isCustomGame = isCustom; gameActive = true;
+            resetState(); overlays.forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById('editor-ui').classList.add('hidden');
+            document.getElementById('lives-display').classList.remove('hidden');
+            document.getElementById('game-hud').classList.remove('hidden');
+            
+            if (!isCustom) {
+                const customSpeed = document.getElementById('speed-' + mode);
+                speed = customSpeed ? parseInt(customSpeed.value) : 18; targetSpeed = speed; 
+                windowLevelFPS = 60;
+                document.getElementById('progress-display').classList.add('hidden'); 
+                spawnTile();
+            } else {
+                document.getElementById('progress-display').classList.remove('hidden');
+                speed = 18; targetSpeed = 18; customPlayTime = 0;
+                
+                let sourceArray = isCommunity ? communityLevels : customLevels;
+                let pendingTiles = testTiles ? JSON.parse(JSON.stringify(testTiles)) : JSON.parse(JSON.stringify(sourceArray[customIndex].data));
+                let pendingEffects = testEffects ? JSON.parse(JSON.stringify(testEffects)) : (sourceArray[customIndex].effects ? JSON.parse(JSON.stringify(sourceArray[customIndex].effects)) : []);
+                
+                let allTimes = [0];
+                pendingTiles.forEach(t => allTimes.push(t.time + (t.holdDuration || 0)));
+                pendingEffects.forEach(e => allTimes.push(e.time));
+                levelEndTime = Math.max(...allTimes) + 4.0;
+                verifyEndTime = levelEndTime;
+
+                if (loadedLevelObj) {
+                    maxLives = loadedLevelObj.lives !== undefined ? loadedLevelObj.lives : 3;
+                    currentLives = maxLives;
+                    windowLevelFPS = loadedLevelObj.fps || 60;
+                } else if(customIndex !== -1 && sourceArray[customIndex].lives) {
+                    maxLives = sourceArray[customIndex].lives; currentLives = maxLives;
+                    windowLevelFPS = sourceArray[customIndex].fps || 60;
+                } else {
+                    windowLevelFPS = testTiles ? parseInt(document.getElementById('edit-fps').value) : 60;
+                }
+                document.getElementById('lives-count').innerText = currentLives;
+                if (!windowLevelFPS || windowLevelFPS < 10) windowLevelFPS = 60;
+
+                let currentAudioOffset = loadedLevelObj && loadedLevelObj.audioOffset !== undefined ? loadedLevelObj.audioOffset : (customIndex !== -1 && sourceArray[customIndex].audioOffset !== undefined ? sourceArray[customIndex].audioOffset : (testTiles ? parseInt(document.getElementById('edit-audio-offset').value) : 0));
+                let currentDisableHolds = loadedLevelObj && loadedLevelObj.disableHolds !== undefined ? loadedLevelObj.disableHolds : (customIndex !== -1 && sourceArray[customIndex].disableHolds !== undefined ? sourceArray[customIndex].disableHolds : (testTiles ? document.getElementById('edit-disable-holds').checked : false));
+
+                let offsetMs = parseInt(currentAudioOffset) || 0;
+                if (bgAudio.src) {
+                    bgAudio.currentTime = 0;
+                    if (offsetMs < 0) {
+                        bgAudio.currentTime = Math.abs(offsetMs) / 1000;
+                        bgAudio.play().catch(e=>console.warn(e));
+                    } else if (offsetMs > 0) {
+                        setTimeout(() => { if(gameActive && !isDead) bgAudio.play().catch(e=>console.warn(e)); }, offsetMs);
+                    } else {
+                        bgAudio.play().catch(e=>console.warn(e));
+                    }
+                }
+
+                customGameInterval = setInterval(() => {
+                    if(isDead || !gameActive) { clearInterval(customGameInterval); bgAudio.pause(); return; }
+                    customPlayTime += 0.016; 
+                    let spawnOffset = 690 / (speed * 60); 
+
+                    for(let i=pendingTiles.length-1; i>=0; i--) {
+                        if(customPlayTime >= pendingTiles[i].time - spawnOffset) {
+                            let isHold = pendingTiles[i].isHold;
+                            if (currentDisableHolds) isHold = false;
+                            
+                            tiles.push(new Tile(pendingTiles[i].lane, -TILE_H, isHold, pendingTiles[i].holdDuration)); 
+                            pendingTiles.splice(i, 1);
+                        }
+                    }
+
+                    for(let i=pendingEffects.length-1; i>=0; i--) {
+                        if(customPlayTime >= pendingEffects[i].time) {
+                            let fx = pendingEffects[i];
+                            if(fx.type === 'pulse') fireAdvancedPulse(fx);
+                            if(fx.type === 'image') fireAdvancedImage(fx);
+                            if(fx.type === 'extra_image') fireExtraImage(fx);
+                            if(fx.type === 'tile_style') fireTileStyle(fx);
+                            if(fx.type === 'speed') fireSpeedChange(fx);
+                            if(fx.type === 'sfx') fireSFX(fx);
+                            pendingEffects.splice(i, 1);
+                        }
+                    }
+
+                    if (levelEndTime > 0) {
+                        let pct = Math.min(100, Math.floor((customPlayTime / levelEndTime) * 100));
+                        document.getElementById('progress-display').innerText = pct + '%';
+                    }
+
+                    if (isVerifying && customPlayTime >= verifyEndTime && tiles.length === 0 && !isDead) {
+                        clearInterval(customGameInterval);
+                        gameActive = false;
+                        alert("Verification Complete! Level will now download.");
+                        downloadLevelData();
+                        quitPlaytestOrGame();
+                    }
+
+                    if(speedTransitionDuration > 0) {
+                        speedTransitionTime += 0.016;
+                        let progress = Math.min(speedTransitionTime / speedTransitionDuration, 1.0);
+                        speed = initialSpeed + (targetSpeed - initialSpeed) * progress;
+                        if(progress >= 1.0) speedTransitionDuration = 0;
+                    }
+                }, 16);
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startPlaytest() {
+            if (recordedTiles.length === 0) { alert("Place some tiles first!"); return; }
+            maxLives = parseInt(document.getElementById('edit-lives').value) || 1;
+            isPlaytesting = true; inEditor = false; deleteMode = false;
+            document.getElementById('btn-delete-mode').style.background = '#333';
+            document.getElementById('editor-ui').classList.add('hidden');
+            document.getElementById('stop-playtest-btn').classList.remove('hidden');
+            startGame('playtest', true, -1, recordedTiles, recordedEffects);
+        }
+
+        function stopPlaytest() {
+            isPlaytesting = false; isVerifying = false; gameActive = false; isDead = true; resetState();
+            document.getElementById('stop-playtest-btn').classList.add('hidden');
+            document.getElementById('lives-display').classList.add('hidden');
+            document.getElementById('game-hud').classList.add('hidden');
+            document.getElementById('editor-ui').classList.remove('hidden');
+            inEditor = true; requestAnimationFrame(gameLoop);
+        }
+
+        function verifyAndDownloadLevel() {
+            if (recordedTiles.length === 0) { alert("Place some tiles first!"); return; }
+            closeCreatorMenu();
+            isVerifying = true;
+            startPlaytest();
+        }
+
+        function downloadLevelData() {
+            let name = currentEditingName || "My_Level";
+            let lvlData = { 
+                name: name, 
+                data: [...recordedTiles], 
+                effects: [...recordedEffects], 
+                lives: parseInt(document.getElementById('edit-lives').value) || 3,
+                fps: parseInt(document.getElementById('edit-fps').value) || 60,
+                audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
+                disableHolds: document.getElementById('edit-disable-holds').checked
+            };
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(lvlData, null, 2));
+            let dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", name + ".json");
+            document.body.appendChild(dlAnchorElem);
+            dlAnchorElem.click();
+            document.body.removeChild(dlAnchorElem);
+        }
+
+        function fireAdvancedPulse(fx) {
+            const target = (fx.layer == 1) ? document.getElementById('fg-flash') : document.getElementById('bg-flash');
+            target.style.transition = `opacity ${fx.inTrans}s ease-out`; target.style.background = fx.color; target.style.opacity = 1;
+            setTimeout(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
+        }
+
+        function fireAdvancedImage(fx) {
+            const target = (fx.layer == 1) ? document.getElementById('fg-image-container') : document.getElementById('bg-image-container');
+            target.style.backgroundImage = `url(${fx.src})`; target.style.transition = `opacity ${fx.inTrans}s ease-out`; target.style.opacity = fx.alpha;
+            setTimeout(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
+        }
+
+        function fireExtraImage(fx) {
+            let img = document.createElement('img');
+            img.src = fx.src;
+            img.style.position = 'absolute';
+            img.style.left = fx.x + 'px';
+            img.style.top = fx.y + 'px';
+            img.style.width = fx.w + 'px';
+            img.style.height = fx.h + 'px';
+            img.style.opacity = fx.alpha;
+            img.style.transform = 'translate(-50%, -50%)'; 
+            
+            let container = fx.layer == 1 ? document.getElementById('extra-images-fg') : document.getElementById('extra-images-bg');
+            container.appendChild(img);
+            
+            setTimeout(() => { if (img.parentNode) img.parentNode.removeChild(img); }, fx.duration * 1000);
+        }
+
+        function fireTileStyle(fx) { currentTileStyle.c1 = fx.c1; currentTileStyle.c2 = fx.c2; currentTileStyle.alpha = fx.alpha; }
+        function fireSpeedChange(fx) { initialSpeed = speed; targetSpeed = fx.target; speedTransitionDuration = fx.transDuration; speedTransitionTime = 0; }
+        function fireSFX(fx) { let audio = new Audio(fx.src); audio.play(); }
+
+        function spawnTile() {
+            let currentSpawn = patterns[currentMode] ? patterns[currentMode][patternStep] : Math.floor(Math.random() * 4);
+            if (Array.isArray(currentSpawn)) { currentSpawn.forEach(lane => tiles.push(new Tile(lane))); } 
+            else { tiles.push(new Tile(currentSpawn)); }
+            if (patterns[currentMode]) { patternStep++; if (patternStep >= patterns[currentMode].length) patternStep = 0; }
+            nextSpawnDistance = TILE_H + GAP; distanceTraveled = 0;
+        }
+
+        class Tile { 
+            constructor(lane, overrideY = -TILE_H, isHold = false, holdDuration = 0) { 
+                this.lane = lane; 
+                this.y = overrideY; 
+                this.isHold = isHold;
+                this.holdDuration = holdDuration;
+                this.interacted = false; 
+                this.failed = false;
+            } 
+        }
+
+        class Particle {
+            constructor(x, y) { this.x = x; this.y = y; this.vx = (Math.random() - 0.5) * 15; this.vy = (Math.random() - 0.5) * 15; this.life = 1.0; }
+            update() { this.x += this.vx; this.y += this.vy; this.life -= 0.05; }
+        }
+
+        // --- EDITOR DELETE MODE LOGIC ---
+        function toggleDeleteMode() {
+            deleteMode = !deleteMode;
+            const btn = document.getElementById('btn-delete-mode');
+            if (deleteMode) {
+                btn.style.background = '#ff3333';
+                btn.style.borderColor = '#fff';
+            } else {
+                btn.style.background = '#333';
+                btn.style.borderColor = '#555';
+            }
+        }
+
+        canvas.addEventListener("mousedown", (e) => {
+            if (inEditor && deleteMode) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const mouseX = (e.clientX - rect.left) * scaleX;
+                const mouseY = (e.clientY - rect.top) * scaleY;
+                
+                const clickedLane = Math.floor(mouseX / laneW);
+                
+                for(let i = recordedTiles.length - 1; i >= 0; i--) {
+                    let t = recordedTiles[i];
+                    if (t.lane === clickedLane) {
+                        let yOffset = (editorTimer - t.time) * (18 * 60); 
+                        let y = lineY + yOffset;
+                        let holdLen = t.isHold ? (t.holdDuration * 18 * 60) : 0;
+                        let h = TILE_H + holdLen;
+                        let drawY = y - holdLen; // the true top boundary of the combined tile
+                        
+                        if (mouseY >= drawY && mouseY <= drawY + h) {
+                            recordedTiles.splice(i, 1);
+                            editorVisualTiles = editorVisualTiles.filter(vt => vt.ref !== t);
+                            break; 
+                        }
+                    }
+                }
+            }
+        });
+
+        window.addEventListener("keydown", (e) => {
+            const k = e.key.toLowerCase();
+            if (keys[k] === false) { 
+                keys[k] = true; const laneIndex = keyMap.indexOf(k);
+                
+                if (inEditor && isRecording && laneIndex !== -1 && !deleteMode) {
+                    if (editorKeyTimes[laneIndex] === null) {
+                        editorKeyTimes[laneIndex] = editorTimer;
+                        let newTile = { lane: laneIndex, time: editorTimer, isHold: false, holdDuration: 0 };
+                        recordedTiles.push(newTile); 
+                        editorVisualTiles.push({ lane: laneIndex, y: lineY, alpha: 1.0, ref: newTile }); 
+                    }
+                    return;
+                }
+                
+                if (laneIndex !== -1 && gameActive && !isDead && !inEditor) {
+                    const activeTiles = tiles.filter(t => !t.interacted);
+                    if (activeTiles.length > 0) {
+                        const target = activeTiles.find(t => t.lane === laneIndex);
+                        
+                        let targetY = target ? target.y : 0;
+                        let firstTileY = activeTiles[0] ? activeTiles[0].y : 0;
+                        
+                        const cbfToggle = document.getElementById('setting-cbf');
+                        if (cbfToggle && cbfToggle.checked) {
+                            const timeSinceLastFrame = performance.now() - lastTime;
+                            const subFrameDt = timeSinceLastFrame / 16.666;
+                            
+                            if (target) targetY += speed * subFrameDt;
+                            if (activeTiles[0]) firstTileY += speed * subFrameDt;
+                        }
+
+                        if (target && (target === activeTiles[0] || targetY > firstTileY - TILE_H)) {
+                            target.interacted = true; score += 10;
+                            for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
+                        } else if (firstTileY + TILE_H > 0) { 
+                            if(!handleHit()) die("WRONG ORDER!"); 
+                        }
+                    }
+                }
+            }
+        });
+        
+        window.addEventListener("keyup", (e) => { 
+            const k = e.key.toLowerCase();
+            keys[k] = false; 
+            const laneIndex = keyMap.indexOf(k);
+            
+            if (inEditor && isRecording && laneIndex !== -1 && editorKeyTimes[laneIndex] !== null) {
+                let duration = editorTimer - editorKeyTimes[laneIndex];
+                if (duration >= 1.1) {
+                    for(let i = recordedTiles.length - 1; i >= 0; i--) {
+                        if(recordedTiles[i].lane === laneIndex) {
+                            recordedTiles[i].isHold = true;
+                            recordedTiles[i].holdDuration = duration;
+                            break;
+                        }
+                    }
+                }
+                editorKeyTimes[laneIndex] = null;
+            }
+        });
+
+        function gameLoop(timestamp) {
+            if (isDead || (!gameActive && !inEditor)) return;
+            
+            let fpsInterval = 1000 / (windowLevelFPS || 60);
+            let elapsed = timestamp - lastTime;
+            
+            if (elapsed < fpsInterval - 0.1) { requestAnimationFrame(gameLoop); return; }
+            
+            const dt = elapsed / 16.666; 
+            lastTime = timestamp;
+
+            if(gameActive) {
+                frameCount++;
+                if (timestamp - lastFpsTime >= 1000) {
+                    document.getElementById('fps-display').innerText = frameCount + ' FPS';
+                    frameCount = 0;
+                    lastFpsTime = timestamp;
+                }
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 1;
+            for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, canvas.height); ctx.stroke(); }
+            ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(canvas.width, lineY); ctx.stroke();
+            
+            if(!isCustomGame && !inEditor && gameActive) {
+                distanceTraveled += speed * dt;
+                if (distanceTraveled >= nextSpawnDistance) spawnTile();
+            }
+
+            if(inEditor) {
+                recordedTiles.forEach(t => {
+                    let yOffset = (editorTimer - t.time) * (18 * 60); 
+                    let y = lineY + yOffset;
+                    let holdLen = t.isHold ? (t.holdDuration * 18 * 60) : 0;
+                    let h = TILE_H + holdLen;
+                    let drawY = y - holdLen;
+
+                    if(drawY < canvas.height + TILE_H && drawY + h > -TILE_H) {
+                        ctx.globalAlpha = 0.6; 
+                        ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.5)" : "rgba(0, 255, 255, 0.5)"; 
+                        ctx.fillRect(t.lane * laneW + 4, drawY, laneW - 8, h); 
+                        ctx.globalAlpha = 1.0;
+                    }
+                });
+            }
+
+            const firstUnclicked = tiles.find(t => !t.interacted);
+            for (let i = tiles.length - 1; i >= 0; i--) {
+                let t = tiles[i]; t.y += speed * dt;
+                
+                let holdLength = t.isHold ? (t.holdDuration * speed * 60) : 0;
+                let h = TILE_H + holdLength;
+                
+                // For proper rendering & hit detection bounds
+                let headTop = t.y - TILE_H;
+                let tailTop = t.y - TILE_H - holdLength;
+                
+                if (tailTop > canvas.height) {
+                    if (!t.interacted) { 
+                        if(handleHit()) { tiles.splice(i, 1); continue; } 
+                        else { die("MISSED!"); return; }
+                    }
+                    tiles.splice(i, 1); continue;
+                }
+
+                if (t.isHold && t.interacted && !t.failed) {
+                    if (tailTop < lineY - holdLength) {
+                        if (keys[keyMap[t.lane]] === false) {
+                            t.failed = true;
+                            if(!handleHit()) { die("RELEASED EARLY!"); return; }
+                        } else {
+                            score += 0.5;
+                            if (Math.random() > 0.7) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY));
+                        }
+                    }
+                }
+
+                // 1. Draw Tail (if hold tile)
+                if (t.isHold) {
+                    // Tail Background
+                    ctx.fillStyle = t.interacted ? "rgba(100, 100, 100, 0.4)" : "rgba(0, 150, 255, 0.3)";
+                    ctx.fillRect(t.lane * laneW + 12, tailTop, laneW - 24, holdLength);
+                    
+                    // Tail Center Glowing Line
+                    ctx.fillStyle = t.interacted ? "rgba(200, 200, 200, 0.8)" : "rgba(0, 255, 255, 0.8)";
+                    ctx.fillRect(t.lane * laneW + (laneW/2) - 2, tailTop, 4, holdLength);
+                    
+                    // Tail Start Cap
+                    ctx.fillRect(t.lane * laneW + 16, tailTop, laneW - 32, 8);
+                }
+
+                // 2. Draw Head (Main Block)
+                ctx.globalAlpha = t.interacted ? 0.2 : currentTileStyle.alpha;
+                if (t === firstUnclicked) { ctx.shadowBlur = 15; ctx.shadowColor = "#00ffff"; }
+                ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+                ctx.fillRect(t.lane * laneW + 4, headTop, laneW - 8, TILE_H);
+                
+                let grad = ctx.createLinearGradient(0, headTop, 0, headTop + TILE_H);
+                grad.addColorStop(0, t.interacted ? "#444" : currentTileStyle.c1);
+                grad.addColorStop(1, t.interacted ? "#222" : currentTileStyle.c2);
+                ctx.fillStyle = grad;
+                
+                ctx.fillRect(t.lane * laneW + 8, headTop + 4, laneW - 16, TILE_H - 8);
+                ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
+            }
+
+            if(inEditor) {
+                for (let i = editorVisualTiles.length - 1; i >= 0; i--) {
+                    let vt = editorVisualTiles[i]; vt.alpha -= 0.05 * dt; vt.y -= 2 * dt;
+                    if(vt.alpha <= 0) { editorVisualTiles.splice(i, 1); continue; }
+                    ctx.globalAlpha = vt.alpha; ctx.fillStyle = "#ff00ff"; ctx.fillRect(vt.lane * laneW + 4, vt.y, laneW - 8, 40); ctx.globalAlpha = 1.0;
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i]; p.update();
+                if (p.life <= 0) particles.splice(i, 1);
+                else { ctx.fillStyle = `rgba(0,255,255,${p.life})`; ctx.fillRect(p.x, p.y, 6, 6); }
+            }
+            
+            if(!inEditor && gameActive) scoreEl.innerText = Math.floor(score);
+            requestAnimationFrame(gameLoop);
+        }
+
+        function die(reason) { 
+            isDead = true; gameActive = false; bgAudio.pause(); 
+            document.getElementById("death-title").innerText = reason; 
+            document.getElementById("final-score").innerText = "Score: " + Math.floor(score); 
+            document.getElementById("death-screen").classList.remove("hidden"); 
+            document.getElementById("lives-display").classList.add("hidden"); 
+            document.getElementById('game-hud').classList.add('hidden');
+            
+            if (isPlaytesting || isVerifying) {
+                document.getElementById('death-quit-btn').classList.add('hidden');
+                document.getElementById('death-stop-playtest-btn').classList.remove('hidden');
+            } else {
+                document.getElementById('death-quit-btn').classList.remove('hidden');
+                document.getElementById('death-stop-playtest-btn').classList.add('hidden');
+            }
+        }
+        
+        function stopPlaytestFromDeath() {
+            document.getElementById('death-screen').classList.add('hidden');
+            stopPlaytest();
+        }
+
+        function quitPlaytestOrGame() { 
+            gameActive = false; isPlaytesting = false; isVerifying = false; inEditor = false; isDead = false; 
+            if(customGameInterval) clearInterval(customGameInterval); 
+            if(editorInterval) clearInterval(editorInterval); 
+            bgAudio.pause(); bgAudio.currentTime = 0; 
+            resetState(); 
+            tempLoadedLevel = null; // Clear loaded level
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            document.getElementById('game-hud').classList.add('hidden');
+            document.getElementById('editor-ui').classList.add('hidden'); 
+            document.getElementById('death-screen').classList.add('hidden'); 
+            document.getElementById('lives-display').classList.add('hidden'); 
+            document.getElementById('stop-playtest-btn').classList.add('hidden'); 
+            toggleMenu('main-menu'); 
+        }
+
+        function restartGame() { 
+            if(isPlaytesting) { 
+                startPlaytest(); 
+            } else if(tempLoadedLevel) {
+                startGame(tempLoadedLevel.name || 'Custom Loaded Level', true, -1, tempLoadedLevel.data, tempLoadedLevel.effects, false, tempLoadedLevel);
+            } else if(isCustomGame) { 
+                let idx = communityLevels.findIndex(l => l.name === currentMode); 
+                if(idx !== -1) startGame(currentMode, true, idx, null, null, true); 
+                else { 
+                    idx = customLevels.findIndex(l => l.name === currentMode); 
+                    startGame(currentMode, true, idx); 
+                } 
+            } else { 
+                startGame(currentMode); 
+            } 
+        }
+
+        function startEditor() { 
+            overlays.forEach(id => document.getElementById(id).classList.add('hidden')); 
+            document.getElementById('editor-ui').classList.remove('hidden'); 
+            inEditor = true; recordedTiles = []; recordedEffects = []; editorTimer = 0; currentEditingName = ""; 
+            deleteMode = false; document.getElementById('btn-delete-mode').style.background = '#333';
+            document.getElementById('editor-timer-panel').innerText = "0.00s"; 
+            document.getElementById('timeline-slider').value = 0; 
+            document.getElementById('edit-fps').value = 60; windowLevelFPS = 60; 
+            document.getElementById('edit-audio-offset').value = 0;
+            document.getElementById('edit-disable-holds').checked = false;
+            lastTime = performance.now(); requestAnimationFrame(gameLoop); 
+        }
+        
+        function editLevel(sourceArray, index) { 
+            let lvl = sourceArray[index]; 
+            recordedTiles = JSON.parse(JSON.stringify(lvl.data)); 
+            recordedEffects = lvl.effects ? JSON.parse(JSON.stringify(lvl.effects)) : []; 
+            currentEditingName = lvl.name; 
+            deleteMode = false; document.getElementById('btn-delete-mode').style.background = '#333';
+            document.getElementById('edit-lives').value = lvl.lives || 3; 
+            document.getElementById('edit-fps').value = lvl.fps || 60; windowLevelFPS = lvl.fps || 60; 
+            document.getElementById('edit-audio-offset').value = lvl.audioOffset || 0;
+            document.getElementById('edit-disable-holds').checked = lvl.disableHolds || false;
+            toggleMenu(null); document.getElementById('editor-ui').classList.remove('hidden'); 
+            inEditor = true; editorTimer = 0; 
+            document.getElementById('editor-timer-panel').innerText = "0.00s"; 
+            document.getElementById('timeline-slider').value = 0; 
+            lastTime = performance.now(); requestAnimationFrame(gameLoop); 
+        }
+
+        function toggleRecording() { const btn = document.getElementById('btn-create-tiles'); if(!isRecording) { isRecording = true; btn.innerHTML = "⏹<br>Stop Tiles"; btn.classList.add('active'); if(bgAudio.src) bgAudio.play(); editorInterval = setInterval(() => { editorTimer += 0.016; document.getElementById('editor-timer-panel').innerText = editorTimer.toFixed(2) + "s"; document.getElementById('timeline-slider').value = editorTimer; }, 16); } else { isRecording = false; btn.innerHTML = "▶<br>Create Tiles"; btn.classList.remove('active'); if(bgAudio.src) bgAudio.pause(); clearInterval(editorInterval); } }
+        function toggleSongTester() { const btn = document.getElementById('btn-song-test'); if(!isSongTesting) { isSongTesting = true; btn.innerHTML = "⏹<br>Stop Test"; btn.classList.add('active'); if(bgAudio.src) bgAudio.play(); editorInterval = setInterval(() => { editorTimer += 0.016; document.getElementById('editor-timer-panel').innerText = editorTimer.toFixed(2) + "s"; document.getElementById('timeline-slider').value = editorTimer; }, 16); } else { isSongTesting = false; btn.innerHTML = "🎧<br>Song Tester"; btn.classList.remove('active'); if(bgAudio.src) bgAudio.pause(); clearInterval(editorInterval); } }
+        function scrubTimeline(val) { editorTimer = parseFloat(val); document.getElementById('editor-timer-panel').innerText = editorTimer.toFixed(2) + "s"; if(bgAudio.src) bgAudio.currentTime = editorTimer; }
+
+        function openCreatorMenu() { document.getElementById('creator-menu').classList.remove('hidden'); }
+        function closeCreatorMenu() { document.getElementById('creator-menu').classList.add('hidden'); }
+        function openEffectsMenu() { document.getElementById('effects-menu').classList.remove('hidden'); document.getElementById('effect-time-display').innerText = editorTimer.toFixed(2); }
+        function closeEffectsMenu() { document.getElementById('effects-menu').classList.add('hidden'); }
+        function openEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.remove('hidden'); }
+        function closeEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.add('hidden'); windowLevelFPS = parseInt(document.getElementById('edit-fps').value) || 60; }
+
+        function saveCustomLevel(isPublishing = false) { 
+            let name = prompt("Enter level name:", currentEditingName || ""); 
+            if(name) { 
+                let lvl = { 
+                    name: name, data: [...recordedTiles], effects: [...recordedEffects], 
+                    lives: parseInt(document.getElementById('edit-lives').value) || 3,
+                    fps: parseInt(document.getElementById('edit-fps').value) || 60,
+                    audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
+                    disableHolds: document.getElementById('edit-disable-holds').checked
+                }; 
+                let existing = users[currentUser].customLevels.findIndex(l => l.name === name); 
+                if(existing !== -1) users[currentUser].customLevels[existing] = lvl; 
+                else users[currentUser].customLevels.push(lvl); 
+                
+                customLevels = users[currentUser].customLevels; 
+                localStorage.setItem('extremeTilesUsers', JSON.stringify(users)); 
+                
+                if (!isPublishing) { alert("Saved to My Levels!"); exitEditorWithoutSaving(); } 
+                return name; 
+            } 
+            return null; 
+        }
+
+        function publishLevel() { 
+            let savedName = saveCustomLevel(true); 
+            if(savedName) { 
+                let localLvl = users[currentUser].customLevels.find(l => l.name === savedName); 
+                let commLvl = { 
+                    name: savedName, author: currentUser, data: localLvl.data ? [...localLvl.data] : [], effects: localLvl.effects ? [...localLvl.effects] : [], 
+                    lives: localLvl.lives || 3, fps: localLvl.fps || 60, audioOffset: localLvl.audioOffset || 0, disableHolds: localLvl.disableHolds || false,
+                    timestamp: Date.now(), ratings: [], listRank: 0 
+                }; 
+                
+                let existing = communityLevels.findIndex(l => l.name === savedName); 
+                if(existing !== -1) { commLvl.ratings = communityLevels[existing].ratings || []; commLvl.listRank = communityLevels[existing].listRank || 0; commLvl.timestamp = communityLevels[existing].timestamp || Date.now(); communityLevels[existing] = commLvl; } 
+                else communityLevels.push(commLvl); 
+                
+                localStorage.setItem('communityLevels', JSON.stringify(communityLevels)); 
+                alert("Published! Your level is saved to 'My Levels' and now active in Browse Levels."); 
+                exitEditorWithoutSaving(); 
+            } 
+        }
+        
+        function exitEditorWithoutSaving() { inEditor = false; isRecording = false; isSongTesting = false; currentEditingName = ""; deleteMode = false; document.getElementById('btn-delete-mode').style.background = '#333'; clearInterval(editorInterval); bgAudio.pause(); document.getElementById('editor-ui').classList.add('hidden'); toggleMenu('main-menu'); }
+
+        function openMyLevels() { const container = document.getElementById('custom-levels-container'); container.innerHTML = ""; if(customLevels.length === 0) { container.innerHTML = "<p style='text-align:center; grid-column: span 2;'>No custom levels yet.</p>"; } else { customLevels.forEach((level, index) => { container.innerHTML += ` <div class="song-card"> <div class="song-main"> <div class="song-thumb">🌟</div> <div class="song-info"> <span class="song-title">${level.name}</span> <span class="song-author">By: You</span> </div> <button class="play-btn" onclick="startGame('${level.name}', true, ${index})">PLAY (Lives: ${level.lives})</button> <button class="play-btn edit-btn" onclick="editLevel(customLevels, ${index})">EDIT</button> </div> </div>`; }); } toggleMenu('my-levels-menu'); }
+        
+        function openBrowseLevels(filter = 'recent') { const container = document.getElementById('community-levels-container'); container.innerHTML = ""; document.querySelectorAll('#browse-levels-menu .small-tab').forEach(t => t.style.background = '#333'); if(document.getElementById('tab-' + filter)) { document.getElementById('tab-' + filter).style.background = 'var(--play-blue)'; } let displayList = [...communityLevels]; if (filter === 'recent') { displayList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)); } else if (filter === 'rated') { displayList = displayList.filter(l => l.ratings && l.ratings.length > 0); displayList.sort((a, b) => getAvgRating(b) - getAvgRating(a)); } else if (filter === 'list') { displayList = displayList.filter(l => l.listRank > 0); displayList.sort((a, b) => a.listRank - b.listRank); } if(displayList.length === 0) { container.innerHTML = "<p style='text-align:center; grid-column: span 2;'>No levels found in this category.</p>"; } else { displayList.forEach((level) => { let canEdit = (level.author === currentUser); let avgRating = getAvgRating(level); let originalIndex = communityLevels.findIndex(l => l.name === level.name); container.innerHTML += ` <div class="song-card"> <div class="song-main"> <div class="song-thumb">🌐</div> <div class="song-info"> <span class="song-title">${level.name}</span> <span class="song-author">By: ${level.author || "Unknown"}</span> <div> <span style="font-size: 10px; color: gold; font-weight: bold;">⭐ ${avgRating > 0 ? avgRating : 'Unrated'}</span> ${level.listRank > 0 ? `<span style="font-size: 10px; color: #ff00ff; font-weight: bold; margin-left: 5px;">🏆 Top ${level.listRank}</span>` : ''} </div> </div> <button class="play-btn" onclick="startGame('${level.name}', true, ${originalIndex}, null, null, true)">PLAY</button> ${canEdit ? `<button class="play-btn edit-btn" onclick="editLevel(communityLevels, ${originalIndex})">EDIT</button>` : ''} </div> </div>`; }); } toggleMenu('browse-levels-menu'); }
+
+        // --- NEW EFFECT FUNCTIONS ---
+        function addPulseEffect() { recordedEffects.push({ type: 'pulse', time: editorTimer, color: document.getElementById('fx-pulse-color').value, layer: parseInt(document.getElementById('fx-pulse-layer').value), duration: parseFloat(document.getElementById('fx-pulse-dur').value), inTrans: parseFloat(document.getElementById('fx-pulse-in').value), outTrans: parseFloat(document.getElementById('fx-pulse-out').value) }); alert("Pulse/Color effect added at " + editorTimer.toFixed(2) + "s"); }
+        function addImageEffect() { if(!loadedImageDataUrl) { alert("Please upload an image first!"); return; } recordedEffects.push({ type: 'image', time: editorTimer, src: loadedImageDataUrl, layer: parseInt(document.getElementById('fx-img-layer').value), alpha: parseFloat(document.getElementById('fx-img-alpha').value), duration: parseFloat(document.getElementById('fx-img-dur').value), inTrans: parseFloat(document.getElementById('fx-img-in').value), outTrans: parseFloat(document.getElementById('fx-img-out').value) }); alert("Image effect added at " + editorTimer.toFixed(2) + "s"); }
+        
+        function addExtraImageEffect() {
+            if(!loadedExtraImageDataUrl) { alert("Please upload an image first!"); return; }
+            let count = recordedEffects.filter(e => e.type === 'extra_image').length;
+            if (count >= 30) {
+                alert("Maximum limit reached! You can only add up to 30 Extra Images per level to prevent lag.");
+                return;
+            }
+            recordedEffects.push({ 
+                type: 'extra_image', time: editorTimer, src: loadedExtraImageDataUrl, 
+                layer: parseInt(document.getElementById('fx-extra-layer').value), 
+                alpha: parseFloat(document.getElementById('fx-extra-alpha').value),
+                w: parseInt(document.getElementById('fx-extra-w').value),
+                h: parseInt(document.getElementById('fx-extra-h').value),
+                x: parseInt(document.getElementById('fx-extra-x').value),
+                y: parseInt(document.getElementById('fx-extra-y').value),
+                duration: parseFloat(document.getElementById('fx-extra-dur').value) 
+            }); 
+            alert(`Extra Image added at ${editorTimer.toFixed(2)}s. (${count + 1}/30)`); 
+        }
+
+        function previewExtraImage() {
+            if(!loadedExtraImageDataUrl) { alert("Please upload an image first!"); return; }
+            fireExtraImage({
+                src: loadedExtraImageDataUrl,
+                layer: parseInt(document.getElementById('fx-extra-layer').value),
+                alpha: parseFloat(document.getElementById('fx-extra-alpha').value),
+                w: parseInt(document.getElementById('fx-extra-w').value),
+                h: parseInt(document.getElementById('fx-extra-h').value),
+                x: parseInt(document.getElementById('fx-extra-x').value),
+                y: parseInt(document.getElementById('fx-extra-y').value),
+                duration: parseFloat(document.getElementById('fx-extra-dur').value)
+            });
+        }
+
+        function addTileStyleEffect() { recordedEffects.push({ type: 'tile_style', time: editorTimer, c1: document.getElementById('fx-tile-color1').value, c2: document.getElementById('fx-tile-color2').value, alpha: parseFloat(document.getElementById('fx-tile-alpha').value), duration: parseFloat(document.getElementById('fx-tile-dur').value) }); alert("Tile Style change added at " + editorTimer.toFixed(2) + "s"); }
+        function addSpeedEffect() { recordedEffects.push({ type: 'speed', time: editorTimer, target: parseInt(document.getElementById('fx-speed-target').value), transDuration: parseFloat(document.getElementById('fx-speed-trans').value) }); alert("Speed change added at " + editorTimer.toFixed(2) + "s"); }
+        function addSfxEffect() { if(!loadedSfxDataUrl) { alert("Please upload a sound file first!"); return; } recordedEffects.push({ type: 'sfx', time: editorTimer, src: loadedSfxDataUrl }); alert("Extra SFX added at " + editorTimer.toFixed(2) + "s"); loadedSfxDataUrl = null; document.getElementById('fx-sfx-upload').value = ""; }
+    </script>
+</body>
+</html>
