@@ -1,1321 +1,480 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Extreme Tiles: Hyper Edition</title>
-    <link rel="stylesheet" href="style.css">
-    
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Extreme Tiles: Hyper Edition</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div id="red-flash"></div>
-    <div id="bg-flash"></div>
-    <div id="bg-image-container"></div>
-    <div id="extra-images-bg"></div>
-    <div id="fg-flash"></div>
-    <div id="fg-image-container"></div>
-    <div id="extra-images-fg"></div>
+<!-- ============================== BACKGROUND / FX LAYERS ============================== -->
+<div id="red-flash"></div>
+<div id="bg-flash"></div>
+<div id="bg-image-container"></div>
+<div id="extra-images-bg"></div>
+<div id="fg-flash"></div>
+<div id="fg-image-container"></div>
+<div id="extra-images-fg"></div>
 
-    <div id="game-hud" class="hidden">
-        <div id="fps-display">60 FPS</div>
-        <div id="progress-display">0%</div>
+<!-- ============================== GAME HUD / CANVAS ============================== -->
+<div id="game-hud" class="hidden">
+  <div id="fps-display">60 FPS</div>
+  <div id="progress-display">0%</div>
+</div>
+
+<div id="battle-race-hud" class="hidden">
+  <div class="race-player-row">
+    <span class="race-name" id="race-name-me">You</span>
+    <div class="race-bar-track"><div class="race-bar-fill me" id="race-bar-me" style="width:0%"></div></div>
+  </div>
+  <div class="race-vs">VS</div>
+  <div class="race-player-row">
+    <span class="race-name" id="race-name-opp">Opponent</span>
+    <div class="race-bar-track"><div class="race-bar-fill opp" id="race-bar-opp" style="width:0%"></div></div>
+  </div>
+</div>
+
+<audio id="bg-audio"></audio>
+<input type="file" id="audio-upload" accept="audio/*" style="display:none" onchange="loadAudioFile(event)">
+
+<div id="lives-display" class="hidden">❤️ <span id="lives-count">3</span></div>
+<button id="stop-playtest-btn" class="hidden" onclick="stopPlaytest()">🛑 STOP PLAYTESTING</button>
+
+<div id="score-container">
+  <div id="score">0</div>
+  <div id="rest-msg">BREATHE</div>
+</div>
+
+<canvas id="gameCanvas" width="360" height="640"></canvas>
+
+<!-- ============================== MAIN MENU ============================== -->
+<div id="main-menu" class="overlay">
+  <h1>EXTREME TILES</h1>
+  <div class="menu-content">
+    <button class="nav-btn" style="background: linear-gradient(135deg, var(--play-blue), #0055ff); color: #fff;" onclick="toggleMenu('levels-menu')">▶ MAIN LEVELS</button>
+    <button class="nav-btn" onclick="openBrowseLevels('recent')">🌐 BROWSE LEVELS</button>
+    <button class="nav-btn" style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-purple-deep)); color: #fff;" onclick="openMyLevels()">📁 MY LEVELS</button>
+    <button class="nav-btn" style="background: linear-gradient(135deg, var(--accent-pink), #b3195f); color: #fff;" onclick="openBattleMenu()">⚔ BATTLE</button>
+    <button class="nav-btn pink-btn" onclick="startEditor()">🛠 CREATE LEVEL</button>
+    <button class="nav-btn secondary-btn" onclick="toggleMenu('settings-menu')">⚙ SETTINGS</button>
+    <button class="nav-btn secondary-btn" id="profile-btn" onclick="openProfileModal()">👤 Guest</button>
+  </div>
+</div>
+
+<!-- ============================== PROFILE SWITCHER (replaces password login) ============================== -->
+<div id="profile-modal" class="overlay hidden">
+  <h2>LOCAL PROFILE</h2>
+  <div class="menu-content">
+    <p class="profile-note">
+      Profiles are stored only in this browser — there's no server, so there's no password to
+      set or lose. Pick a name to label your levels and battle presence with, or play as Guest.
+    </p>
+    <div class="profile-modal-list" id="profile-modal-list"></div>
+    <div class="profile-create-row">
+      <input type="text" id="new-profile-name" placeholder="New profile name" maxlength="16">
+      <button class="play-btn" onclick="createProfile()">CREATE</button>
     </div>
+    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top:6px;">BACK TO MENU</button>
+  </div>
+</div>
 
-    <audio id="bg-audio"></audio>
-    <input type="file" id="audio-upload" accept="audio/*" style="display:none" onchange="loadAudioFile(event)">
-
-    <div id="lives-display" class="hidden">❤️ <span id="lives-count">3</span></div>
-    <button id="stop-playtest-btn" class="hidden" onclick="stopPlaytest()">🛑 STOP PLAYTESTING</button>
-
-    <div id="main-menu" class="overlay">
-        <h1 style="letter-spacing: 5px; font-style: italic;">EXTREME TILES</h1>
-        <div class="menu-content">
-            <button class="nav-btn" style="background: linear-gradient(135deg, var(--play-blue), #0055ff); color: #fff;" onclick="toggleMenu('levels-menu')">▶ MAIN LEVELS</button>
-            <button class="nav-btn" onclick="openBrowseLevels('recent')">🌐 BROWSE LEVELS</button>
-            <button class="nav-btn" style="background: linear-gradient(135deg, #9d4edd, #5a189a); color: #fff;" onclick="openMyLevels()">📁 MY LEVELS</button>
-            <button class="nav-btn pink-btn" onclick="startEditor()">🛠 CREATE LEVEL</button>
-            <button class="nav-btn secondary-btn" onclick="toggleMenu('settings-menu')">⚙ SETTINGS</button>
-            <button class="nav-btn secondary-btn" id="signup-btn" onclick="handleAuth()">👤 LOGIN / SIGN UP (GUEST)</button>
-        </div>
+<!-- ============================== SETTINGS ============================== -->
+<div id="settings-menu" class="overlay hidden">
+  <h2>GAME SETTINGS</h2>
+  <div class="menu-content">
+    <div class="settings-row">
+      <span>Primary Theme Color</span>
+      <input type="color" id="primary-color-picker" value="#3c096c" onchange="updatePrimaryColor(this.value)">
     </div>
-
-    <div id="settings-menu" class="overlay hidden">
-        <h2>GAME SETTINGS</h2>
-        <div class="menu-content">
-            <div class="settings-row">
-                <span>Primary Theme Color</span>
-                <input type="color" id="primary-color-picker" value="#3c096c" onchange="updatePrimaryColor(this.value)">
-            </div>
-            <div class="settings-row">
-                <span>Main Levels BG Color</span>
-                <input type="color" id="bg-color-picker" value="#3c096c">
-            </div>
-            
-            <div class="settings-row">
-                <span>Enable CBF (Sub-frame Clicks)</span>
-                <input type="checkbox" id="setting-cbf" checked>
-            </div>
-            
-            <button class="nav-btn" onclick="toggleMenu('main-menu')">SAVE & BACK</button>
-        </div>
+    <div class="settings-row">
+      <span>Main Levels BG Color</span>
+      <input type="color" id="bg-color-picker" value="#3c096c">
     </div>
-
-    <div id="levels-menu" class="overlay hidden">
-        <h2 style="margin-bottom: 5px;">MAIN LEVELS</h2>
-        <div class="menu-content" style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
-            <div class="grid-levels">
-                
-                <div class="song-card" style="border-left: 5px solid #ff0000;">
-                    <div class="song-main">
-                        <div class="song-thumb" style="background: #2a0000; color: #ff3333;">🔃</div>
-                        <div class="song-info">
-                            <span class="song-title">Level Loader</span>
-                            <span class="song-author">Load any JSON</span>
-                        </div>
-                        <input type="file" id="level-upload" accept=".json" style="display:none" onchange="loadCustomLevelFile(event)">
-                        <button class="play-btn" style="background: linear-gradient(135deg, #ff0000, #aa0000);" onclick="document.getElementById('level-upload').click()">LOAD .JSON</button>
-                    </div>
-                    <div class="speed-control" style="justify-content: center; background: rgba(255,0,0,0.1);">
-                        <span style="color: #ffaaaa; font-weight: bold; font-size: 11px;">Extracts Lives & Effects</span>
-                    </div>
-                </div>
-
-                <div class="song-card">
-                    <div class="song-main">
-                        <div class="song-thumb">🎹</div>
-                        <div class="song-info">
-                            <span class="song-title">The Scale</span>
-                            <span class="song-author">By: System</span>
-                        </div>
-                        <button class="play-btn" onclick="startGame('scale')">PLAY</button>
-                    </div>
-                    <div class="speed-control">
-                        <span>Spd:</span>
-                        <input type="range" id="speed-scale" min="5" max="40" value="18">
-                        <span id="val-scale">18</span>
-                    </div>
-                </div>
-                <div class="song-card">
-                    <div class="song-main">
-                        <div class="song-thumb">🥁</div>
-                        <div class="song-info">
-                            <span class="song-title">Bam Bam</span>
-                            <span class="song-author">By: System</span>
-                        </div>
-                        <button class="play-btn" onclick="startGame('bambam')">PLAY</button>
-                    </div>
-                    <div class="speed-control">
-                        <span>Spd:</span>
-                        <input type="range" id="speed-bambam" min="5" max="40" value="19">
-                        <span id="val-bambam">19</span>
-                    </div>
-                </div>
-            </div>
-            <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
-        </div>
+    <div class="settings-row">
+      <span>Enable CBF (Sub-frame Clicks)</span>
+      <input type="checkbox" id="setting-cbf" checked>
     </div>
+    <button class="nav-btn" onclick="toggleMenu('main-menu')">SAVE &amp; BACK</button>
+  </div>
+</div>
 
-    <div id="my-levels-menu" class="overlay hidden">
-        <h2 style="margin-bottom: 15px;">MY CREATIONS</h2>
-        <div class="menu-content" style="max-height: 75vh; overflow-y: auto; padding-right: 5px;">
-            <div class="grid-levels" id="custom-levels-container"></div>
-            <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
+<!-- ============================== BUILT-IN LEVELS ============================== -->
+<div id="levels-menu" class="overlay hidden">
+  <h2 style="margin-bottom: 5px;">MAIN LEVELS</h2>
+  <div class="menu-content" style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+    <div class="grid-levels">
+      <div class="song-card" style="border-left: 5px solid #ff0000;">
+        <div class="song-main">
+          <div class="song-thumb" style="background: #2a0000; color: #ff3333;">🔃</div>
+          <div class="song-info">
+            <span class="song-title">Level Loader</span>
+            <span class="song-author">Load any JSON</span>
+          </div>
+          <input type="file" id="level-upload" accept=".json" style="display:none" onchange="loadCustomLevelFile(event)">
+          <button class="play-btn" style="background: linear-gradient(135deg, #ff0000, #aa0000);" onclick="document.getElementById('level-upload').click()">LOAD .JSON</button>
         </div>
+        <div class="speed-control" style="justify-content: center; background: rgba(255,0,0,0.1);">
+          <span style="color: #ffaaaa; font-weight: bold; font-size: 11px;">Extracts Lives &amp; Effects</span>
+        </div>
+      </div>
+      <div class="song-card">
+        <div class="song-main">
+          <div class="song-thumb">🎹</div>
+          <div class="song-info">
+            <span class="song-title">The Scale</span>
+            <span class="song-author">By: System</span>
+          </div>
+          <button class="play-btn" onclick="startGame('scale')">PLAY</button>
+        </div>
+        <div class="speed-control">
+          <span>Spd:</span>
+          <input type="range" id="speed-scale" min="5" max="40" value="18">
+          <span id="val-scale">18</span>
+        </div>
+      </div>
+      <div class="song-card">
+        <div class="song-main">
+          <div class="song-thumb">🥁</div>
+          <div class="song-info">
+            <span class="song-title">Bam Bam</span>
+            <span class="song-author">By: System</span>
+          </div>
+          <button class="play-btn" onclick="startGame('bambam')">PLAY</button>
+        </div>
+        <div class="speed-control">
+          <span>Spd:</span>
+          <input type="range" id="speed-bambam" min="5" max="40" value="19">
+          <span id="val-bambam">19</span>
+        </div>
+      </div>
     </div>
+    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
+  </div>
+</div>
 
-    <div id="browse-levels-menu" class="overlay hidden">
-        <h2 style="margin-bottom: 15px;">COMMUNITY LEVELS</h2>
-        <div class="tabs-container">
-            <button id="tab-recent" class="small-tab" onclick="openBrowseLevels('recent')">Recent</button>
-            <button id="tab-rated" class="small-tab" onclick="openBrowseLevels('rated')">Rated Tab</button>
-            <button id="tab-list" class="small-tab" onclick="openBrowseLevels('list')">Level List</button>
-        </div>
-        <div class="menu-content" style="max-height: 70vh; overflow-y: auto; padding-right: 5px;">
-            <div class="grid-levels" id="community-levels-container"></div>
-            <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
-        </div>
+<!-- ============================== MY LEVELS (GD-style cards) ============================== -->
+<div id="my-levels-menu" class="overlay hidden">
+  <h2 style="margin-bottom: 15px;">MY CREATIONS</h2>
+  <div class="menu-content" style="max-height: 75vh; overflow-y: auto; padding-right: 5px;">
+    <div class="grid-levels" id="custom-levels-container"></div>
+    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
+  </div>
+</div>
+
+<!-- ============================== BROWSE LEVELS (GD-style) ============================== -->
+<div id="browse-levels-menu" class="overlay hidden">
+  <h2 style="margin-bottom: 12px;">COMMUNITY LEVELS</h2>
+  <div class="menu-content" style="max-height: 78vh;">
+    <div class="browse-info-banner">
+      This library is saved in your browser's local storage, not a real server — "publishing" a
+      level here makes it visible to other profiles <em>in this same browser</em>, styled like an
+      online level list. It won't appear on anyone else's device.
     </div>
-
-    <div id="editor-ui" class="hidden">
-        <div id="editor-timer-panel" class="editor-panel">0.00s</div>
-        <div id="editor-timeline-panel" class="editor-panel">
-            <div class="timeline-head">
-                <div>
-                    <span class="timeline-label">TIMELINE</span>
-                    <strong id="editor-timeline-time">0.00s</strong>
-                </div>
-                <div class="timeline-actions">
-                    <button class="mini-editor-btn" onclick="nudgeEditorTime(-0.10)">−0.10</button>
-                    <button class="mini-editor-btn play-toggle-btn" onclick="toggleEditorTransport()" id="editor-transport-btn">▶</button>
-                    <button class="mini-editor-btn" onclick="nudgeEditorTime(0.10)">+0.10</button>
-                    <button class="mini-editor-btn" onclick="jumpEditorEnd()">END</button>
-                </div>
-            </div>
-            <div id="editor-marker-track">
-                <div id="editor-playhead"></div>
-                <div id="editor-marker-layer"></div>
-            </div>
-            <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.01" oninput="scrubTimeline(this.value)">
-            <div class="timeline-hint">Use the timeline to position the playhead. Tiles can be snapped from Editor Settings.</div>
-        </div>
-        <div id="editor-left-panel" class="editor-panel">
-            <button class="editor-btn square-btn" style="background: #0055ff;" onclick="document.getElementById('audio-upload').click()">🎵<br>Load Song</button>
-            <button id="btn-song-test" class="editor-btn square-btn" onclick="toggleSongTester()">🎧<br>Song Tester</button>
-            <button id="btn-create-tiles" class="editor-btn square-btn" onclick="toggleRecording()">▶<br>Create Tiles</button>
-            <button id="btn-delete-mode" class="editor-btn square-btn" onclick="toggleDeleteMode()">🗑️<br>Delete</button>
-            <div style="border-top: 1px solid #555; padding-top: 10px; margin-top: 5px; display:flex; flex-direction:column; gap: 5px;">
-                <label style="font-size: 11px; text-align: center;">Starting Hearts:</label>
-                <input type="number" id="edit-lives" value="3" min="1" max="10" style="background:#222; color:white; border:1px solid #555; text-align:center; padding:2px; border-radius:4px;">
-                <button class="editor-btn small-bottom-btn" style="background: var(--play-blue); margin-top: 5px;" onclick="startPlaytest()">🎮 Play Test</button>
-                <div class="switch-container">
-                    <label>NoClip</label><input type="checkbox" id="edit-noclip">
-                </div>
-            </div>
-        </div>
-        <div id="editor-selected-panel" class="editor-panel">
-            <div class="selected-empty" id="selected-effect-empty">
-                <span class="selected-icon">✦</span>
-                <div><b>No effect selected</b><small>Open Effects, add one at the playhead, or click a marker.</small></div>
-            </div>
-            <div id="selected-effect-editor" class="hidden">
-                <div class="selected-effect-title">
-                    <div><span id="selected-effect-kind">EFFECT</span><b id="selected-effect-time">0.00s</b></div>
-                    <div class="selected-effect-actions">
-                        <button class="mini-editor-btn" onclick="setSelectedEffectToPlayhead()">MOVE TO PLAYHEAD</button>
-                        <button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button>
-                    </div>
-                </div>
-                <div id="selected-effect-fields"></div>
-            </div>
-        </div>
-        <div id="editor-bottom-panel" class="editor-panel">
-            <button id="editor-tool-normal" class="editor-btn small-bottom-btn active" onclick="setEditorTileMode('normal')">NORMAL TILE</button>
-            <button id="editor-tool-hold" class="editor-btn small-bottom-btn" onclick="setEditorTileMode('hold')">HOLD TILE</button>
-        </div>
-        <button id="editor-menu-btn" class="editor-btn editor-panel" onclick="openCreatorMenu()">☰</button>
-        <button id="editor-effect-btn" class="editor-btn editor-panel" onclick="openEffectsMenu()">✨</button>
-        <button id="editor-settings-btn" class="editor-btn editor-panel" onclick="openEditorSettingsMenu()">⚙</button>
+    <div class="browse-search-row">
+      <span class="search-icon">🔎</span>
+      <input type="text" id="browse-search-input" placeholder="Search levels or creators..." oninput="renderBrowseLevels()">
     </div>
+    <div class="pill-tabs">
+      <button id="tab-recent" class="pill-tab" onclick="openBrowseLevels('recent')">Recent</button>
+      <button id="tab-trending" class="pill-tab" onclick="openBrowseLevels('trending')">Trending</button>
+      <button id="tab-rated" class="pill-tab" onclick="openBrowseLevels('rated')">Top Rated</button>
+      <button id="tab-featured" class="pill-tab" onclick="openBrowseLevels('featured')">Featured</button>
+    </div>
+    <div class="grid-levels" id="community-levels-container" style="max-height: 52vh; overflow-y:auto; padding-right:4px;"></div>
+    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
+  </div>
+</div>
 
-    <div id="editor-level-settings" class="overlay hidden">
-        <h2>LEVEL SETTINGS</h2>
-        <div class="menu-content">
-            <div class="settings-row">
-                <span>Target FPS</span>
-                <input type="number" id="edit-fps" value="60" min="10" max="240" style="width:60px; text-align:center; border-radius:4px; border:none; padding:4px;">
-            </div>
-            <div class="settings-row">
-                <span>Audio Offset (ms)</span>
-                <input type="number" id="edit-audio-offset" value="0" style="width:70px; text-align:center; background:#222; color:#fff; border:1px solid #555; border-radius:4px; padding: 4px;">
-            </div>
-            <div class="settings-row">
-                <span>Disable Hold Tiles</span>
-                <input type="checkbox" id="edit-disable-holds">
-            </div>            <div class="editor-settings-section">
-                <div class="editor-settings-title">TIMING GRID</div>
-                <div class="editor-settings-subtitle">Choose how tile placement snaps on the editor timeline.</div>
-                <div class="editor-grid-controls settings-grid-controls">
-                    <span class="grid-label">SNAP</span>
-                    <button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
-                    <button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
-                    <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
-                    <button class="grid-btn" data-grid="12" onclick="setEditorGrid(12)">1/12</button>
-                    <span id="grid-readout" class="grid-readout">0.250s</span>
-                </div>
-                <div class="editor-settings-subtitle">Hold Shift while placing a tile to bypass snapping.</div>
-            </div>
-            <button class="nav-btn secondary-btn" onclick="closeEditorSettingsMenu()">BACK TO EDITOR</button>
+<!-- ============================== LEVEL DETAIL SHEET (GD-style info popup) ============================== -->
+<div id="level-detail-menu" class="overlay hidden">
+  <h2 id="level-detail-title" style="margin-bottom: 12px;">LEVEL</h2>
+  <div class="menu-content">
+    <div class="level-detail-sheet" id="level-detail-body"></div>
+    <button class="nav-btn secondary-btn" onclick="closeLevelDetail()" style="margin-top: 6px;">CLOSE</button>
+  </div>
+</div>
+
+<!-- ============================== BATTLE MODE ============================== -->
+<div id="battle-menu" class="overlay hidden">
+  <h2 style="margin-bottom: 12px;">⚔ BATTLE</h2>
+  <div class="menu-content">
+    <button class="quick-match-btn" onclick="startQuickMatch()">⚡ QUICK MATCH <kbd>Q</kbd></button>
+    <div class="battle-search-row">
+      <input type="text" id="battle-search-input" placeholder="Search a player by name..." oninput="renderOnlinePlayers()">
+    </div>
+    <div class="online-section-label">ONLINE NOW (this browser)</div>
+    <div id="battle-online-list"></div>
+    <button class="nav-btn secondary-btn" onclick="leaveBattleMenu()" style="margin-top: 6px;">BACK TO MENU</button>
+  </div>
+</div>
+
+<div id="battle-level-picker" class="overlay hidden">
+  <h2 style="margin-bottom: 12px;">PICK A LEVEL TO CHALLENGE WITH</h2>
+  <div class="menu-content" style="max-height:70vh; overflow-y:auto; padding-right:5px;">
+    <div class="grid-levels" id="battle-level-picker-list"></div>
+    <button class="nav-btn secondary-btn" onclick="cancelBattleFlow()" style="margin-top: 15px;">CANCEL</button>
+  </div>
+</div>
+
+<div id="battle-waiting-menu" class="overlay hidden">
+  <div class="battle-waiting">
+    <div class="spinner"></div>
+    <h2 id="battle-waiting-title">Waiting for opponent...</h2>
+    <p id="battle-waiting-sub">Sit tight — this updates as soon as they respond.</p>
+    <span class="cancel-link" onclick="cancelBattleFlow()">Cancel</span>
+  </div>
+</div>
+
+<div id="battle-incoming-menu" class="overlay hidden">
+  <div class="menu-content">
+    <div class="battle-incoming">
+      <div class="profile-avatar" style="margin: 0 auto 10px; width:44px;height:44px;font-size:18px;" id="battle-incoming-avatar">?</div>
+      <b id="battle-incoming-name">Someone</b>
+      <p style="color:var(--text-mid); font-size:12px; margin:6px 0 0;" id="battle-incoming-level">wants to battle on a level</p>
+      <div class="battle-incoming-row">
+        <button class="nav-btn secondary-btn" onclick="declineChallenge()">DECLINE</button>
+        <button class="nav-btn" style="background:var(--accent-success); color:#fff;" onclick="acceptChallenge()">ACCEPT</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="battle-result-menu" class="overlay hidden">
+  <div class="menu-content" style="text-align:center;">
+    <div class="battle-result-banner" id="battle-result-banner">RESULT</div>
+    <div class="battle-result-sub" id="battle-result-sub"></div>
+    <div class="battle-result-scores">
+      <div class="battle-result-score-col"><b id="battle-result-my-score">0</b><span>You</span></div>
+      <div class="battle-result-score-col"><b id="battle-result-opp-score">0</b><span id="battle-result-opp-label">Opponent</span></div>
+    </div>
+    <button class="nav-btn" style="background:var(--play-blue); color:#fff;" onclick="rematchBattle()">REMATCH</button>
+    <button class="nav-btn secondary-btn" onclick="leaveBattleMenu()" style="margin-top:8px;">BACK TO MENU</button>
+  </div>
+</div>
+
+<!-- ============================== EDITOR ============================== -->
+<div id="editor-ui" class="hidden">
+
+  <div class="editor-topbar">
+    <div class="editor-topbar-group">
+      <button class="icon-btn" onclick="openCreatorMenu()" title="Menu">☰</button>
+      <button class="icon-btn" onclick="toggleDrawer('left')" title="Tools">🛠</button>
+      <button class="icon-btn" onclick="openEffectsMenu()" title="Effects">✨</button>
+      <button class="icon-btn" onclick="openEditorSettingsMenu()" title="Level Settings">⚙</button>
+      <button id="btn-delete-mode" class="icon-btn" onclick="toggleDeleteMode()" title="Delete tiles">🗑️</button>
+    </div>
+    <div class="editor-topbar-group">
+      <div class="editor-stat-pill" id="editor-timer-panel">0.00s</div>
+    </div>
+  </div>
+
+  <!-- Tile placement mode pill, kept small and out of the canvas tap area -->
+  <div class="tile-mode-pill">
+    <button id="editor-tool-normal" class="active" onclick="setEditorTileMode('normal')">NORMAL</button>
+    <button id="editor-tool-hold" onclick="setEditorTileMode('hold')">HOLD</button>
+  </div>
+
+  <!-- LEFT DRAWER: song / recording / playtest tools (was a permanent floating panel; now tucked away) -->
+  <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>
+  <div class="drawer drawer-left" id="drawer-left">
+    <div class="drawer-header"><b>TOOLS</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
+    <div class="tool-drawer-section">
+      <div class="tool-drawer-label">SONG</div>
+      <div class="tool-grid">
+        <button class="tool-btn" onclick="document.getElementById('audio-upload').click()"><span class="tool-icon">🎵</span>Load Song</button>
+        <button id="btn-song-test" class="tool-btn" onclick="toggleSongTester()"><span class="tool-icon">🎧</span>Tester</button>
+      </div>
+    </div>
+    <div class="tool-drawer-section">
+      <div class="tool-drawer-label">PLACEMENT</div>
+      <div class="tool-grid">
+        <button id="btn-create-tiles" class="tool-btn" onclick="toggleRecording()"><span class="tool-icon">▶</span>Record</button>
+        <button id="btn-delete-mode-2" class="tool-btn danger" onclick="toggleDeleteMode()"><span class="tool-icon">🗑️</span>Delete</button>
+      </div>
+    </div>
+    <div class="tool-drawer-section">
+      <div class="tool-drawer-label">PLAYTEST</div>
+      <div class="field-row">
+        <label>Starting Hearts</label>
+        <input type="number" id="edit-lives" value="3" min="1" max="10">
+      </div>
+      <div class="switch-container">
+        <label>NoClip</label><input type="checkbox" id="edit-noclip">
+      </div>
+      <button class="nav-btn" style="background: var(--play-blue); color:#fff; padding:11px;" onclick="startPlaytest()">🎮 Play Test</button>
+    </div>
+  </div>
+
+  <!-- RIGHT DRAWER: quick inspector for whichever effect is selected -->
+  <div class="drawer drawer-right" id="drawer-right">
+    <div class="drawer-header"><b>SELECTED</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
+    <div class="selected-empty" id="selected-effect-empty">
+      <span class="selected-icon">✦</span>
+      <div><b>No effect selected</b><br><small>Open Effects, add one at the playhead, or tap a marker on the timeline.</small></div>
+    </div>
+    <div id="selected-effect-editor" class="hidden">
+      <div class="selected-effect-title">
+        <div><span id="selected-effect-kind">EFFECT</span><b id="selected-effect-time">0.00s</b></div>
+      </div>
+      <div id="selected-effect-fields"></div>
+      <div class="selected-effect-actions" style="margin-top:10px;">
+        <button class="mini-editor-btn" onclick="setSelectedEffectToPlayhead()">MOVE TO PLAYHEAD</button>
+        <button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOCKED BOTTOM TIMELINE: fix for "timeline is in the way" — anchored to the true bottom
+       edge, collapsible, and never overlaps the canvas tap area. -->
+  <div class="timeline-dock" id="timeline-dock">
+    <div class="timeline-dock-handle" onclick="toggleTimelineDock()"><div class="grip"></div></div>
+    <div class="timeline-toolbar">
+      <div class="timeline-toolbar-left">
+        <b id="editor-timeline-time">0.00s</b>
+        <div class="timeline-transport">
+          <button class="mini-editor-btn" onclick="nudgeEditorTime(-0.10)">−0.10</button>
+          <button class="mini-editor-btn play-toggle-btn" onclick="toggleEditorTransport()" id="editor-transport-btn">▶</button>
+          <button class="mini-editor-btn" onclick="nudgeEditorTime(0.10)">+0.10</button>
+          <button class="mini-editor-btn" onclick="jumpEditorEnd()">END</button>
         </div>
+      </div>
+      <div class="editor-grid-controls">
+        <button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
+        <button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
+        <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
+        <button class="grid-btn" data-grid="12" onclick="setEditorGrid(12)">1/12</button>
+      </div>
     </div>
+    <div class="timeline-track-wrap" id="editor-marker-track">
+      <div id="editor-playhead"></div>
+      <div id="editor-marker-layer"></div>
+    </div>
+    <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.01" oninput="scrubTimeline(this.value)">
+    <div class="timeline-hint">Tap the grip to collapse the timeline. Shift+tap a lane bypasses snapping.</div>
+  </div>
+</div>
 
-    <div id="creator-menu" class="overlay hidden">
-        <h2>EDITOR MENU</h2>
-        <div class="menu-content">
-            <button class="nav-btn" onclick="closeCreatorMenu()">RESUME</button>
-            <button class="nav-btn" style="background: #9900ff; color: white;" onclick="verifyAndDownloadLevel()">▶ VERIFY & DOWNLOAD</button>
-            <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 PUBLISH TO CLOUD</button>
-            <button class="nav-btn" style="background: #00cc66; color: white;" onclick="saveCustomLevel()">SAVE TO MY LEVELS</button>
-            <button class="nav-btn" style="background: #cc0000; color: white;" onclick="exitEditorWithoutSaving()">QUIT</button>
+<div id="editor-level-settings" class="overlay hidden">
+  <h2>LEVEL SETTINGS</h2>
+  <div class="menu-content">
+    <div class="settings-row">
+      <span>Target FPS</span>
+      <input type="number" id="edit-fps" value="60" min="10" max="240" style="width:60px; text-align:center; border-radius:6px; border:1px solid var(--border-soft); background:var(--bg-panel-raised); color:var(--text-hi); padding:6px;">
+    </div>
+    <div class="settings-row">
+      <span>Audio Offset (ms)</span>
+      <input type="number" id="edit-audio-offset" value="0" style="width:70px; text-align:center; background:var(--bg-panel-raised); color:#fff; border:1px solid var(--border-soft); border-radius:6px; padding: 6px;">
+    </div>
+    <div class="settings-row">
+      <span>Disable Hold Tiles</span>
+      <input type="checkbox" id="edit-disable-holds">
+    </div>
+    <div class="settings-row">
+      <span>Difficulty Tag</span>
+      <select id="edit-difficulty" style="background:var(--bg-panel-raised); color:var(--text-hi); border:1px solid var(--border-soft); border-radius:6px; padding:6px;">
+        <option value="Easy">Easy</option>
+        <option value="Normal" selected>Normal</option>
+        <option value="Hard">Hard</option>
+        <option value="Insane">Insane</option>
+        <option value="Extreme">Extreme</option>
+      </select>
+    </div>
+    <div class="editor-settings-section">
+      <div class="editor-settings-title">TIMING GRID</div>
+      <div class="editor-settings-subtitle">Choose how tile placement snaps on the editor timeline.</div>
+      <div class="editor-grid-controls settings-grid-controls">
+        <span class="grid-label">SNAP</span>
+        <button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
+        <button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
+        <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
+        <button class="grid-btn" data-grid="12" onclick="setEditorGrid(12)">1/12</button>
+        <span id="grid-readout" class="grid-readout">0.250s</span>
+      </div>
+      <div class="editor-settings-subtitle">Hold Shift while placing a tile to bypass snapping.</div>
+    </div>
+    <button class="nav-btn secondary-btn" onclick="closeEditorSettingsMenu()">BACK TO EDITOR</button>
+  </div>
+</div>
+
+<div id="creator-menu" class="overlay hidden">
+  <h2>EDITOR MENU</h2>
+  <div class="menu-content">
+    <button class="nav-btn" onclick="closeCreatorMenu()">RESUME</button>
+    <button class="nav-btn" style="background: var(--accent-purple); color: white;" onclick="verifyAndDownloadLevel()">▶ VERIFY &amp; DOWNLOAD</button>
+    <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 PUBLISH TO LIBRARY</button>
+    <button class="nav-btn" style="background: var(--accent-success); color: white;" onclick="saveCustomLevel()">SAVE TO MY LEVELS</button>
+    <button class="nav-btn" style="background: var(--accent-danger); color: white;" onclick="exitEditorWithoutSaving()">QUIT</button>
+  </div>
+</div>
+
+<!-- ============================== EFFECTS STUDIO ============================== -->
+<div id="effects-menu" class="overlay hidden">
+  <div class="effects-studio">
+    <div class="effects-studio-header">
+      <div class="effects-studio-title">
+        <span class="eyebrow">EXTREME TILES EDITOR</span>
+        <h2>Effect Editor</h2>
+        <p>Drag effects on the timeline. Drag the edges to change duration.</p>
+      </div>
+      <div class="effects-studio-header-actions">
+        <div class="effect-playhead-pill">PLAYHEAD <strong id="effect-time-display">0.00s</strong></div>
+        <button class="mini-editor-btn" onclick="closeEffectsMenu()">DONE</button>
+      </div>
+    </div>
+    <div class="effects-studio-body">
+      <aside class="effect-library-panel">
+        <div class="effect-panel-heading"><span>ADD EFFECT</span><small>Placed at the playhead</small></div>
+        <div class="effect-category-tabs">
+          <button class="effect-tab active" onclick="switchEffectCategory('visual')">VISUAL</button>
+          <button class="effect-tab" onclick="switchEffectCategory('speed')">SPEED</button>
+          <button class="effect-tab" onclick="switchEffectCategory('image')">IMAGE</button>
+          <button class="effect-tab" onclick="switchEffectCategory('audio')">AUDIO</button>
         </div>
-    </div>
-
-    <div id="effects-menu" class="overlay hidden">
-        <div class="effects-studio">
-            <div class="effects-studio-header">
-                <div class="effects-studio-title">
-                    <span class="eyebrow">EXTREME TILES EDITOR</span>
-                    <h2>Effect Editor</h2>
-                    <p>Drag effects on the timeline. Drag the edges to change duration.</p>
-                </div>
-                <div class="effects-studio-header-actions">
-                    <div class="effect-playhead-pill">PLAYHEAD <strong id="effect-time-display">0.00s</strong></div>
-                    <button class="mini-editor-btn" onclick="closeEffectsMenu()">DONE</button>
-                </div>
-            </div>
-            <div class="effects-studio-body">
-                <aside class="effect-library-panel">
-                    <div class="effect-panel-heading"><span>ADD EFFECT</span><small>Placed at the playhead</small></div>
-                    <div class="effect-category-tabs">
-                        <button class="effect-tab active" onclick="switchEffectCategory('visual')">VISUAL</button>
-                        <button class="effect-tab" onclick="switchEffectCategory('speed')">SPEED</button>
-                        <button class="effect-tab" onclick="switchEffectCategory('image')">IMAGE</button>
-                        <button class="effect-tab" onclick="switchEffectCategory('audio')">AUDIO</button>
-                    </div>
-                    <div class="effect-library-list" id="effect-library-visual">
-                        <button class="effect-library-card pulse-card" onclick="addPulseEffect()"><span class="effect-library-icon">✦</span><span><b>Pulse</b><small>Timed flash / color</small></span><strong>+</strong></button>
-                        <button class="effect-library-card tile-card" onclick="addTileStyleEffect()"><span class="effect-library-icon">■</span><span><b>Tile Style</b><small>Change tile colors</small></span><strong>+</strong></button>
-                    </div>
-                    <div class="effect-library-list hidden" id="effect-library-speed">
-                        <button class="effect-library-card speed-card" onclick="setSpeedPreset(0.5)"><span class="effect-library-icon">½</span><span><b>0.5× Slow</b><small>Quick slowdown</small></span><strong>+</strong></button>
-                        <button class="effect-library-card speed-card" onclick="setSpeedPreset(1)"><span class="effect-library-icon">1×</span><span><b>1× Normal</b><small>Return to normal</small></span><strong>+</strong></button>
-                        <button class="effect-library-card speed-card" onclick="setSpeedPreset(1.5)"><span class="effect-library-icon">1.5×</span><span><b>1.5× Fast</b><small>Build pressure</small></span><strong>+</strong></button>
-                        <button class="effect-library-card speed-card" onclick="setSpeedPreset(2)"><span class="effect-library-icon">2×</span><span><b>2× Extreme</b><small>High-speed section</small></span><strong>+</strong></button>
-                        <div class="effect-library-form"><label>Target speed<input id="fx-speed-target" type="number" value="25" min="5" max="50" step="1"></label><label>Transition<input id="fx-speed-trans" type="number" value="0.50" min="0" step="0.05"></label><button class="primary-effect-btn" onclick="addSpeedEffect()">ADD SPEED</button></div>
-                    </div>
-                    <div class="effect-library-list hidden" id="effect-library-image">
-                        <div class="effect-library-form"><div class="form-block-title">BACKGROUND IMAGE</div><input type="file" id="fx-img-upload" accept="image/*"><div class="two-col-effect"><label>Opacity<input type="number" id="fx-img-alpha" value="0.5" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-img-dur" value="2" min="0.1" step="0.1"></label><label>Fade in<input type="number" id="fx-img-in" value="0.3" min="0" step="0.05"></label><label>Fade out<input type="number" id="fx-img-out" value="0.3" min="0" step="0.05"></label></div><button class="primary-effect-btn" onclick="addImageEffect()">ADD IMAGE</button></div>
-                        <div class="effect-library-form"><div class="form-block-title">EXTRA IMAGE</div><input type="file" id="fx-extra-upload" accept="image/*"><div class="two-col-effect"><label>Width<input type="number" id="fx-extra-w" value="150"></label><label>Height<input type="number" id="fx-extra-h" value="150"></label><label>Opacity<input type="number" id="fx-extra-alpha" value="1" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-extra-dur" value="2" min="0.1" step="0.1"></label></div><div class="quick-position-row"><button onclick="setExtraImagePosition('center')">CENTER</button><button onclick="setExtraImagePosition('top')">TOP</button><button onclick="setExtraImagePosition('bottom')">BOTTOM</button></div><button class="primary-effect-btn" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button></div>
-                    </div>
-                    <div class="effect-library-list hidden" id="effect-library-audio"><div class="effect-library-form"><div class="form-block-title">EXTRA SFX</div><input type="file" id="fx-sfx-upload" accept="audio/*"><button class="primary-effect-btn" onclick="addSfxEffect()">ADD SFX</button></div></div>
-                </aside>
-                <main class="effect-editor-main">
-                    <div class="effect-timeline-toolbar"><div><b>EVENT TIMELINE</b><span>Drag blocks to move them · drag handles to resize</span></div><div class="effect-toolbar-actions"><button class="mini-editor-btn" onclick="nudgeSelectedEffect(-0.10)">−0.10s</button><button class="mini-editor-btn" onclick="nudgeSelectedEffect(0.10)">+0.10s</button><button class="mini-editor-btn" onclick="setSelectedEffectToPlayhead()">ALIGN TO PLAYHEAD</button><button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button></div></div>
-                    <div class="effect-timeline-wrap" id="effect-timeline-wrap"><div class="effect-time-ruler" id="effect-time-ruler"></div><div class="effect-tracks" id="effect-tracks"></div><div class="effect-timeline-playhead" id="effect-timeline-playhead"></div></div>
-                    <div class="effect-timeline-footer"><span id="effect-selection-summary">Nothing selected</span><span>Shift = free drag · click empty timeline to move playhead</span></div>
-                </main>
-                <aside class="effect-inspector"><div class="effect-panel-heading"><span>INSPECTOR</span><small id="effect-inspector-subtitle">Select an effect</small></div><div id="effect-inspector-content" class="effect-inspector-content"><div class="effect-inspector-empty"><div class="inspector-empty-icon">✦</div><b>Select an effect</b><span>Pick a block from the timeline to edit its timing, duration and properties.</span></div></div></aside>
-            </div>
+        <div class="effect-library-list" id="effect-library-visual">
+          <button class="effect-library-card pulse-card" onclick="addPulseEffect()"><span class="effect-library-icon">✦</span><span><b>Pulse</b><small>Timed flash / color</small></span><strong>+</strong></button>
+          <button class="effect-library-card tile-card" onclick="addTileStyleEffect()"><span class="effect-library-icon">■</span><span><b>Tile Style</b><small>Change tile colors</small></span><strong>+</strong></button>
         </div>
+        <div class="effect-library-list hidden" id="effect-library-speed">
+          <button class="effect-library-card speed-card" onclick="setSpeedPreset(0.5)"><span class="effect-library-icon">½</span><span><b>0.5× Slow</b><small>Quick slowdown</small></span><strong>+</strong></button>
+          <button class="effect-library-card speed-card" onclick="setSpeedPreset(1)"><span class="effect-library-icon">1×</span><span><b>1× Normal</b><small>Return to normal</small></span><strong>+</strong></button>
+          <button class="effect-library-card speed-card" onclick="setSpeedPreset(1.5)"><span class="effect-library-icon">1.5×</span><span><b>1.5× Fast</b><small>Build pressure</small></span><strong>+</strong></button>
+          <button class="effect-library-card speed-card" onclick="setSpeedPreset(2)"><span class="effect-library-icon">2×</span><span><b>2× Extreme</b><small>High-speed section</small></span><strong>+</strong></button>
+          <div class="effect-library-form"><label>Target speed<input id="fx-speed-target" type="number" value="25" min="5" max="50" step="1"></label><label>Transition<input id="fx-speed-trans" type="number" value="0.50" min="0" step="0.05"></label><button class="primary-effect-btn" onclick="addSpeedEffect()">ADD SPEED</button></div>
+        </div>
+        <div class="effect-library-list hidden" id="effect-library-image">
+          <div class="effect-library-form"><div class="form-block-title">BACKGROUND IMAGE</div><input type="file" id="fx-img-upload" accept="image/*"><div class="two-col-effect"><label>Opacity<input type="number" id="fx-img-alpha" value="0.5" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-img-dur" value="2" min="0.1" step="0.1"></label><label>Fade in<input type="number" id="fx-img-in" value="0.3" min="0" step="0.05"></label><label>Fade out<input type="number" id="fx-img-out" value="0.3" min="0" step="0.05"></label></div><button class="primary-effect-btn" onclick="addImageEffect()">ADD IMAGE</button></div>
+          <div class="effect-library-form"><div class="form-block-title">EXTRA IMAGE</div><input type="file" id="fx-extra-upload" accept="image/*"><div class="two-col-effect"><label>Width<input type="number" id="fx-extra-w" value="150"></label><label>Height<input type="number" id="fx-extra-h" value="150"></label><label>Opacity<input type="number" id="fx-extra-alpha" value="1" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-extra-dur" value="2" min="0.1" step="0.1"></label></div><div class="quick-position-row"><button onclick="setExtraImagePosition('center')">CENTER</button><button onclick="setExtraImagePosition('top')">TOP</button><button onclick="setExtraImagePosition('bottom')">BOTTOM</button></div><button class="primary-effect-btn" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button></div>
+        </div>
+        <div class="effect-library-list hidden" id="effect-library-audio"><div class="effect-library-form"><div class="form-block-title">EXTRA SFX</div><input type="file" id="fx-sfx-upload" accept="audio/*"><button class="primary-effect-btn" onclick="addSfxEffect()">ADD SFX</button></div></div>
+      </aside>
+      <main class="effect-editor-main">
+        <div class="effect-timeline-toolbar"><div><b>EVENT TIMELINE</b><span>Drag blocks to move them · drag handles to resize</span></div><div class="effect-toolbar-actions"><button class="mini-editor-btn" onclick="nudgeSelectedEffect(-0.10)">−0.10s</button><button class="mini-editor-btn" onclick="nudgeSelectedEffect(0.10)">+0.10s</button><button class="mini-editor-btn" onclick="setSelectedEffectToPlayhead()">ALIGN TO PLAYHEAD</button><button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button></div></div>
+        <div class="effect-timeline-wrap" id="effect-timeline-wrap"><div class="effect-time-ruler" id="effect-time-ruler"></div><div class="effect-tracks" id="effect-tracks"></div><div class="effect-timeline-playhead" id="effect-timeline-playhead"></div></div>
+        <div class="effect-timeline-footer"><span id="effect-selection-summary">Nothing selected</span><span>Shift = free drag · click empty timeline to move playhead</span></div>
+      </main>
+      <aside class="effect-inspector"><div class="effect-panel-heading"><span>INSPECTOR</span><small id="effect-inspector-subtitle">Select an effect</small></div><div id="effect-inspector-content" class="effect-inspector-content"><div class="effect-inspector-empty"><div class="inspector-empty-icon">✦</div><b>Select an effect</b><span>Pick a block from the timeline to edit its timing, duration and properties.</span></div></div></aside>
     </div>
-
-    <div id="score-container">
-        <div id="score">0</div>
-        <div id="rest-msg">BREATHE</div>
-    </div>
-    <canvas id="gameCanvas" width="360" height="640"></canvas>
-
-    <div id="death-screen" class="overlay hidden">
-        <h1 id="death-title" style="color: #ff3333; font-size: 48px;">FAILED</h1>
-        <p id="final-score" style="font-size: 26px; margin-bottom: 20px;">Score: 0</p>
-        <button id="death-retry-btn" class="play-btn" style="padding: 15px 50px; font-size: 18px;" onclick="restartGame()">RETRY</button>
-        <button id="death-quit-btn" class="nav-btn" style="max-width: 200px; margin-top: 15px;" onclick="quitPlaytestOrGame()">QUIT TO MENU</button>
-        <button id="death-stop-playtest-btn" class="nav-btn hidden" style="max-width: 200px; margin-top: 15px; background: red; color: white;" onclick="stopPlaytestFromDeath()">STOP PLAYTESTING</button>
-    </div>
-
-    <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        const scoreEl = document.getElementById("score");
-        const restEl = document.getElementById("rest-msg");
-        const bgAudio = document.getElementById("bg-audio");
-        const overlays = ['main-menu', 'levels-menu', 'settings-menu', 'death-screen', 'my-levels-menu', 'creator-menu', 'effects-menu', 'browse-levels-menu', 'editor-level-settings'];
-
-        let score = 0, speed = 18, lastTime = 0; 
-        let tiles = [], particles = [], isDead = false, gameActive = false;
-        let currentMode = 'practice', patternStep = 0;
-        let distanceTraveled = 0, nextSpawnDistance = 0;
-
-        let maxLives = 3; let currentLives = 3;
-        let windowLevelFPS = 60;
-        
-        let frameCount = 0;
-        let lastFpsTime = 0;
-        let levelEndTime = 0;
-
-        const laneW = canvas.width / 4;
-        const keyMap = ['r', 't', 'y', 'u'];
-        const keys = { r: false, t: false, y: false, u: false };
-        const lineY = 540;
-        const TILE_H = 150, GAP = 35;
-
-        let currentTileStyle = { c1: "#000000", c2: "#000000", alpha: 1.0 };
-        let targetSpeed = 18, speedTransitionTime = 0, speedTransitionDuration = 0, initialSpeed = 18;
-
-        const patterns = {
-            scale: [3, 2, 1, 0],
-            bambam: [[0, 2], 1, [0, 2], 1, [0, 2], 1, 0, [1, 3], 2, [1, 3], 2, [1, 3], 2, 3]
-        };
-
-        // Holds our externally loaded level temporarily so "Restart" works smoothly
-        let tempLoadedLevel = null;
-
-        // --- ACCOUNT LOGIC (NO LOGIN REQUIRED) ---
-        let users = JSON.parse(localStorage.getItem('extremeTilesUsers')) || { 'Guest': { customLevels: [] } };
-        let currentUser = localStorage.getItem('extremeTilesUser') || 'Guest';
-        if (!users['Guest']) users['Guest'] = { customLevels: [] };
-        
-        let customLevels = users[currentUser] ? users[currentUser].customLevels : users['Guest'].customLevels;
-        let communityLevels = JSON.parse(localStorage.getItem('communityLevels')) || [];
-
-        if(currentUser !== 'Guest') {
-            document.getElementById('signup-btn').innerText = `👤 ${currentUser} (Log Out)`;
-        } else {
-            document.getElementById('signup-btn').innerText = `👤 LOGIN / SIGN UP (GUEST)`;
-        }
-
-        // --- FILE LOADER (PULLS EVERYTHING DYNAMICALLY) ---
-        function loadCustomLevelFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const levelData = JSON.parse(e.target.result);
-                    tempLoadedLevel = levelData;
-                    
-                    // Start game with all settings populated straight from the JSON
-                    startGame(levelData.name || 'Loaded Level', true, -1, levelData.data, levelData.effects || [], false, levelData);
-                    
-                    event.target.value = ""; // Reset input so they can click it again if needed
-                } catch (err) {
-                    alert("Error parsing level file. Make sure it's a valid JSON format.");
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        function updatePrimaryColor(val) {
-            document.documentElement.style.setProperty('--primary-theme', val);
-            document.documentElement.style.setProperty('--play-blue', val);
-        }
-
-        function handleAuth() {
-            if (currentUser !== 'Guest') {
-                if (confirm("Log out of " + currentUser + "?")) {
-                    currentUser = 'Guest'; localStorage.removeItem('extremeTilesUser'); 
-                    customLevels = users['Guest'].customLevels;
-                    document.getElementById('signup-btn').innerText = `👤 LOGIN / SIGN UP (GUEST)`; 
-                    alert("Logged out successfully. You are now playing as a Guest.");
-                } return;
-            }
-            let action = prompt("Type 'login' to Log In, or 'signup' to Create an Account:");
-            if (!action) return; action = action.toLowerCase();
-            if (action === 'signup') {
-                let user = prompt("Create a Username:"); if (!user || user === 'Guest') return;
-                if (users[user]) { alert("Username already taken!"); return; }
-                let pass = prompt("Create a Password:"); if (!pass) return;
-                users[user] = { password: pass, customLevels: [] };
-                localStorage.setItem('extremeTilesUsers', JSON.stringify(users)); login(user, pass);
-            } else if (action === 'login') {
-                let user = prompt("Enter Username:"); let pass = prompt("Enter Password:");
-                if (users[user] && users[user].password === pass) login(user, pass);
-                else alert("Invalid Username or Password.");
-            }
-        }
-
-        function login(user, pass) {
-            currentUser = user; localStorage.setItem('extremeTilesUser', user);
-            customLevels = users[user].customLevels;
-            document.getElementById('signup-btn').innerText = `👤 ${user} (Log Out)`; alert("Logged in as " + user);
-        }
-
-        let isCustomGame = false, customPlayTime = 0, customGameInterval = null, isPlaytesting = false, isVerifying = false; 
-        let inEditor = false, isRecording = false, isSongTesting = false, deleteMode = false; 
-        let editorTimer = 0, editorInterval = null;
-        let recordedTiles = [], recordedEffects = [], editorVisualTiles = []; 
-        let loadedImageDataUrl = null, loadedSfxDataUrl = null, loadedExtraImageDataUrl = null, currentEditingName = "";
-        let verifyEndTime = 0;
-        let editorKeyTimes = [null, null, null, null]; 
-
-        document.getElementById('fx-img-upload').addEventListener('change', function(e) {
-            if(!e.target.files[0]) return; const reader = new FileReader(); reader.onload = (ev) => loadedImageDataUrl = ev.target.result; reader.readAsDataURL(e.target.files[0]);
-        });
-        document.getElementById('fx-extra-upload').addEventListener('change', function(e) {
-            if(!e.target.files[0]) return; const reader = new FileReader(); reader.onload = (ev) => loadedExtraImageDataUrl = ev.target.result; reader.readAsDataURL(e.target.files[0]);
-        });
-        document.getElementById('fx-sfx-upload').addEventListener('change', function(e) {
-            if(!e.target.files[0]) return; const reader = new FileReader(); reader.onload = (ev) => loadedSfxDataUrl = ev.target.result; reader.readAsDataURL(e.target.files[0]);
-        });
-
-        function toggleMenu(menuId) {
-            overlays.forEach(id => document.getElementById(id).classList.add('hidden'));
-            if(menuId) document.getElementById(menuId).classList.remove('hidden');
-        }
-
-        document.querySelectorAll('.speed-control input').forEach(input => {
-            input.addEventListener('input', (e) => {
-                const id = e.target.id.replace('speed-', 'val-'); document.getElementById(id).innerText = e.target.value;
-            });
-        });
-
-        function loadAudioFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const maxSize = 10 * 1024 * 1024; 
-            if (file.size > maxSize) {
-                alert("File is too large! Please select a song under 10MB.");
-                event.target.value = ""; 
-                return;
-            }
-            const url = URL.createObjectURL(file); 
-            bgAudio.src = url; bgAudio.load();
-            bgAudio.onloadedmetadata = () => { document.getElementById('timeline-slider').max = bgAudio.duration; alert("Song loaded successfully!"); };
-        }
-
-        function getAvgRating(level) {
-            if (!level.ratings || level.ratings.length === 0) return 0;
-            return (level.ratings.reduce((a, b) => a + b, 0) / level.ratings.length).toFixed(1);
-        }
-
-        function resetState() {
-            score = 0; tiles = []; particles = []; isDead = false; patternStep = 0; scoreEl.innerText = "0";
-            distanceTraveled = 0; nextSpawnDistance = 0; currentLives = maxLives;
-            document.getElementById('lives-count').innerText = currentLives;
-            
-            document.getElementById('fps-display').innerText = "60 FPS";
-            document.getElementById('progress-display').innerText = "0%";
-            frameCount = 0;
-            lastFpsTime = performance.now();
-            levelEndTime = 0;
-            
-            document.body.style.background = document.getElementById('bg-color-picker').value || 'var(--custom-bg)';
-            document.getElementById('bg-image-container').style.opacity = 0;
-            document.getElementById('fg-image-container').style.opacity = 0;
-            document.getElementById('bg-flash').style.opacity = 0;
-            document.getElementById('fg-flash').style.opacity = 0;
-
-            document.getElementById('extra-images-bg').innerHTML = "";
-            document.getElementById('extra-images-fg').innerHTML = "";
-
-            currentTileStyle = { c1: "#000000", c2: "#000000", alpha: 1.0 };
-            targetSpeed = speed; speedTransitionTime = 0; speedTransitionDuration = 0;
-
-            bgAudio.pause(); bgAudio.currentTime = 0;
-            if(customGameInterval) clearInterval(customGameInterval);
-            lastTime = performance.now();
-        }
-
-        function triggerRedFlash() {
-            const flash = document.getElementById('red-flash'); flash.style.opacity = 0.8;
-            setTimeout(() => { flash.style.opacity = 0; }, 150);
-        }
-
-        function handleHit() {
-            if(document.getElementById('edit-noclip') && document.getElementById('edit-noclip').checked && (inEditor || isPlaytesting || isVerifying)) return true;
-            if (currentLives > 1) { currentLives--; document.getElementById('lives-count').innerText = currentLives; triggerRedFlash(); return true; } 
-            return false; 
-        }
-
-        function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, testEffects = null, isCommunity = false, loadedLevelObj = null) {
-            currentMode = mode; isCustomGame = isCustom; gameActive = true;
-            resetState(); overlays.forEach(id => document.getElementById(id).classList.add('hidden'));
-            document.getElementById('editor-ui').classList.add('hidden');
-            document.getElementById('lives-display').classList.remove('hidden');
-            document.getElementById('game-hud').classList.remove('hidden');
-            
-            if (!isCustom) {
-                const customSpeed = document.getElementById('speed-' + mode);
-                speed = customSpeed ? parseInt(customSpeed.value) : 18; targetSpeed = speed; 
-                windowLevelFPS = 60;
-                document.getElementById('progress-display').classList.add('hidden'); 
-                spawnTile();
-            } else {
-                document.getElementById('progress-display').classList.remove('hidden');
-                speed = 18; targetSpeed = 18; customPlayTime = 0;
-                
-                let sourceArray = isCommunity ? communityLevels : customLevels;
-                let pendingTiles = testTiles ? JSON.parse(JSON.stringify(testTiles)) : JSON.parse(JSON.stringify(sourceArray[customIndex].data));
-                let pendingEffects = testEffects ? JSON.parse(JSON.stringify(testEffects)) : (sourceArray[customIndex].effects ? JSON.parse(JSON.stringify(sourceArray[customIndex].effects)) : []);
-                
-                let allTimes = [0];
-                pendingTiles.forEach(t => allTimes.push(t.time + (t.holdDuration || 0)));
-                pendingEffects.forEach(e => allTimes.push(e.time));
-                levelEndTime = Math.max(...allTimes) + 4.0;
-                verifyEndTime = levelEndTime;
-
-                if (loadedLevelObj) {
-                    maxLives = loadedLevelObj.lives !== undefined ? loadedLevelObj.lives : 3;
-                    currentLives = maxLives;
-                    windowLevelFPS = loadedLevelObj.fps || 60;
-                } else if(customIndex !== -1 && sourceArray[customIndex].lives) {
-                    maxLives = sourceArray[customIndex].lives; currentLives = maxLives;
-                    windowLevelFPS = sourceArray[customIndex].fps || 60;
-                } else {
-                    windowLevelFPS = testTiles ? parseInt(document.getElementById('edit-fps').value) : 60;
-                }
-                document.getElementById('lives-count').innerText = currentLives;
-                if (!windowLevelFPS || windowLevelFPS < 10) windowLevelFPS = 60;
-
-                let currentAudioOffset = loadedLevelObj && loadedLevelObj.audioOffset !== undefined ? loadedLevelObj.audioOffset : (customIndex !== -1 && sourceArray[customIndex].audioOffset !== undefined ? sourceArray[customIndex].audioOffset : (testTiles ? parseInt(document.getElementById('edit-audio-offset').value) : 0));
-                let currentDisableHolds = loadedLevelObj && loadedLevelObj.disableHolds !== undefined ? loadedLevelObj.disableHolds : (customIndex !== -1 && sourceArray[customIndex].disableHolds !== undefined ? sourceArray[customIndex].disableHolds : (testTiles ? document.getElementById('edit-disable-holds').checked : false));
-
-                let offsetMs = parseInt(currentAudioOffset) || 0;
-                if (bgAudio.src) {
-                    bgAudio.currentTime = 0;
-                    if (offsetMs < 0) {
-                        bgAudio.currentTime = Math.abs(offsetMs) / 1000;
-                        bgAudio.play().catch(e=>console.warn(e));
-                    } else if (offsetMs > 0) {
-                        setTimeout(() => { if(gameActive && !isDead) bgAudio.play().catch(e=>console.warn(e)); }, offsetMs);
-                    } else {
-                        bgAudio.play().catch(e=>console.warn(e));
-                    }
-                }
-
-                customGameInterval = setInterval(() => {
-                    if(isDead || !gameActive) { clearInterval(customGameInterval); bgAudio.pause(); return; }
-                    customPlayTime += 0.016; 
-                    let spawnOffset = 690 / (speed * 60); 
-
-                    for(let i=pendingTiles.length-1; i>=0; i--) {
-                        if(customPlayTime >= pendingTiles[i].time - spawnOffset) {
-                            let isHold = pendingTiles[i].isHold;
-                            if (currentDisableHolds) isHold = false;
-                            
-                            tiles.push(new Tile(pendingTiles[i].lane, -TILE_H, isHold, pendingTiles[i].holdDuration)); 
-                            pendingTiles.splice(i, 1);
-                        }
-                    }
-
-                    for(let i=pendingEffects.length-1; i>=0; i--) {
-                        if(customPlayTime >= pendingEffects[i].time) {
-                            let fx = pendingEffects[i];
-                            if(fx.type === 'pulse') fireAdvancedPulse(fx);
-                            if(fx.type === 'image') fireAdvancedImage(fx);
-                            if(fx.type === 'extra_image') fireExtraImage(fx);
-                            if(fx.type === 'tile_style') fireTileStyle(fx);
-                            if(fx.type === 'speed') fireSpeedChange(fx);
-                            if(fx.type === 'sfx') fireSFX(fx);
-                            pendingEffects.splice(i, 1);
-                        }
-                    }
-
-                    if (levelEndTime > 0) {
-                        let pct = Math.min(100, Math.floor((customPlayTime / levelEndTime) * 100));
-                        document.getElementById('progress-display').innerText = pct + '%';
-                    }
-
-                    if (isVerifying && customPlayTime >= verifyEndTime && tiles.length === 0 && !isDead) {
-                        clearInterval(customGameInterval);
-                        gameActive = false;
-                        alert("Verification Complete! Level will now download.");
-                        downloadLevelData();
-                        quitPlaytestOrGame();
-                    }
-
-                    if(speedTransitionDuration > 0) {
-                        speedTransitionTime += 0.016;
-                        let progress = Math.min(speedTransitionTime / speedTransitionDuration, 1.0);
-                        speed = initialSpeed + (targetSpeed - initialSpeed) * progress;
-                        if(progress >= 1.0) speedTransitionDuration = 0;
-                    }
-                }, 16);
-            }
-            requestAnimationFrame(gameLoop);
-        }
-
-        function startPlaytest() {
-            if (recordedTiles.length === 0) { alert("Place some tiles first!"); return; }
-            maxLives = parseInt(document.getElementById('edit-lives').value) || 1;
-            isPlaytesting = true; inEditor = false; deleteMode = false;
-            document.getElementById('btn-delete-mode').style.background = '#333';
-            document.getElementById('editor-ui').classList.add('hidden');
-            document.getElementById('stop-playtest-btn').classList.remove('hidden');
-            startGame('playtest', true, -1, recordedTiles, recordedEffects);
-        }
-
-        function stopPlaytest() {
-            isPlaytesting = false; isVerifying = false; gameActive = false; isDead = true; resetState();
-            document.getElementById('stop-playtest-btn').classList.add('hidden');
-            document.getElementById('lives-display').classList.add('hidden');
-            document.getElementById('game-hud').classList.add('hidden');
-            document.getElementById('editor-ui').classList.remove('hidden');
-            inEditor = true; requestAnimationFrame(gameLoop);
-        }
-
-        function verifyAndDownloadLevel() {
-            if (recordedTiles.length === 0) { alert("Place some tiles first!"); return; }
-            closeCreatorMenu();
-            isVerifying = true;
-            startPlaytest();
-        }
-
-        function downloadLevelData() {
-            let name = currentEditingName || "My_Level";
-            let lvlData = { 
-                name: name, 
-                data: [...recordedTiles], 
-                effects: [...recordedEffects], 
-                lives: parseInt(document.getElementById('edit-lives').value) || 3,
-                fps: parseInt(document.getElementById('edit-fps').value) || 60,
-                audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
-                disableHolds: document.getElementById('edit-disable-holds').checked
-            };
-            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(lvlData, null, 2));
-            let dlAnchorElem = document.createElement('a');
-            dlAnchorElem.setAttribute("href", dataStr);
-            dlAnchorElem.setAttribute("download", name + ".json");
-            document.body.appendChild(dlAnchorElem);
-            dlAnchorElem.click();
-            document.body.removeChild(dlAnchorElem);
-        }
-
-        function fireAdvancedPulse(fx) {
-            const target = (fx.layer == 1) ? document.getElementById('fg-flash') : document.getElementById('bg-flash');
-            target.style.transition = `opacity ${fx.inTrans}s ease-out`; target.style.background = fx.color; target.style.opacity = 1;
-            setTimeout(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
-        }
-
-        function fireAdvancedImage(fx) {
-            const target = (fx.layer == 1) ? document.getElementById('fg-image-container') : document.getElementById('bg-image-container');
-            target.style.backgroundImage = `url(${fx.src})`; target.style.transition = `opacity ${fx.inTrans}s ease-out`; target.style.opacity = fx.alpha;
-            setTimeout(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
-        }
-
-        function fireExtraImage(fx) {
-            let img = document.createElement('img');
-            img.src = fx.src;
-            img.style.position = 'absolute';
-            img.style.left = fx.x + 'px';
-            img.style.top = fx.y + 'px';
-            img.style.width = fx.w + 'px';
-            img.style.height = fx.h + 'px';
-            img.style.opacity = fx.alpha;
-            img.style.transform = 'translate(-50%, -50%)'; 
-            
-            let container = fx.layer == 1 ? document.getElementById('extra-images-fg') : document.getElementById('extra-images-bg');
-            container.appendChild(img);
-            
-            setTimeout(() => { if (img.parentNode) img.parentNode.removeChild(img); }, fx.duration * 1000);
-        }
-
-        function fireTileStyle(fx) { currentTileStyle.c1 = fx.c1; currentTileStyle.c2 = fx.c2; currentTileStyle.alpha = fx.alpha; }
-        function fireSpeedChange(fx) { initialSpeed = speed; targetSpeed = fx.target; speedTransitionDuration = fx.transDuration; speedTransitionTime = 0; }
-        function fireSFX(fx) { let audio = new Audio(fx.src); audio.play(); }
-
-        function spawnTile() {
-            let currentSpawn = patterns[currentMode] ? patterns[currentMode][patternStep] : Math.floor(Math.random() * 4);
-            if (Array.isArray(currentSpawn)) { currentSpawn.forEach(lane => tiles.push(new Tile(lane))); } 
-            else { tiles.push(new Tile(currentSpawn)); }
-            if (patterns[currentMode]) { patternStep++; if (patternStep >= patterns[currentMode].length) patternStep = 0; }
-            nextSpawnDistance = TILE_H + GAP; distanceTraveled = 0;
-        }
-
-        class Tile { 
-            constructor(lane, overrideY = -TILE_H, isHold = false, holdDuration = 0) { 
-                this.lane = lane; 
-                this.y = overrideY; 
-                this.isHold = isHold;
-                this.holdDuration = holdDuration;
-                this.interacted = false; 
-                this.failed = false;
-            } 
-        }
-
-        class Particle {
-            constructor(x, y) { this.x = x; this.y = y; this.vx = (Math.random() - 0.5) * 15; this.vy = (Math.random() - 0.5) * 15; this.life = 1.0; }
-            update() { this.x += this.vx; this.y += this.vy; this.life -= 0.05; }
-        }
-
-        // --- EDITOR DELETE MODE LOGIC ---
-        function toggleDeleteMode() {
-            deleteMode = !deleteMode;
-            const btn = document.getElementById('btn-delete-mode');
-            if (deleteMode) {
-                btn.style.background = '#ff3333';
-                btn.style.borderColor = '#fff';
-            } else {
-                btn.style.background = '#333';
-                btn.style.borderColor = '#555';
-            }
-        }
-
-        
-        let editorTileMode = 'normal';
-        function setEditorTileMode(mode){
-            editorTileMode=mode;
-            document.getElementById('editor-tool-normal')?.classList.toggle('active', mode==='normal');
-            document.getElementById('editor-tool-hold')?.classList.toggle('active', mode==='hold');
-        }
-        // --- EDITOR SNAP GRID ---
-        let editorGridDivision = 2;
-        const EDITOR_GRID_BEAT_SECONDS = 0.5; // 120 BPM reference beat; only used for editor snapping.
-
-        function getEditorGridStep(){
-            return EDITOR_GRID_BEAT_SECONDS / editorGridDivision;
-        }
-
-        function snapEditorTime(time, force = false){
-            const raw = Math.max(0, Number(time) || 0);
-            if (force || !window.event?.shiftKey) {
-                const step = getEditorGridStep();
-                return Math.max(0, Math.round(raw / step) * step);
-            }
-            return raw;
-        }
-
-        function setEditorGrid(division){
-            editorGridDivision = [2,4,8,12].includes(Number(division)) ? Number(division) : 2;
-            document.querySelectorAll('.grid-btn').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.grid) === editorGridDivision));
-            const readout = document.getElementById('grid-readout');
-            if(readout) readout.textContent = getEditorGridStep().toFixed(3) + 's';
-            refreshEditorTimeline();
-        }
-
-        function getSnappedEditorTime(time, bypassSnap=false){
-            const raw=Math.max(0, Number(time)||0);
-            if(bypassSnap) return raw;
-            const step=getEditorGridStep();
-            return Math.max(0, Math.round(raw/step)*step);
-        }
-
-        function tileAlreadyAt(lane, time){
-            const epsilon = getEditorGridStep() * 0.25;
-            return recordedTiles.some(t => t.lane === lane && Math.abs(t.time - time) < epsilon);
-        }
-
-        function placeTileAtPlayhead(lane, bypassSnap=false){
-            const snapped = getSnappedEditorTime(editorTimer, bypassSnap);
-            editorTimer = snapped;
-            if (tileAlreadyAt(lane, snapped)) return;
-            const t={ lane, time:snapped, isHold:editorTileMode==='hold', holdDuration:editorTileMode==='hold'?Math.max(getEditorGridStep()*2, 1):0 };
-            recordedTiles.push(t);
-            recordedTiles.sort((a,b)=>a.time-b.time || a.lane-b.lane);
-            refreshEditorTimeline();
-            updateEditorView();
-        }
-
-        canvas.addEventListener("mousedown", (e) => {
-            if (inEditor) {
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const mouseX = (e.clientX - rect.left) * scaleX;
-                const mouseY = (e.clientY - rect.top) * scaleY;
-                
-                const clickedLane = Math.floor(mouseX / laneW);
-
-                if (!deleteMode && mouseY >= 0 && mouseY <= canvas.height) {
-                    placeTileAtPlayhead(Math.max(0, Math.min(3, clickedLane)), e.shiftKey);
-                    return;
-                }
-                
-                if (!deleteMode) return;
-                for(let i = recordedTiles.length - 1; i >= 0; i--) {
-                    let t = recordedTiles[i];
-                    if (t.lane === clickedLane) {
-                        let yOffset = (editorTimer - t.time) * (18 * 60); 
-                        let y = lineY + yOffset;
-                        let holdLen = t.isHold ? (t.holdDuration * 18 * 60) : 0;
-                        let h = TILE_H + holdLen;
-                        let drawY = y - holdLen; // the true top boundary of the combined tile
-                        
-                        if (mouseY >= drawY && mouseY <= drawY + h) {
-                            recordedTiles.splice(i, 1);
-                            editorVisualTiles = editorVisualTiles.filter(vt => vt.ref !== t);
-                            break; 
-                        }
-                    }
-                }
-            }
-        });
-
-        window.addEventListener("keydown", (e) => {
-            const k = e.key.toLowerCase();
-            if (keys[k] === false) { 
-                keys[k] = true; const laneIndex = keyMap.indexOf(k);
-                
-                if (inEditor && isRecording && laneIndex !== -1 && !deleteMode) {
-                    if (editorKeyTimes[laneIndex] === null) {
-                        const snappedTime = getSnappedEditorTime(editorTimer, e.shiftKey);
-                        editorKeyTimes[laneIndex] = snappedTime;
-                        if (!tileAlreadyAt(laneIndex, snappedTime)) {
-                            let newTile = { lane: laneIndex, time: snappedTime, isHold: false, holdDuration: 0 };
-                            recordedTiles.push(newTile);
-                            recordedTiles.sort((a,b)=>a.time-b.time || a.lane-b.lane);
-                            editorTimer = snappedTime;
-                        } 
-                        editorVisualTiles.push({ lane: laneIndex, y: lineY, alpha: 1.0, ref: newTile }); 
-                    }
-                    return;
-                }
-                
-                if (laneIndex !== -1 && gameActive && !isDead && !inEditor) {
-                    const activeTiles = tiles.filter(t => !t.interacted);
-                    if (activeTiles.length > 0) {
-                        const target = activeTiles.find(t => t.lane === laneIndex);
-                        
-                        let targetY = target ? target.y : 0;
-                        let firstTileY = activeTiles[0] ? activeTiles[0].y : 0;
-                        
-                        const cbfToggle = document.getElementById('setting-cbf');
-                        if (cbfToggle && cbfToggle.checked) {
-                            const timeSinceLastFrame = performance.now() - lastTime;
-                            const subFrameDt = timeSinceLastFrame / 16.666;
-                            
-                            if (target) targetY += speed * subFrameDt;
-                            if (activeTiles[0]) firstTileY += speed * subFrameDt;
-                        }
-
-                        if (target && (target === activeTiles[0] || targetY > firstTileY - TILE_H)) {
-                            target.interacted = true; score += 10;
-                            for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
-                        } else if (firstTileY + TILE_H > 0) { 
-                            if(!handleHit()) die("WRONG ORDER!"); 
-                        }
-                    }
-                }
-            }
-        });
-        
-        window.addEventListener("keyup", (e) => { 
-            const k = e.key.toLowerCase();
-            keys[k] = false; 
-            const laneIndex = keyMap.indexOf(k);
-            
-            if (inEditor && isRecording && laneIndex !== -1 && editorKeyTimes[laneIndex] !== null) {
-                let duration = Math.max(0, editorTimer - editorKeyTimes[laneIndex]);
-                if (duration >= 1.1) {
-                    for(let i = recordedTiles.length - 1; i >= 0; i--) {
-                        if(recordedTiles[i].lane === laneIndex) {
-                            recordedTiles[i].isHold = true;
-                            recordedTiles[i].holdDuration = duration;
-                            break;
-                        }
-                    }
-                }
-                editorKeyTimes[laneIndex] = null;
-            }
-        });
-
-        function gameLoop(timestamp) {
-            if (isDead || (!gameActive && !inEditor)) return;
-            
-            let fpsInterval = 1000 / (windowLevelFPS || 60);
-            let elapsed = timestamp - lastTime;
-            
-            if (elapsed < fpsInterval - 0.1) { requestAnimationFrame(gameLoop); return; }
-            
-            const dt = elapsed / 16.666; 
-            lastTime = timestamp;
-
-            if(gameActive) {
-                frameCount++;
-                if (timestamp - lastFpsTime >= 1000) {
-                    document.getElementById('fps-display').innerText = frameCount + ' FPS';
-                    frameCount = 0;
-                    lastFpsTime = timestamp;
-                }
-            }
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 1;
-            for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, canvas.height); ctx.stroke(); }
-            ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 4;
-            ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(canvas.width, lineY); ctx.stroke();
-            
-            if(!isCustomGame && !inEditor && gameActive) {
-                distanceTraveled += speed * dt;
-                if (distanceTraveled >= nextSpawnDistance) spawnTile();
-            }
-
-            if(inEditor) {
-                // Visual snap grid: horizontal lines show exact placement intervals.
-                ctx.save();
-                ctx.globalAlpha = 0.16;
-                ctx.strokeStyle = "#78bfff";
-                ctx.lineWidth = 1;
-                const gridStep = getEditorGridStep();
-                const pixelsPerSecond = 18 * 60;
-                const firstGridIndex = Math.floor((editorTimer - lineY / pixelsPerSecond) / gridStep) - 2;
-                const lastGridIndex = Math.ceil((editorTimer + (canvas.height-lineY) / pixelsPerSecond) / gridStep) + 2;
-                for(let gi=firstGridIndex; gi<=lastGridIndex; gi++){
-                    const gt = gi * gridStep;
-                    const gy = lineY + (editorTimer - gt) * pixelsPerSecond;
-                    if(gy < 0 || gy > canvas.height) continue;
-                    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(canvas.width, gy); ctx.stroke();
-                }
-                ctx.restore();
-
-                recordedTiles.forEach(t => {
-                    let yOffset = (editorTimer - t.time) * (18 * 60); 
-                    let y = lineY + yOffset;
-                    let holdLen = t.isHold ? (t.holdDuration * 18 * 60) : 0;
-                    let h = TILE_H + holdLen;
-                    let drawY = y - holdLen;
-
-                    if(drawY < canvas.height + TILE_H && drawY + h > -TILE_H) {
-                        ctx.globalAlpha = 0.6; 
-                        ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.5)" : "rgba(0, 255, 255, 0.5)"; 
-                        ctx.fillRect(t.lane * laneW + 4, drawY, laneW - 8, h); 
-                        ctx.globalAlpha = 1.0;
-                    }
-                });
-            }
-
-            const firstUnclicked = tiles.find(t => !t.interacted);
-            for (let i = tiles.length - 1; i >= 0; i--) {
-                let t = tiles[i]; t.y += speed * dt;
-                
-                let holdLength = t.isHold ? (t.holdDuration * speed * 60) : 0;
-                let h = TILE_H + holdLength;
-                
-                // For proper rendering & hit detection bounds
-                let headTop = t.y - TILE_H;
-                let tailTop = t.y - TILE_H - holdLength;
-                
-                if (tailTop > canvas.height) {
-                    if (!t.interacted) { 
-                        if(handleHit()) { tiles.splice(i, 1); continue; } 
-                        else { die("MISSED!"); return; }
-                    }
-                    tiles.splice(i, 1); continue;
-                }
-
-                if (t.isHold && t.interacted && !t.failed) {
-                    if (tailTop < lineY - holdLength) {
-                        if (keys[keyMap[t.lane]] === false) {
-                            t.failed = true;
-                            if(!handleHit()) { die("RELEASED EARLY!"); return; }
-                        } else {
-                            score += 0.5;
-                            if (Math.random() > 0.7) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY));
-                        }
-                    }
-                }
-
-                // 1. Draw Tail (if hold tile)
-                if (t.isHold) {
-                    // Tail Background
-                    ctx.fillStyle = t.interacted ? "rgba(100, 100, 100, 0.4)" : "rgba(0, 150, 255, 0.3)";
-                    ctx.fillRect(t.lane * laneW + 12, tailTop, laneW - 24, holdLength);
-                    
-                    // Tail Center Glowing Line
-                    ctx.fillStyle = t.interacted ? "rgba(200, 200, 200, 0.8)" : "rgba(0, 255, 255, 0.8)";
-                    ctx.fillRect(t.lane * laneW + (laneW/2) - 2, tailTop, 4, holdLength);
-                    
-                    // Tail Start Cap
-                    ctx.fillRect(t.lane * laneW + 16, tailTop, laneW - 32, 8);
-                }
-
-                // 2. Draw Head (Main Block)
-                ctx.globalAlpha = t.interacted ? 0.2 : currentTileStyle.alpha;
-                if (t === firstUnclicked) { ctx.shadowBlur = 15; ctx.shadowColor = "#00ffff"; }
-                ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-                ctx.fillRect(t.lane * laneW + 4, headTop, laneW - 8, TILE_H);
-                
-                let grad = ctx.createLinearGradient(0, headTop, 0, headTop + TILE_H);
-                grad.addColorStop(0, t.interacted ? "#444" : currentTileStyle.c1);
-                grad.addColorStop(1, t.interacted ? "#222" : currentTileStyle.c2);
-                ctx.fillStyle = grad;
-                
-                ctx.fillRect(t.lane * laneW + 8, headTop + 4, laneW - 16, TILE_H - 8);
-                ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
-            }
-
-            if(inEditor) {
-                for (let i = editorVisualTiles.length - 1; i >= 0; i--) {
-                    let vt = editorVisualTiles[i]; vt.alpha -= 0.05 * dt; vt.y -= 2 * dt;
-                    if(vt.alpha <= 0) { editorVisualTiles.splice(i, 1); continue; }
-                    ctx.globalAlpha = vt.alpha; ctx.fillStyle = "#ff00ff"; ctx.fillRect(vt.lane * laneW + 4, vt.y, laneW - 8, 40); ctx.globalAlpha = 1.0;
-                }
-            }
-
-            for (let i = particles.length - 1; i >= 0; i--) {
-                let p = particles[i]; p.update();
-                if (p.life <= 0) particles.splice(i, 1);
-                else { ctx.fillStyle = `rgba(0,255,255,${p.life})`; ctx.fillRect(p.x, p.y, 6, 6); }
-            }
-            
-            if(!inEditor && gameActive) scoreEl.innerText = Math.floor(score);
-            requestAnimationFrame(gameLoop);
-        }
-
-        function die(reason) { 
-            isDead = true; gameActive = false; bgAudio.pause(); 
-            document.getElementById("death-title").innerText = reason; 
-            document.getElementById("final-score").innerText = "Score: " + Math.floor(score); 
-            document.getElementById("death-screen").classList.remove("hidden"); 
-            document.getElementById("lives-display").classList.add("hidden"); 
-            document.getElementById('game-hud').classList.add('hidden');
-            
-            if (isPlaytesting || isVerifying) {
-                document.getElementById('death-quit-btn').classList.add('hidden');
-                document.getElementById('death-stop-playtest-btn').classList.remove('hidden');
-            } else {
-                document.getElementById('death-quit-btn').classList.remove('hidden');
-                document.getElementById('death-stop-playtest-btn').classList.add('hidden');
-            }
-        }
-        
-        function stopPlaytestFromDeath() {
-            document.getElementById('death-screen').classList.add('hidden');
-            stopPlaytest();
-        }
-
-        function quitPlaytestOrGame() { 
-            gameActive = false; isPlaytesting = false; isVerifying = false; inEditor = false; isDead = false; 
-            if(customGameInterval) clearInterval(customGameInterval); 
-            if(editorInterval) clearInterval(editorInterval); 
-            bgAudio.pause(); bgAudio.currentTime = 0; 
-            resetState(); 
-            tempLoadedLevel = null; // Clear loaded level
-            ctx.clearRect(0, 0, canvas.width, canvas.height); 
-            document.getElementById('game-hud').classList.add('hidden');
-            document.getElementById('editor-ui').classList.add('hidden'); 
-            document.getElementById('death-screen').classList.add('hidden'); 
-            document.getElementById('lives-display').classList.add('hidden'); 
-            document.getElementById('stop-playtest-btn').classList.add('hidden'); 
-            toggleMenu('main-menu'); 
-        }
-
-        function restartGame() { 
-            if(isPlaytesting) { 
-                startPlaytest(); 
-            } else if(tempLoadedLevel) {
-                startGame(tempLoadedLevel.name || 'Custom Loaded Level', true, -1, tempLoadedLevel.data, tempLoadedLevel.effects, false, tempLoadedLevel);
-            } else if(isCustomGame) { 
-                let idx = communityLevels.findIndex(l => l.name === currentMode); 
-                if(idx !== -1) startGame(currentMode, true, idx, null, null, true); 
-                else { 
-                    idx = customLevels.findIndex(l => l.name === currentMode); 
-                    startGame(currentMode, true, idx); 
-                } 
-            } else { 
-                startGame(currentMode); 
-            } 
-        }
-
-        function startEditor() { 
-            overlays.forEach(id => document.getElementById(id).classList.add('hidden')); 
-            document.getElementById('editor-ui').classList.remove('hidden'); 
-            inEditor = true; recordedTiles = []; recordedEffects = []; editorTimer = 0; currentEditingName = ""; 
-            deleteMode = false; document.getElementById('btn-delete-mode').style.background = '#333';
-            document.getElementById('editor-timer-panel').innerText = "0.00s"; 
-            document.getElementById('timeline-slider').value = 0;
-            selectedEffectIndex = -1; refreshEditorTimeline(); refreshSelectedEffectEditor(); 
-            document.getElementById('edit-fps').value = 60; windowLevelFPS = 60; 
-            document.getElementById('edit-audio-offset').value = 0;
-            document.getElementById('edit-disable-holds').checked = false;
-            setEditorGrid(editorGridDivision);
-            lastTime = performance.now(); requestAnimationFrame(gameLoop); 
-        }
-        
-        function editLevel(sourceArray, index) { 
-            let lvl = sourceArray[index]; 
-            recordedTiles = JSON.parse(JSON.stringify(lvl.data)); 
-            recordedEffects = lvl.effects ? JSON.parse(JSON.stringify(lvl.effects)) : []; 
-            currentEditingName = lvl.name; 
-            deleteMode = false; document.getElementById('btn-delete-mode').style.background = '#333';
-            document.getElementById('edit-lives').value = lvl.lives || 3; 
-            document.getElementById('edit-fps').value = lvl.fps || 60; windowLevelFPS = lvl.fps || 60; 
-            document.getElementById('edit-audio-offset').value = lvl.audioOffset || 0;
-            document.getElementById('edit-disable-holds').checked = lvl.disableHolds || false;
-            toggleMenu(null); document.getElementById('editor-ui').classList.remove('hidden'); 
-            inEditor = true; editorTimer = 0; 
-            document.getElementById('editor-timer-panel').innerText = "0.00s"; 
-            document.getElementById('timeline-slider').value = 0;
-            selectedEffectIndex = -1; refreshEditorTimeline(); refreshSelectedEffectEditor(); 
-            lastTime = performance.now(); requestAnimationFrame(gameLoop); 
-        }
-
-        function toggleRecording() {
-            const btn=document.getElementById('btn-create-tiles');
-            if(!isRecording){
-                isRecording=true; btn.innerHTML="⏹<br>Stop Tiles"; btn.classList.add('active');
-                if(bgAudio.src){ bgAudio.currentTime=editorTimer; bgAudio.play().catch(()=>{}); }
-                editorTimerTicker();
-            } else {
-                isRecording=false; btn.innerHTML="▶<br>Create Tiles"; btn.classList.remove('active');
-                bgAudio.pause(); clearInterval(editorInterval); editorInterval=null;
-            }
-        }
-        function toggleSongTester() {
-            const btn=document.getElementById('btn-song-test');
-            if(!isSongTesting){
-                isSongTesting=true; btn.innerHTML="⏹<br>Stop Test"; btn.classList.add('active');
-                if(bgAudio.src){ bgAudio.currentTime=editorTimer; bgAudio.play().catch(()=>{}); }
-                editorTimerTicker();
-            } else {
-                isSongTesting=false; btn.innerHTML="🎧<br>Song Tester"; btn.classList.remove('active');
-                bgAudio.pause(); clearInterval(editorInterval); editorInterval=null;
-            }
-        }
-        function editorTimerTicker(){
-            clearInterval(editorInterval);
-            editorInterval=setInterval(()=>{
-                if(bgAudio.src) editorTimer=bgAudio.currentTime; else editorTimer+=0.016;
-                const max=Number(document.getElementById('timeline-slider')?.max||60);
-                if(editorTimer>=max){ editorTimer=max; bgAudio.pause(); isRecording=false; isSongTesting=false; }
-                document.getElementById('timeline-slider').value=editorTimer;
-                document.getElementById('editor-timer-panel').innerText=editorTimer.toFixed(2)+'s';
-                updateEditorView();
-            }, 33);
-        }
-
-
-        function openCreatorMenu() { document.getElementById('creator-menu').classList.remove('hidden'); }
-        function closeCreatorMenu() { document.getElementById('creator-menu').classList.add('hidden'); }
-        function openEffectsMenu() { document.getElementById('effects-menu').classList.remove('hidden'); document.getElementById('effect-time-display').innerText = editorTimer.toFixed(2) + 's'; }
-        function closeEffectsMenu() { document.getElementById('effects-menu').classList.add('hidden'); }
-        function openEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.remove('hidden'); }
-        function closeEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.add('hidden'); windowLevelFPS = parseInt(document.getElementById('edit-fps').value) || 60; }
-
-        function saveCustomLevel(isPublishing = false) { 
-            let name = prompt("Enter level name:", currentEditingName || ""); 
-            if(name) { 
-                let lvl = { 
-                    name: name, data: [...recordedTiles], effects: [...recordedEffects], 
-                    lives: parseInt(document.getElementById('edit-lives').value) || 3,
-                    fps: parseInt(document.getElementById('edit-fps').value) || 60,
-                    audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
-                    disableHolds: document.getElementById('edit-disable-holds').checked
-                }; 
-                let existing = users[currentUser].customLevels.findIndex(l => l.name === name); 
-                if(existing !== -1) users[currentUser].customLevels[existing] = lvl; 
-                else users[currentUser].customLevels.push(lvl); 
-                
-                customLevels = users[currentUser].customLevels; 
-                localStorage.setItem('extremeTilesUsers', JSON.stringify(users)); 
-                
-                if (!isPublishing) { alert("Saved to My Levels!"); exitEditorWithoutSaving(); } 
-                return name; 
-            } 
-            return null; 
-        }
-
-        function publishLevel() { 
-            let savedName = saveCustomLevel(true); 
-            if(savedName) { 
-                let localLvl = users[currentUser].customLevels.find(l => l.name === savedName); 
-                let commLvl = { 
-                    name: savedName, author: currentUser, data: localLvl.data ? [...localLvl.data] : [], effects: localLvl.effects ? [...localLvl.effects] : [], 
-                    lives: localLvl.lives || 3, fps: localLvl.fps || 60, audioOffset: localLvl.audioOffset || 0, disableHolds: localLvl.disableHolds || false,
-                    timestamp: Date.now(), ratings: [], listRank: 0 
-                }; 
-                
-                let existing = communityLevels.findIndex(l => l.name === savedName); 
-                if(existing !== -1) { commLvl.ratings = communityLevels[existing].ratings || []; commLvl.listRank = communityLevels[existing].listRank || 0; commLvl.timestamp = communityLevels[existing].timestamp || Date.now(); communityLevels[existing] = commLvl; } 
-                else communityLevels.push(commLvl); 
-                
-                localStorage.setItem('communityLevels', JSON.stringify(communityLevels)); 
-                alert("Published! Your level is saved to 'My Levels' and now active in Browse Levels."); 
-                exitEditorWithoutSaving(); 
-            } 
-        }
-        
-        function exitEditorWithoutSaving() { inEditor = false; isRecording = false; isSongTesting = false; currentEditingName = ""; deleteMode = false; document.getElementById('btn-delete-mode').style.background = '#333'; clearInterval(editorInterval); bgAudio.pause(); document.getElementById('editor-ui').classList.add('hidden'); toggleMenu('main-menu'); }
-
-        function openMyLevels() { const container = document.getElementById('custom-levels-container'); container.innerHTML = ""; if(customLevels.length === 0) { container.innerHTML = "<p style='text-align:center; grid-column: span 2;'>No custom levels yet.</p>"; } else { customLevels.forEach((level, index) => { container.innerHTML += ` <div class="song-card"> <div class="song-main"> <div class="song-thumb">🌟</div> <div class="song-info"> <span class="song-title">${level.name}</span> <span class="song-author">By: You</span> </div> <button class="play-btn" onclick="startGame('${level.name}', true, ${index})">PLAY (Lives: ${level.lives})</button> <button class="play-btn edit-btn" onclick="editLevel(customLevels, ${index})">EDIT</button> </div> </div>`; }); } toggleMenu('my-levels-menu'); }
-        
-        function openBrowseLevels(filter = 'recent') { const container = document.getElementById('community-levels-container'); container.innerHTML = ""; document.querySelectorAll('#browse-levels-menu .small-tab').forEach(t => t.style.background = '#333'); if(document.getElementById('tab-' + filter)) { document.getElementById('tab-' + filter).style.background = 'var(--play-blue)'; } let displayList = [...communityLevels]; if (filter === 'recent') { displayList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)); } else if (filter === 'rated') { displayList = displayList.filter(l => l.ratings && l.ratings.length > 0); displayList.sort((a, b) => getAvgRating(b) - getAvgRating(a)); } else if (filter === 'list') { displayList = displayList.filter(l => l.listRank > 0); displayList.sort((a, b) => a.listRank - b.listRank); } if(displayList.length === 0) { container.innerHTML = "<p style='text-align:center; grid-column: span 2;'>No levels found in this category.</p>"; } else { displayList.forEach((level) => { let canEdit = (level.author === currentUser); let avgRating = getAvgRating(level); let originalIndex = communityLevels.findIndex(l => l.name === level.name); container.innerHTML += ` <div class="song-card"> <div class="song-main"> <div class="song-thumb">🌐</div> <div class="song-info"> <span class="song-title">${level.name}</span> <span class="song-author">By: ${level.author || "Unknown"}</span> <div> <span style="font-size: 10px; color: gold; font-weight: bold;">⭐ ${avgRating > 0 ? avgRating : 'Unrated'}</span> ${level.listRank > 0 ? `<span style="font-size: 10px; color: #ff00ff; font-weight: bold; margin-left: 5px;">🏆 Top ${level.listRank}</span>` : ''} </div> </div> <button class="play-btn" onclick="startGame('${level.name}', true, ${originalIndex}, null, null, true)">PLAY</button> ${canEdit ? `<button class="play-btn edit-btn" onclick="editLevel(communityLevels, ${originalIndex})">EDIT</button>` : ''} </div> </div>`; }); } toggleMenu('browse-levels-menu'); }
-
-        
-        // --- EDITOR TIMELINE / EFFECT WORKFLOW ---
-        let selectedEffectIndex = -1;
-        let editorPlaying = false;
-        let editorLastTick = 0;
-
-        function refreshEditorTimeline() {
-            const slider = document.getElementById('timeline-slider');
-            if (!slider) return;
-            const maxTime = Math.max(10, ...recordedTiles.map(t => t.time + (t.holdDuration || 0)), ...recordedEffects.map(e => e.time + (e.duration || e.transDuration || 0)), 10);
-            slider.max = Math.ceil(maxTime + 2);
-            slider.value = Math.min(editorTimer, Number(slider.max));
-            document.getElementById('editor-timeline-time').textContent = editorTimer.toFixed(2) + 's';
-            document.getElementById('effect-time-display').textContent = editorTimer.toFixed(2) + 's';
-            const track = document.getElementById('editor-marker-track');
-            const layer = document.getElementById('editor-marker-layer');
-            const playhead = document.getElementById('editor-playhead');
-            if (!track || !layer) return;
-            layer.innerHTML = '';
-            const max = Number(slider.max) || 1;
-            recordedTiles.forEach((t, i) => {
-                const el = document.createElement('button');
-                el.className = 'timeline-marker tile-marker';
-                el.style.left = (t.time / max * 100) + '%';
-                el.title = `Tile ${['R','T','Y','U'][t.lane]} • ${t.time.toFixed(2)}s`;
-                el.onclick = () => scrubTimeline(t.time);
-                layer.appendChild(el);
-            });
-            recordedEffects.forEach((e, i) => {
-                const el = document.createElement('button');
-                el.className = 'timeline-marker effect-marker ' + (i === selectedEffectIndex ? 'selected' : '');
-                el.style.left = (e.time / max * 100) + '%';
-                el.dataset.effectIndex = i;
-                el.title = `${e.type} • ${e.time.toFixed(2)}s`;
-                el.onclick = () => selectEffect(i);
-                layer.appendChild(el);
-            });
-            playhead.style.left = (editorTimer / max * 100) + '%';
-        }
-
-        function getEffectDuration(fx){ if(!fx)return .08; if(fx.type==='speed')return Math.max(.05,Number(fx.transDuration??fx.duration??.25)); if(fx.type==='sfx'||fx.type==='tile_style')return Math.max(.08,Number(fx.duration??.08)); return Math.max(.05,Number(fx.duration??.5)); }
-        function setEffectDuration(fx,value){const d=Math.max(.05,Number(value)||.05);fx.duration=d;if(fx.type==='speed')fx.transDuration=d;}
-        function effectLabel(fx){return ({pulse:'Pulse',tile_style:'Tile Style',speed:'Speed',image:'Background Image',extra_image:'Extra Image',sfx:'SFX'})[fx?.type]||'Effect';}
-        function effectColor(fx){return ({pulse:'#61d8ff',tile_style:'#a78bfa',speed:'#ff9d5c',image:'#5eead4',extra_image:'#8bff8b',sfx:'#f472b6'})[fx?.type]||'#72dcff';}
-        function openEffectsMenu(){document.getElementById('effects-menu').classList.remove('hidden');renderEffectEditor();}
-        function closeEffectsMenu(){document.getElementById('effects-menu').classList.add('hidden');}
-        function refreshSelectedEffectEditor(){renderEffectEditor();}
-        function selectEffect(index,syncPlayhead=true){if(index<0||!recordedEffects[index]){selectedEffectIndex=-1;renderEffectEditor();return;}selectedEffectIndex=index;if(syncPlayhead){editorTimer=Math.max(0,Number(recordedEffects[index].time)||0);updateEditorView();}renderEffectEditor();}
-        function deleteSelectedEffect(){if(selectedEffectIndex<0||!recordedEffects[selectedEffectIndex])return;recordedEffects.splice(selectedEffectIndex,1);selectedEffectIndex=-1;refreshEditorTimeline();renderEffectEditor();}
-        function setSelectedEffectToPlayhead(){if(selectedEffectIndex<0||!recordedEffects[selectedEffectIndex])return;const fx=recordedEffects[selectedEffectIndex];fx.time=Math.max(0,editorTimer);recordedEffects.sort((a,b)=>a.time-b.time);selectedEffectIndex=recordedEffects.indexOf(fx);refreshEditorTimeline();renderEffectEditor();}
-        function nudgeSelectedEffect(delta){if(selectedEffectIndex<0||!recordedEffects[selectedEffectIndex])return;const fx=recordedEffects[selectedEffectIndex];fx.time=Math.max(0,fx.time+delta);editorTimer=fx.time;recordedEffects.sort((a,b)=>a.time-b.time);selectedEffectIndex=recordedEffects.indexOf(fx);refreshEditorTimeline();renderEffectEditor();updateEditorView();}
-        function updateEffectProperty(name,value){if(selectedEffectIndex<0||!recordedEffects[selectedEffectIndex])return;const fx=recordedEffects[selectedEffectIndex];if(name==='time')fx.time=Math.max(0,Number(value)||0);else if(name==='duration')setEffectDuration(fx,value);else if(name==='color')fx.color=value;else if(name==='layer')fx.layer=Number(value);else if(name==='alpha')fx.alpha=Math.max(0,Math.min(1,Number(value)||0));else if(name==='inTrans')fx.inTrans=Math.max(0,Number(value)||0);else if(name==='outTrans')fx.outTrans=Math.max(0,Number(value)||0);else if(name==='target')fx.target=Math.max(5,Math.min(50,Number(value)||5));else if(name==='w')fx.w=Math.max(10,Number(value)||10);else if(name==='h')fx.h=Math.max(10,Number(value)||10);else if(name==='x')fx.x=Number(value)||0;else if(name==='y')fx.y=Number(value)||0;else if(name==='c1')fx.c1=value;else if(name==='c2')fx.c2=value;recordedEffects.sort((a,b)=>a.time-b.time);selectedEffectIndex=recordedEffects.indexOf(fx);editorTimer=fx.time;renderEffectEditor();refreshEditorTimeline();updateEditorView();}
-        function field(label,id,type,value,step='0.01',extra=''){return `<label class="inspector-field">${label}<input id="${id}" type="${type}" value="${value}" step="${step}" ${extra} oninput="updateEffectProperty('${id.replace('effect-inspector-','')}', this.value)"></label>`;}
-        function renderEffectInspector(){const root=document.getElementById('effect-inspector-content'),sub=document.getElementById('effect-inspector-subtitle');if(!root||!sub)return;const fx=recordedEffects[selectedEffectIndex];if(!fx){sub.textContent='Select an effect';root.innerHTML=`<div class="effect-inspector-empty"><div class="inspector-empty-icon">✦</div><b>Select an effect</b><span>Pick a block from the timeline to edit its timing, duration and properties.</span></div>`;return;}sub.textContent=effectLabel(fx);const d=getEffectDuration(fx);let h=`<div class="inspector-effect-banner" style="--effect-accent:${effectColor(fx)}"><div class="inspector-effect-icon">${fx.type==='speed'?'↯':fx.type==='sfx'?'♫':fx.type==='image'||fx.type==='extra_image'?'▧':'✦'}</div><div><b>${effectLabel(fx)}</b><span>${fx.time.toFixed(2)}s → ${(fx.time+d).toFixed(2)}s</span></div></div><div class="inspector-section"><div class="inspector-section-title">TIMING</div><div class="inspector-grid">${field('Start time','effect-inspector-time','number',Number(fx.time).toFixed(2),'0.01','min="0"')}${fx.type!=='sfx'?field('Duration','effect-inspector-duration','number',Number(d).toFixed(2),'0.01','min="0.05"'):''}</div></div>`;
-        if(fx.type==='pulse')h+=`<div class="inspector-section"><div class="inspector-section-title">PULSE</div><div class="inspector-grid">${field('Color','effect-inspector-color','color',fx.color||'#61d8ff')}<label class="inspector-field">Layer<select id="effect-inspector-layer" onchange="updateEffectProperty('layer',this.value)"><option value="0" ${Number(fx.layer)===0?'selected':''}>Back</option><option value="1" ${Number(fx.layer)===1?'selected':''}>Front</option></select></label>${field('Fade in','effect-inspector-inTrans','number',Number(fx.inTrans||0).toFixed(2),'0.01','min="0"')}${field('Fade out','effect-inspector-outTrans','number',Number(fx.outTrans||0).toFixed(2),'0.01','min="0"')}</div></div>`;
-        else if(fx.type==='speed')h+=`<div class="inspector-section"><div class="inspector-section-title">SPEED</div><div class="inspector-grid">${field('Target speed','effect-inspector-target','number',Number(fx.target||25).toFixed(1),'0.1','min="5" max="50"')}</div><div class="inspector-note">The block length is the transition duration. Drag its right edge to make the transition longer or shorter.</div></div>`;
-        else if(fx.type==='image')h+=`<div class="inspector-section"><div class="inspector-section-title">IMAGE</div><div class="inspector-grid">${field('Opacity','effect-inspector-alpha','number',Number(fx.alpha??.5).toFixed(2),'0.05','min="0" max="1"')}<label class="inspector-field">Layer<select id="effect-inspector-layer" onchange="updateEffectProperty('layer',this.value)"><option value="0" ${Number(fx.layer)===0?'selected':''}>Back</option><option value="1" ${Number(fx.layer)===1?'selected':''}>Front</option></select></label>${field('Fade in','effect-inspector-inTrans','number',Number(fx.inTrans||0).toFixed(2),'0.01','min="0"')}${field('Fade out','effect-inspector-outTrans','number',Number(fx.outTrans||0).toFixed(2),'0.01','min="0"')}</div></div>`;
-        else if(fx.type==='extra_image')h+=`<div class="inspector-section"><div class="inspector-section-title">POSITION & SIZE</div><div class="inspector-grid">${field('X','effect-inspector-x','number',Number(fx.x||0),'1')}${field('Y','effect-inspector-y','number',Number(fx.y||0),'1')}${field('Width','effect-inspector-w','number',Number(fx.w||150),'1','min="10"')}${field('Height','effect-inspector-h','number',Number(fx.h||150),'1','min="10"')}${field('Opacity','effect-inspector-alpha','number',Number(fx.alpha??1).toFixed(2),'0.05','min="0" max="1"')}<label class="inspector-field">Layer<select id="effect-inspector-layer" onchange="updateEffectProperty('layer',this.value)"><option value="0" ${Number(fx.layer)===0?'selected':''}>Back</option><option value="1" ${Number(fx.layer)===1?'selected':''}>Front</option></select></label></div></div>`;
-        else if(fx.type==='tile_style')h+=`<div class="inspector-section"><div class="inspector-section-title">TILE STYLE</div><div class="inspector-grid">${field('Color 1','effect-inspector-c1','color',fx.c1||'#000000')}${field('Color 2','effect-inspector-c2','color',fx.c2||'#111111')}${field('Opacity','effect-inspector-alpha','number',Number(fx.alpha??1).toFixed(2),'0.05','min="0" max="1"')}</div><div class="inspector-note">Tile Style is a state change. Later tile-style effects replace the active style.</div></div>`;
-        else if(fx.type==='sfx')h+=`<div class="inspector-section"><div class="inspector-section-title">AUDIO</div><div class="inspector-note">SFX triggers at its start time, so dragging changes exactly when it plays.</div></div>`;
-        h+=`<div class="inspector-actions"><button class="primary-effect-btn" onclick="setSelectedEffectToPlayhead()">ALIGN TO PLAYHEAD</button><button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button></div>`;root.innerHTML=h;}
-        function renderEffectEditor(){const ruler=document.getElementById('effect-time-ruler'),tracks=document.getElementById('effect-tracks'),ph=document.getElementById('effect-timeline-playhead'),summary=document.getElementById('effect-selection-summary');if(!ruler||!tracks||!ph)return;const max=Math.max(1,Number(document.getElementById('timeline-slider')?.max||60));ruler.innerHTML='';const tickCount=Math.min(30,Math.max(10,Math.ceil(max/2)));for(let i=0;i<=tickCount;i++){const t=max*i/tickCount,el=document.createElement('div');el.className='effect-ruler-tick';el.style.left=`${i/tickCount*100}%`;el.innerHTML=`<span>${t.toFixed(1)}s</span>`;ruler.appendChild(el);}tracks.innerHTML='<div class="effect-track-row"><div class="effect-track-label">EVENTS</div><div class="effect-track-content"></div></div>';const content=tracks.querySelector('.effect-track-content');recordedEffects.forEach((fx,index)=>{const d=Math.min(getEffectDuration(fx),Math.max(.05,max-fx.time));const b=document.createElement('div');b.className=`effect-block ${index===selectedEffectIndex?'selected':''}`;b.dataset.index=index;b.style.left=`${Math.max(0,Math.min(100,fx.time/max*100))}%`;b.style.width=`${Math.max(.5,Math.min(100-fx.time/max*100,d/max*100))}%`;b.style.setProperty('--effect-accent',effectColor(fx));b.innerHTML=`<span class="effect-resize-handle left"></span><span class="effect-block-content"><b>${effectLabel(fx)}</b><small>${fx.time.toFixed(2)}s</small></span><span class="effect-resize-handle right"></span>`;b.addEventListener('pointerdown',ev=>beginEffectDrag(ev,index));b.addEventListener('click',ev=>{if(!effectDragState.moved)selectEffect(index,false);effectDragState.moved=false;});content.appendChild(b);});ph.style.left=`${Math.max(0,Math.min(100,editorTimer/max*100))}%`;const fx=recordedEffects[selectedEffectIndex];if(summary)summary.textContent=fx?`${effectLabel(fx)} · ${fx.time.toFixed(2)}s · ${getEffectDuration(fx).toFixed(2)}s`:'Nothing selected';renderEffectInspector();const et=document.getElementById('effect-time-display');if(et)et.textContent=editorTimer.toFixed(2)+'s';}
-        const effectDragState={index:-1,mode:null,startX:0,startTime:0,startDuration:0,moved:false};
-        document.getElementById('effect-timeline-wrap')?.addEventListener('pointerdown',e=>{if(e.target.closest('.effect-block'))return;const wrap=document.getElementById('effect-timeline-wrap'),rect=wrap.getBoundingClientRect(),max=Math.max(1,Number(document.getElementById('timeline-slider')?.max||60));editorTimer=e.shiftKey?Math.max(0,Math.min(max,((e.clientX-rect.left)/rect.width)*max)):getSnappedEditorTime(Math.max(0,Math.min(max,((e.clientX-rect.left)/rect.width)*max)),false);updateEditorView();renderEffectEditor();});
-        function beginEffectDrag(event,index){if(event.button!==undefined&&event.button!==0)return;event.preventDefault();const isLeft=event.target.classList.contains('left'),isRight=event.target.classList.contains('right');effectDragState.index=index;effectDragState.mode=isLeft?'resize-left':isRight?'resize-right':'move';effectDragState.startX=event.clientX;effectDragState.startTime=recordedEffects[index].time;effectDragState.startDuration=getEffectDuration(recordedEffects[index]);effectDragState.moved=false;selectedEffectIndex=index;document.body.classList.add('dragging-effect');document.addEventListener('pointermove',updateEffectDrag);document.addEventListener('pointerup',endEffectDrag,{once:true});}
-        function updateEffectDrag(event){if(effectDragState.index<0)return;const wrap=document.getElementById('effect-timeline-wrap');const rect=wrap.getBoundingClientRect(),fx=recordedEffects[effectDragState.index];if(!wrap||!fx)return;const max=Math.max(1,Number(document.getElementById('timeline-slider')?.max||60));const raw=((event.clientX-effectDragState.startX)/rect.width)*max;const delta=event.shiftKey?raw:getSnappedEditorTime(Math.abs(raw),false)*Math.sign(raw);if(Math.abs(raw)>1)effectDragState.moved=true;if(effectDragState.mode==='move')fx.time=Math.max(0,Math.min(max-.01,effectDragState.startTime+delta));else if(effectDragState.mode==='resize-right'&&fx.type!=='sfx')setEffectDuration(fx,Math.max(.05,Math.min(max-fx.time,effectDragState.startDuration+delta)));else if(effectDragState.mode==='resize-left'&&fx.type!=='sfx'){const end=effectDragState.startTime+effectDragState.startDuration;const newStart=Math.max(0,Math.min(end-.05,effectDragState.startTime+delta));fx.time=event.shiftKey?newStart:getSnappedEditorTime(newStart,false);setEffectDuration(fx,end-fx.time);}recordedEffects.sort((a,b)=>a.time-b.time);effectDragState.index=recordedEffects.indexOf(fx);selectedEffectIndex=effectDragState.index;editorTimer=fx.time;renderEffectEditor();refreshEditorTimeline();updateEditorView();}
-        function endEffectDrag(){document.body.classList.remove('dragging-effect');document.removeEventListener('pointermove',updateEffectDrag);effectDragState.index=-1;effectDragState.mode=null;}
-        function afterEffectAdded(index){recordedEffects.sort((a,b)=>a.time-b.time);selectedEffectIndex=recordedEffects.indexOf(recordedEffects[index]||recordedEffects[recordedEffects.length-1]);refreshEditorTimeline();renderEffectEditor();}
-        function addPulseEffect() {
-            const fx={type:'pulse',time:Math.max(0,editorTimer),color:'#6ee7ff',layer:0,duration:0.5,inTrans:0.08,outTrans:0.25};
-            recordedEffects.push(fx); recordedEffects.sort((a,b)=>a.time-b.time); afterEffectAdded(recordedEffects.indexOf(fx));
-        }
-        function addTileStyleEffect() {
-            const fx={type:'tile_style',time:Math.max(0,editorTimer),c1:'#000000',c2:'#111111',alpha:1,duration:0.25};
-            recordedEffects.push(fx); recordedEffects.sort((a,b)=>a.time-b.time); afterEffectAdded(recordedEffects.indexOf(fx));
-        }
-        function addSpeedEffect() {
-            const target=Math.max(5,Math.min(50,parseFloat(document.getElementById('fx-speed-target').value)||25));
-            const trans=Math.max(0,parseFloat(document.getElementById('fx-speed-trans').value)||0);
-            const fx={type:'speed',time:Math.max(0,editorTimer),target,transDuration:trans,duration:trans,startSpeed:speed};
-            recordedEffects.push(fx); recordedEffects.sort((a,b)=>a.time-b.time); afterEffectAdded(recordedEffects.indexOf(fx));
-        }
-        function addImageEffect() {
-            if(!loadedImageDataUrl){alert('Choose an image first.');return;}
-            const fx={type:'image',time:Math.max(0,editorTimer),src:loadedImageDataUrl,layer:0,
-                alpha:Math.max(0,Math.min(1,parseFloat(document.getElementById('fx-img-alpha').value)||0.5)),
-                duration:Math.max(0.1,parseFloat(document.getElementById('fx-img-dur').value)||2),
-                inTrans:Math.max(0,parseFloat(document.getElementById('fx-img-in').value)||0.3),
-                outTrans:Math.max(0,parseFloat(document.getElementById('fx-img-out').value)||0.3)};
-            recordedEffects.push(fx);recordedEffects.sort((a,b)=>a.time-b.time);afterEffectAdded(recordedEffects.indexOf(fx));
-        }
-        function addExtraImageEffect() {
-            if(!loadedExtraImageDataUrl){alert('Choose an image first.');return;}
-            const count=recordedEffects.filter(e=>e.type==='extra_image').length;
-            if(count>=30){alert('Maximum 30 extra images per level.');return;}
-            const fx={type:'extra_image',time:Math.max(0,editorTimer),src:loadedExtraImageDataUrl,layer:0,
-                alpha:Math.max(0,Math.min(1,parseFloat(document.getElementById('fx-extra-alpha').value)||1)),
-                w:Math.max(10,parseInt(document.getElementById('fx-extra-w').value)||150),
-                h:Math.max(10,parseInt(document.getElementById('fx-extra-h').value)||150),
-                x:parseInt(document.getElementById('fx-extra-x').value)||180,y:parseInt(document.getElementById('fx-extra-y').value)||320,
-                duration:Math.max(0.1,parseFloat(document.getElementById('fx-extra-dur').value)||2)};
-            recordedEffects.push(fx);recordedEffects.sort((a,b)=>a.time-b.time);afterEffectAdded(recordedEffects.indexOf(fx));
-        }
-        function addSfxEffect() {
-            if(!loadedSfxDataUrl){alert('Choose a sound first.');return;}
-            const fx={type:'sfx',time:Math.max(0,editorTimer),src:loadedSfxDataUrl};
-            recordedEffects.push(fx);recordedEffects.sort((a,b)=>a.time-b.time);loadedSfxDataUrl=null;
-            document.getElementById('fx-sfx-upload').value='';afterEffectAdded(recordedEffects.indexOf(fx));
-        }
-        function previewExtraImage(){
-            if(!loadedExtraImageDataUrl){alert('Choose an image first.');return;}
-            fireExtraImage({src:loadedExtraImageDataUrl,layer:0,alpha:parseFloat(document.getElementById('fx-extra-alpha').value)||1,
-                w:parseInt(document.getElementById('fx-extra-w').value)||150,h:parseInt(document.getElementById('fx-extra-h').value)||150,
-                x:parseInt(document.getElementById('fx-extra-x').value)||180,y:parseInt(document.getElementById('fx-extra-y').value)||320,
-                duration:parseFloat(document.getElementById('fx-extra-dur').value)||2});
-        }
-</script>
+  </div>
+</div>
+
+<!-- ============================== DEATH SCREEN ============================== -->
+<div id="death-screen" class="overlay hidden">
+  <h1 id="death-title" style="color: #ff3333; font-size: 48px;">FAILED</h1>
+  <p id="final-score" style="font-size: 26px; margin-bottom: 20px;">Score: 0</p>
+  <button id="death-retry-btn" class="play-btn" style="padding: 15px 50px; font-size: 18px;" onclick="restartGame()">RETRY</button>
+  <button id="death-quit-btn" class="nav-btn" style="max-width: 200px; margin-top: 15px;" onclick="quitPlaytestOrGame()">QUIT TO MENU</button>
+  <button id="death-stop-playtest-btn" class="nav-btn hidden" style="max-width: 200px; margin-top: 15px; background: red; color: white;" onclick="stopPlaytestFromDeath()">STOP PLAYTESTING</button>
+</div>
+
+<!-- ============================== SCRIPTS (load order matters — plain globals, no bundler) ============================== -->
+<script src="js/state.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/game.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/browse.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>
