@@ -146,7 +146,11 @@ button, input { font-family: inherit; }
 
 .overlay {
   position: fixed; inset: 0; z-index: 60;
-  background: radial-gradient(circle at 50% 0%, rgba(60,9,108,0.35), var(--bg-void) 70%);
+  /* background-color gives a fully opaque base so nothing behind the overlay
+     (e.g. leftover score/HUD text) can show through; the gradient is a
+     purely decorative layer on top of that solid base. */
+  background-color: var(--bg-void);
+  background-image: radial-gradient(circle at 50% 0%, rgba(60,9,108,0.45), transparent 70%);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 24px 18px;
   animation: overlayIn var(--dur-med) var(--ease-out);

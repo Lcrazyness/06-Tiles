@@ -41,7 +41,7 @@
 <div id="lives-display" class="hidden">❤️ <span id="lives-count">3</span></div>
 <button id="stop-playtest-btn" class="hidden" onclick="stopPlaytest()">🛑 STOP PLAYTESTING</button>
 
-<div id="score-container">
+<div id="score-container" class="hidden">
   <div id="score">0</div>
   <div id="rest-msg">BREATHE</div>
 </div>
@@ -129,8 +129,8 @@
         </div>
         <div class="speed-control">
           <span>Spd:</span>
-          <input type="range" id="speed-scale" min="5" max="40" value="18">
-          <span id="val-scale">18</span>
+          <input type="range" id="speed-scale" min="10" max="60" value="32">
+          <span id="val-scale">32</span>
         </div>
       </div>
       <div class="song-card">
@@ -144,8 +144,8 @@
         </div>
         <div class="speed-control">
           <span>Spd:</span>
-          <input type="range" id="speed-bambam" min="5" max="40" value="19">
-          <span id="val-bambam">19</span>
+          <input type="range" id="speed-bambam" min="10" max="60" value="34">
+          <span id="val-bambam">34</span>
         </div>
       </div>
     </div>
@@ -269,12 +269,6 @@
     </div>
   </div>
 
-  <!-- Tile placement mode pill, kept small and out of the canvas tap area -->
-  <div class="tile-mode-pill">
-    <button id="editor-tool-normal" class="active" onclick="setEditorTileMode('normal')">NORMAL</button>
-    <button id="editor-tool-hold" onclick="setEditorTileMode('hold')">HOLD</button>
-  </div>
-
   <!-- LEFT DRAWER: song / recording / playtest tools (was a permanent floating panel; now tucked away) -->
   <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>
   <div class="drawer drawer-left" id="drawer-left">
@@ -288,8 +282,9 @@
     </div>
     <div class="tool-drawer-section">
       <div class="tool-drawer-label">PLACEMENT</div>
+      <div class="editor-settings-subtitle" style="margin-top:0;">Tap a lane on the canvas any time to drop a tile at the playhead. Hit Record to have the song play and the playhead move while you tap r/t/y/u along with it.</div>
       <div class="tool-grid">
-        <button id="btn-create-tiles" class="tool-btn" onclick="toggleRecording()"><span class="tool-icon">▶</span>Record</button>
+        <button id="btn-create-tiles" class="tool-btn" onclick="toggleRecording()"><span class="tool-icon">⏺</span>Record</button>
         <button id="btn-delete-mode-2" class="tool-btn danger" onclick="toggleDeleteMode()"><span class="tool-icon">🗑️</span>Delete</button>
       </div>
     </div>
@@ -468,6 +463,7 @@
 </div>
 
 <!-- ============================== SCRIPTS (load order matters — plain globals, no bundler) ============================== -->
+<script src="js/config.js"></script>
 <script src="js/state.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/game.js"></script>
