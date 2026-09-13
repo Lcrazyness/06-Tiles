@@ -85,13 +85,29 @@ function openProfileModal() {
   toggleMenu('profile-modal');
 }
 
-// --- community / local library ---
-function getCommunityLevels() {
+// --- community library: real backend when API_BASE_URL is set, otherwise
+// the same localStorage-backed fallback as before. Every function here is
+// async now so callers work identically either way. ---
+
+function getLocalCommunityLevels() {
   try { return JSON.parse(localStorage.getItem(COMMUNITY_KEY)) || []; }
   catch (e) { return []; }
 }
-function setCommunityLevels(levels) {
+function setLocalCommunityLevels(levels) {
   localStorage.setItem(COMMUNITY_KEY, JSON.stringify(levels));
+}
+
+async function getCommunityLevels(search = '', tab = 'recent') {
+  if (API_BASE_URL) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/levels?search=${encodeURIComponent(search)}&tab=${encodeURIComponent(tab)}`);
+      if (!res.ok) throw new Error('bad response: ' + res.status);
+      return await res.json();
+    } catch (e) {
+      console.warn('Backend unreachable, showing the local-only library instead.', e);
+    }
+  }
+  return getLocalCommunityLevels();
 }
 
 function getAvgRating(level) {
@@ -99,21 +115,33 @@ function getAvgRating(level) {
   return level.ratings.reduce((a, b) => a + b, 0) / level.ratings.length;
 }
 
-function rateLevel(levelId, stars, fromCommunity) {
-  const levels = fromCommunity ? getCommunityLevels() : getCustomLevels();
+async function rateLevel(levelId, stars, fromCommunity) {
+  if (fromCommunity && API_BASE_URL) {
+    try {
+      await fetch(`${API_BASE_URL}/api/levels/${levelId}/rate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stars })
+      });
+      return;
+    } catch (e) { console.warn('Could not reach backend to rate this level.', e); return; }
+  }
+  const levels = fromCommunity ? getLocalCommunityLevels() : getCustomLevels();
   const lvl = levels.find(l => l.id === levelId);
   if (!lvl) return;
   lvl.ratings = lvl.ratings || [];
   lvl.ratings.push(stars);
-  if (fromCommunity) setCommunityLevels(levels); else persistProfiles();
+  if (fromCommunity) setLocalCommunityLevels(levels); else persistProfiles();
 }
 
-function registerPlay(levelId, fromCommunity) {
-  const levels = fromCommunity ? getCommunityLevels() : getCustomLevels();
+async function registerPlay(levelId, fromCommunity) {
+  if (fromCommunity && API_BASE_URL) {
+    try { await fetch(`${API_BASE_URL}/api/levels/${levelId}/play`, { method: 'POST' }); return; }
+    catch (e) { console.warn('Could not reach backend to register this play.', e); return; }
+  }
+  const levels = fromCommunity ? getLocalCommunityLevels() : getCustomLevels();
   const lvl = levels.find(l => l.id === levelId);
   if (!lvl) return;
   lvl.plays = (lvl.plays || 0) + 1;
-  if (fromCommunity) setCommunityLevels(levels); else persistProfiles();
+  if (fromCommunity) setLocalCommunityLevels(levels); else persistProfiles();
 }
 
 function estimateDifficulty(level) {
@@ -169,17 +197,32 @@ function saveCustomLevel() {
   alert('Saved to My Levels.');
 }
 
-function publishLevel() {
+async function publishLevel() {
   if (recordedTiles.length === 0) { alert('Place some tiles first!'); return; }
   const name = prompt('Publish as:', currentEditingName || 'My Level');
   if (!name) return;
   currentEditingName = name;
   const level = buildLevelObject(name);
-  const community = getCommunityLevels();
-  community.unshift(level);
-  setCommunityLevels(community);
   closeCreatorMenu();
-  alert('Published to the local library. Remember: this is stored in this browser, not a real server — see the note on the Browse screen.');
+
+  if (API_BASE_URL) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/levels`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(level)
+      });
+      if (!res.ok) throw new Error('bad response: ' + res.status);
+      alert('Published! Anyone with the game can now find "' + name + '" in Browse Levels.');
+      return;
+    } catch (e) {
+      console.warn('Backend publish failed, saving to the local library instead.', e);
+      alert("Couldn't reach the backend, so this was saved to your local library instead (only visible in this browser). Check the server is deployed and API_BASE_URL in js/config.js is correct.");
+    }
+  } else {
+    alert('Published to the local library. This is stored only in this browser — set API_BASE_URL in js/config.js once your backend is deployed to make this real.');
+  }
+  const community = getLocalCommunityLevels();
+  community.unshift(level);
+  setLocalCommunityLevels(community);
 }
 
 function downloadLevelData() {

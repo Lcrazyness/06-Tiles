@@ -31,6 +31,8 @@ const GAP = 35;
 const EDITOR_BASE_SPEED = 18;         // reference speed the editor's falling preview is drawn at
 const EDITOR_PPS = EDITOR_BASE_SPEED * 60; // pixels/second for that preview + the docked timeline math
 
+// lane 0=r, 1=t, 2=y, 3=u (see keyMap below). "scale" repeatedly cycles
+// u -> y -> t -> r, one tile at a time — that's lanes [3,2,1,0].
 const patterns = {
   scale: [3, 2, 1, 0],
   bambam: [[0, 2], 1, [0, 2], 1, [0, 2], 1, 0, [1, 3], 2, [1, 3], 2, [1, 3], 2, 3]

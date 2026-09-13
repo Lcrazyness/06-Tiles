@@ -12,6 +12,7 @@
 // ============================================================================
 
 let arenaChannel = null;
+let arenaSocket = null;
 let onlineUsers = {};
 let presenceHeartbeatInterval = null;
 let quickMatchWaiting = false;
@@ -20,8 +21,24 @@ let myBattleResult = null;       // { finished, score, reason }
 let oppBattleResult = null;      // { finished, score }
 let oppLastPct = 0, oppLastScore = 0;
 let lastProgressBroadcast = 0;
+const seenArenaMessageIds = new Set();
 
 function initArenaChannel() {
+  // Real cross-device transport, only if a backend is configured (js/config.js).
+  if (API_BASE_URL) {
+    const script = document.createElement('script');
+    script.src = API_BASE_URL.replace(/\/$/, '') + '/socket.io/socket.io.js';
+    script.onload = () => {
+      arenaSocket = io(API_BASE_URL);
+      arenaSocket.on('arena_message', handleArenaMessage);
+      arenaSocket.on('connect_error', (err) => console.warn('Could not connect to the battle backend — falling back to same-browser-only sync.', err));
+    };
+    script.onerror = () => console.warn('Could not load the Socket.IO client from ' + API_BASE_URL + ' — falling back to same-browser-only sync.');
+    document.head.appendChild(script);
+  }
+
+  // Same-browser fallback transport — always on too, so battles still work
+  // between tabs even if no backend is configured or it's unreachable.
   try {
     arenaChannel = new BroadcastChannel('et_arena_v1');
     arenaChannel.onmessage = (ev) => handleArenaMessage(ev.data);
@@ -40,12 +57,23 @@ function initArenaChannel() {
 
 function broadcastArena(msg) {
   msg._sender = currentProfile; msg._ts = Date.now();
+  msg._id = msg._sender + '_' + msg._ts + '_' + Math.random().toString(36).slice(2, 8);
+  seenArenaMessageIds.add(msg._id); // never reprocess our own message if a transport echoes it back
+  if (arenaSocket && arenaSocket.connected) arenaSocket.emit('arena_message', msg);
   if (arenaChannel) { try { arenaChannel.postMessage(msg); } catch (e) {} }
   try { localStorage.setItem('et_arena_relay', JSON.stringify(msg)); } catch (e) {}
 }
 
 function handleArenaMessage(msg) {
   if (!msg || msg._sender === currentProfile) return;
+  // The same message can legitimately arrive twice (once over the backend
+  // socket, once over the local fallback) when both transports are active —
+  // de-dupe so things like "accept" don't fire the match start twice.
+  if (msg._id) {
+    if (seenArenaMessageIds.has(msg._id)) return;
+    seenArenaMessageIds.add(msg._id);
+    if (seenArenaMessageIds.size > 500) seenArenaMessageIds.delete(seenArenaMessageIds.values().next().value);
+  }
   switch (msg.type) {
     case 'presence':
       onlineUsers[msg.name] = { ts: msg.ts || Date.now() };
@@ -131,11 +159,14 @@ function renderOnlinePlayers() {
 let pendingChallengeTarget = null;
 function challengePlayer(name) { pendingChallengeTarget = name; openBattleLevelPicker(); }
 
-function openBattleLevelPicker() {
+async function openBattleLevelPicker() {
   const list = document.getElementById('battle-level-picker-list');
+  list.innerHTML = '<div class="battle-empty">Loading…</div>';
+  toggleMenu('battle-level-picker');
+  const community = await getCommunityLevels();
+  const communityIds = new Set(community.map(l => l.id));
+  const levels = [...getCustomLevels(), ...community];
   list.innerHTML = '';
-  const communityIds = new Set(getCommunityLevels().map(l => l.id));
-  const levels = [...getCustomLevels(), ...getCommunityLevels()];
   if (levels.length === 0) {
     list.innerHTML = '<div class="battle-empty">You need at least one saved or published level to challenge someone with. Make one in the editor first.</div>';
   } else {
@@ -145,7 +176,6 @@ function openBattleLevelPicker() {
       list.appendChild(card);
     });
   }
-  toggleMenu('battle-level-picker');
 }
 
 function sendChallenge(toName, level, quickMatch) {
@@ -197,12 +227,13 @@ function startQuickMatch() {
   document.getElementById('battle-waiting-sub').innerText = 'Keep this open — another tab hitting Quick Match will pair with you.';
   toggleMenu('battle-waiting-menu');
 }
-function handleIncomingQuickMatchSeek(name) {
+async function handleIncomingQuickMatchSeek(name) {
   if (!quickMatchWaiting || name === currentProfile) return;
   quickMatchWaiting = false;
   const iHost = currentProfile < name; // deterministic tie-break so only one side proposes
   if (iHost) {
-    const pool = getCommunityLevels().length ? getCommunityLevels() : getCustomLevels();
+    const community = await getCommunityLevels();
+    const pool = community.length ? community : getCustomLevels();
     if (pool.length === 0) { alert('No levels available yet to quick match with — publish or save one first.'); toggleMenu('battle-menu'); return; }
     const level = pool[Math.floor(Math.random() * pool.length)];
     sendChallenge(name, level, true);

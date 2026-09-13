@@ -41,10 +41,11 @@ function tileAlreadyAt(lane, time) {
 }
 
 function placeTileAtPlayhead(lane, bypassSnap = false) {
+  // Hold tiles are disabled for now — every placed tile is a plain instant tap.
   const snapped = getSnappedEditorTime(editorTimer, bypassSnap);
   editorTimer = snapped;
   if (tileAlreadyAt(lane, snapped)) return;
-  const t = { lane, time: snapped, isHold: editorTileMode === 'hold', holdDuration: editorTileMode === 'hold' ? Math.max(getEditorGridStep() * 2, 1) : 0 };
+  const t = { lane, time: snapped, isHold: false, holdDuration: 0 };
   recordedTiles.push(t);
   recordedTiles.sort((a, b) => a.time - b.time || a.lane - b.lane);
   refreshEditorTimeline();
@@ -110,18 +111,8 @@ function recordTileFromKeydown(laneIndex, e) {
 }
 
 function recordTileFromKeyup(laneIndex) {
-  const startTime = editorKeyTimes[laneIndex];
-  let duration = Math.max(0, editorTimer - startTime);
-  if (duration >= 1.1) {
-    for (let i = recordedTiles.length - 1; i >= 0; i--) {
-      if (recordedTiles[i].lane === laneIndex && recordedTiles[i].time === startTime) {
-        recordedTiles[i].isHold = true;
-        recordedTiles[i].holdDuration = duration;
-        break;
-      }
-    }
-    refreshEditorTimeline();
-  }
+  // Hold tiles are disabled for now, so key-up doesn't need to do anything —
+  // the tile was already placed on key-down as a plain instant tap.
   editorKeyTimes[laneIndex] = null;
 }
 
@@ -231,6 +222,10 @@ function toggleEditorTransport() {
   } else {
     clearInterval(editorInterval);
     bgAudio.pause();
+    if (isRecording) {
+      isRecording = false;
+      document.getElementById('btn-create-tiles')?.classList.remove('active');
+    }
   }
 }
 

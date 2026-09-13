@@ -70,6 +70,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
   document.getElementById('editor-ui').classList.add('hidden');
   document.getElementById('lives-display').classList.remove('hidden');
   document.getElementById('game-hud').classList.remove('hidden');
+  document.getElementById('score-container').classList.remove('hidden');
 
   if (!isCustom) {
     const customSpeed = document.getElementById('speed-' + mode);
@@ -351,7 +352,6 @@ function gameLoop(timestamp) {
     });
   }
 
-  const firstUnclicked = tiles.find(t => !t.interacted);
   for (let i = tiles.length - 1; i >= 0; i--) {
     let t = tiles[i]; t.y += speed * dt;
     let holdLength = t.isHold ? (t.holdDuration * speed * 60) : 0;
@@ -379,26 +379,17 @@ function gameLoop(timestamp) {
       }
     }
 
+    // Plain flat tiles — classic Magic Tiles look, no gradient/glow/border.
+    // (Hold tiles are disabled in the editor for now — this block only still
+    // runs for old level files that already have some.)
     if (t.isHold) {
-      ctx.fillStyle = t.interacted ? "rgba(100, 100, 100, 0.4)" : "rgba(0, 150, 255, 0.3)";
+      ctx.fillStyle = t.interacted ? "#333" : "#000";
       ctx.fillRect(t.lane * laneW + 12, tailTop, laneW - 24, holdLength);
-      ctx.fillStyle = t.interacted ? "rgba(200, 200, 200, 0.8)" : "rgba(0, 255, 255, 0.8)";
-      ctx.fillRect(t.lane * laneW + (laneW / 2) - 2, tailTop, 4, holdLength);
-      ctx.fillRect(t.lane * laneW + 16, tailTop, laneW - 32, 8);
     }
 
-    ctx.globalAlpha = t.interacted ? 0.2 : currentTileStyle.alpha;
-    if (t === firstUnclicked) { ctx.shadowBlur = 15; ctx.shadowColor = "#00ffff"; }
-    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-    ctx.fillRect(t.lane * laneW + 4, headTop, laneW - 8, TILE_H);
-    let grad = ctx.createLinearGradient(0, headTop, 0, headTop + TILE_H);
-    grad.addColorStop(0, t.interacted ? "#444" : currentTileStyle.c1);
-    grad.addColorStop(1, t.interacted ? "#222" : currentTileStyle.c2);
-    ctx.fillStyle = grad;
-    ctx.fillRect(t.lane * laneW + 4, headTop, laneW - 8, TILE_H);
-    ctx.strokeStyle = "rgba(255,255,255,0.15)"; ctx.lineWidth = 2;
-    ctx.strokeRect(t.lane * laneW + 4, headTop, laneW - 8, TILE_H);
-    ctx.shadowBlur = 0;
+    ctx.globalAlpha = t.interacted ? 0.25 : currentTileStyle.alpha;
+    ctx.fillStyle = t.interacted ? "#222" : currentTileStyle.c1;
+    ctx.fillRect(t.lane * laneW + 2, headTop, laneW - 4, TILE_H);
     ctx.globalAlpha = 1.0;
   }
 
@@ -430,6 +421,7 @@ function die(reason) {
 
   document.getElementById('lives-display').classList.add('hidden');
   document.getElementById('game-hud').classList.add('hidden');
+  document.getElementById('score-container').classList.add('hidden');
   document.getElementById('death-title').innerText = reason || 'FAILED';
   document.getElementById('final-score').innerText = 'Score: ' + Math.floor(score);
   document.getElementById('death-retry-btn').classList.toggle('hidden', isPlaytesting);
@@ -445,12 +437,13 @@ function restartGame() {
 }
 
 function quitPlaytestOrGame() {
-  gameActive = false; isDead = true;
+  gameActive = false; isDead = true; score = 0; scoreEl.innerText = "0";
   if (customGameInterval) clearInterval(customGameInterval);
   bgAudio.pause();
   if (isPlaytesting || isVerifying) { stopPlaytest(); return; }
   document.getElementById('lives-display').classList.add('hidden');
   document.getElementById('game-hud').classList.add('hidden');
+  document.getElementById('score-container').classList.add('hidden');
   document.getElementById('battle-race-hud').classList.add('hidden');
   isBattleMode = false;
   toggleMenu('main-menu');
@@ -478,9 +471,15 @@ function startEditor(existingLevel) {
 }
 
 function toggleRecording() {
+  // "Record" is one button that does the whole job: start the song playing
+  // and the playhead advancing at the same time you arm key recording, so
+  // there's no separate step to forget. (Previously you had to also find
+  // and press a transport play button, which is what made this confusing.)
   isRecording = !isRecording;
   const btn = document.getElementById('btn-create-tiles');
   if (btn) btn.classList.toggle('active', isRecording);
+  if (isRecording && !editorPlaying) toggleEditorTransport();
+  else if (!isRecording && editorPlaying) toggleEditorTransport();
 }
 
 function toggleSongTester() {
@@ -498,12 +497,6 @@ function toggleDeleteMode() {
     const btn = document.getElementById(id);
     if (btn) btn.classList.toggle('active', deleteMode);
   });
-}
-
-function setEditorTileMode(mode) {
-  editorTileMode = mode;
-  document.getElementById('editor-tool-normal')?.classList.toggle('active', mode === 'normal');
-  document.getElementById('editor-tool-hold')?.classList.toggle('active', mode === 'hold');
 }
 
 function openCreatorMenu() { document.getElementById('creator-menu').classList.remove('hidden'); }
@@ -537,6 +530,7 @@ function stopPlaytest() {
   document.getElementById('stop-playtest-btn').classList.add('hidden');
   document.getElementById('lives-display').classList.add('hidden');
   document.getElementById('game-hud').classList.add('hidden');
+  document.getElementById('score-container').classList.add('hidden');
   document.getElementById('death-screen').classList.add('hidden');
   document.getElementById('editor-ui').classList.remove('hidden');
   inEditor = true;

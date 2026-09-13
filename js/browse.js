@@ -31,10 +31,11 @@ function openBrowseLevels(tab) {
   renderBrowseLevels();
 }
 
-function renderBrowseLevels() {
+async function renderBrowseLevels() {
   const container = document.getElementById('community-levels-container');
   if (!container) return;
-  let levels = getCommunityLevels().slice();
+  container.innerHTML = '<div class="browse-empty">Loading…</div>';
+  let levels = (await getCommunityLevels()).slice();
   const searchInput = document.getElementById('browse-search-input');
   const query = (searchInput && searchInput.value || '').trim().toLowerCase();
   if (query) {
@@ -115,9 +116,9 @@ function openLevelDetail(level, fromCommunity) {
       star.textContent = '★';
       star.onmouseenter = () => Array.from(rateWrap.children).forEach((s, idx) => s.classList.toggle('hover', idx < i));
       star.onmouseleave = () => Array.from(rateWrap.children).forEach(s => s.classList.remove('hover'));
-      star.onclick = () => {
-        rateLevel(level.id, i, true);
-        const updated = getCommunityLevels().find(l => l.id === level.id);
+      star.onclick = async () => {
+        await rateLevel(level.id, i, true);
+        const updated = (await getCommunityLevels()).find(l => l.id === level.id);
         if (updated) openLevelDetail(updated, true);
       };
       rateWrap.appendChild(star);
