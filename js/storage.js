@@ -33,9 +33,17 @@ if (!profiles[currentProfile]) currentProfile = 'Guest';
 
 function getCustomLevels() {
   if (!profiles[currentProfile]) profiles[currentProfile] = { customLevels: [] };
+  if (!Array.isArray(profiles[currentProfile].customLevels)) profiles[currentProfile].customLevels = [];
   return profiles[currentProfile].customLevels;
 }
 function persistProfiles() { saveProfilesObject(profiles); }
+
+function ensureCurrentProfileRecord() {
+  if (!profiles[currentProfile]) profiles[currentProfile] = { customLevels: [] };
+  if (!Array.isArray(profiles[currentProfile].customLevels)) profiles[currentProfile].customLevels = [];
+  if (!('profileIcon' in profiles[currentProfile])) profiles[currentProfile].profileIcon = null;
+  persistProfiles();
+}
 
 function switchProfile(name) {
   if (!profiles[name]) return;
@@ -172,6 +180,7 @@ function buildLevelObject(name) {
     id: makeLevelId(),
     name: name,
     author: currentProfile,
+    icon: currentLevelIcon || null,
     data: JSON.parse(JSON.stringify(recordedTiles)),
     effects: JSON.parse(JSON.stringify(recordedEffects)),
     lives: parseInt(document.getElementById('edit-lives').value) || 3,
@@ -179,6 +188,8 @@ function buildLevelObject(name) {
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
     disableHolds: document.getElementById('edit-disable-holds').checked,
     difficulty: document.getElementById('edit-difficulty').value || 'Normal',
+    backgroundColor: document.getElementById('edit-bg-color')?.value || '#202738',
+    backgroundBrightness: Number(document.getElementById('edit-bg-brightness')?.value || 100),
     ratings: [],
     plays: 0,
     createdAt: Date.now()
@@ -207,7 +218,7 @@ async function publishLevel() {
 
   if (API_BASE_URL) {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/levels`, {
+      const res = await authFetch(`${API_BASE_URL}/api/levels`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(level)
       });
       if (!res.ok) throw new Error('bad response: ' + res.status);
@@ -229,13 +240,16 @@ function downloadLevelData() {
   const name = currentEditingName || "My_Level";
   const lvlData = {
     name: name,
+    icon: currentLevelIcon || null,
     data: [...recordedTiles],
     effects: [...recordedEffects],
     lives: parseInt(document.getElementById('edit-lives').value) || 3,
     fps: parseInt(document.getElementById('edit-fps').value) || 60,
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
     disableHolds: document.getElementById('edit-disable-holds').checked,
-    difficulty: document.getElementById('edit-difficulty').value || 'Normal'
+    difficulty: document.getElementById('edit-difficulty').value || 'Normal',
+    backgroundColor: document.getElementById('edit-bg-color')?.value || '#202738',
+    backgroundBrightness: Number(document.getElementById('edit-bg-brightness')?.value || 100)
   };
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(lvlData, null, 2));
   const a = document.createElement('a');
@@ -288,4 +302,31 @@ function escapeHtml(str) {
 function updatePrimaryColor(val) {
   document.documentElement.style.setProperty('--primary-theme', val);
   document.documentElement.style.setProperty('--play-blue', val);
+}
+
+
+async function deleteCustomLevel(levelId) {
+  const levels = getCustomLevels();
+  const idx = levels.findIndex(level => level.id === levelId);
+  if (idx === -1) return false;
+  const level = levels[idx];
+  if (!confirm('Delete "' + level.name + '"? This cannot be undone.')) return false;
+
+  if (API_BASE_URL && getAuthToken() && level.published) {
+    try {
+      const response = await authFetch(API_BASE_URL + '/api/levels/' + encodeURIComponent(level.id), { method: 'DELETE' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        alert(data.message || 'Could not delete the online level.');
+        return false;
+      }
+    } catch (error) {
+      alert('Could not connect to the 06-Tiles server.');
+      return false;
+    }
+  }
+
+  levels.splice(idx, 1);
+  persistProfiles();
+  return true;
 }
