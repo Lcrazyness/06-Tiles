@@ -210,6 +210,15 @@ function saveCustomLevel() {
 
 async function publishLevel() {
   if (recordedTiles.length === 0) { alert('Place some tiles first!'); return; }
+  if (!levelVerified) {
+    pendingPublishAfterVerification = true;
+    startLevelVerification();
+    return;
+  }
+  await publishVerifiedLevel();
+}
+
+async function publishVerifiedLevel() {
   const name = prompt('Publish as:', currentEditingName || 'My Level');
   if (!name) return;
   currentEditingName = name;
