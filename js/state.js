@@ -16,7 +16,7 @@ const bgAudio = document.getElementById("bg-audio");
 const overlays = [
   'main-menu', 'levels-menu', 'settings-menu', 'death-screen', 'my-levels-menu',
   'creator-menu', 'effects-menu', 'browse-levels-menu', 'editor-level-settings',
-  'profile-modal', 'level-detail-menu', 'battle-menu', 'battle-level-picker',
+  'profile-modal', 'stats-modal', 'level-detail-menu', 'battle-menu', 'battle-level-picker',
   'battle-waiting-menu', 'battle-incoming-menu', 'battle-result-menu'
 ];
 
