@@ -64,6 +64,8 @@ let currentLevelBackground = '#202738';
 let currentLevelBrightness = 100;
 let currentLevelIcon = null;
 let autoRetryTimer = null;
+let levelVerified = false;
+let pendingPublishAfterVerification = false;
 let verifyEndTime = 0;
 
 // --- editor state ---
