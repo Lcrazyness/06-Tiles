@@ -268,3 +268,58 @@ function closeLevelDetail() {
   if (levelDetailReturnTo === 'my-levels-menu') renderMyLevels();
   else renderBrowseSection();
 }
+
+async function loadAdminPanel() {
+  const modal = document.getElementById('admin-panel');
+  if (!modal || !getAuthToken()) return;
+  try {
+    const check = await authFetch(API_BASE_URL + '/api/admin/check');
+    const checkData = await check.json();
+    if (!checkData.isAdmin) {
+      alert('Admin access required.');
+      return;
+    }
+    const response = await authFetch(API_BASE_URL + '/api/admin/levels');
+    const data = await response.json();
+    const levels = data.levels || [];
+    modal.innerHTML = `
+      <h2>ADMIN PANEL</h2>
+      <div class="menu-content">
+        <div class="profile-note">Signed in as wCrazyNess · Admin controls</div>
+        <div class="admin-level-list">
+          ${levels.length ? levels.map(level => `
+            <div class="admin-level-row">
+              <div class="level-card-thumb">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : '📁'}</div>
+              <div class="admin-level-info">
+                <b>${escapeHtml(level.name)}</b>
+                <span>by ${escapeHtml(level.author || 'Unknown')} · ★ ${Number(level.ratingAverage || 0).toFixed(1)}</span>
+              </div>
+              <button class="nav-btn ${level.featured ? 'admin-unfeature' : ''}" onclick="toggleFeaturedLevel('${level.id}', ${!level.featured})">${level.featured ? 'UNFEATURE' : 'FEATURE'}</button>
+            </div>
+          `).join('') : '<div class="browse-empty">No published levels.</div>'}
+        </div>
+        <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button>
+      </div>`;
+    toggleMenu('admin-panel');
+  } catch (error) {
+    alert('Could not load the admin panel.');
+  }
+}
+
+async function toggleFeaturedLevel(levelId, featured) {
+  try {
+    const response = await authFetch(API_BASE_URL + '/api/admin/levels/' + encodeURIComponent(levelId) + '/feature', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ featured })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      alert(data.message || 'Could not update featured status.');
+      return;
+    }
+    loadAdminPanel();
+  } catch (error) {
+    alert('Could not connect to the 06-Tiles server.');
+  }
+}
