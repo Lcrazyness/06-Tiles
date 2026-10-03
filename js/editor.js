@@ -69,21 +69,23 @@ function handleCanvasMouseDown(e) {
   }
   if (!deleteMode) return;
 
-  for (let i = recordedTiles.length - 1; i >= 0; i--) {
-    let t = recordedTiles[i];
-    if (t.lane === clickedLane) {
-      let yOffset = (editorTimer - t.time) * EDITOR_PPS;
-      let y = lineY + yOffset;
-      let holdLen = t.isHold ? (t.holdDuration * EDITOR_PPS) : 0;
-      let h = TILE_H + holdLen;
-      let drawY = y - holdLen;
-      if (mouseY >= drawY && mouseY <= drawY + h) {
-        recordedTiles.splice(i, 1);
-        editorVisualTiles = editorVisualTiles.filter(vt => vt.ref !== t);
-        refreshEditorTimeline();
-        break;
-      }
+  const clickedTime = editorTimer - (mouseY - lineY) / EDITOR_PPS;
+  let bestIndex = -1;
+  let bestDistance = Infinity;
+  for (let i = 0; i < recordedTiles.length; i++) {
+    const t = recordedTiles[i];
+    if (t.lane !== clickedLane) continue;
+    const tileEnd = t.time + (t.holdDuration || 0);
+    const distance = clickedTime < t.time ? t.time - clickedTime : clickedTime > tileEnd ? clickedTime - tileEnd : 0;
+    if (distance <= 0.35 && distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = i;
     }
+  }
+  if (bestIndex !== -1) {
+    const removed = recordedTiles.splice(bestIndex, 1)[0];
+    editorVisualTiles = editorVisualTiles.filter(vt => vt.ref !== removed);
+    refreshEditorTimeline();
   }
 }
 canvas.addEventListener("mousedown", handleCanvasMouseDown);
