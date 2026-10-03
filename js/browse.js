@@ -1,9 +1,4 @@
-// ============================================================================
-// browse.js — level lists styled after Geometry Dash's browser: searchable,
-// tabbed, difficulty-badged cards that open into a detail sheet with rating.
-// ============================================================================
-
-let currentBrowseTab = 'recent';
+let currentBrowseTab = 'levels';
 let levelDetailReturnTo = 'my-levels-menu';
 
 function openMyLevels() {
@@ -16,57 +11,166 @@ function renderMyLevels() {
   const levels = getCustomLevels();
   container.innerHTML = '';
   if (levels.length === 0) {
-    container.innerHTML = '<div class="browse-empty">No levels yet — tap CREATE LEVEL on the main menu to make one.</div>';
+    container.innerHTML = '<div class="browse-empty">No levels yet — tap CREATE LEVEL to make one.</div>';
     return;
   }
   levels.slice().reverse().forEach(level => container.appendChild(renderLevelCard(level, false)));
 }
 
-function openBrowseLevels(tab) {
+function openBrowseLevels(tab = 'levels') {
   currentBrowseTab = tab;
-  document.querySelectorAll('#browse-levels-menu .pill-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.id === 'tab-' + tab);
-  });
   toggleMenu('browse-levels-menu');
-  renderBrowseLevels();
+  renderBrowseSection();
+}
+
+function renderBrowseSection() {
+  const menu = document.getElementById('browse-levels-menu');
+  if (!menu) return;
+  const content = menu.querySelector('.menu-content');
+  if (!content) return;
+  content.innerHTML = `
+    <div class="browse-search-row">
+      <span class="search-icon">🔎</span>
+      <input type="text" id="browse-search-input" placeholder="Search levels or players..." oninput="renderBrowseSection()">
+    </div>
+    <div class="pill-tabs browse-main-tabs">
+      <button class="pill-tab ${currentBrowseTab === 'levels' ? 'active' : ''}" onclick="openBrowseLevels('levels')">Levels</button>
+      <button class="pill-tab ${currentBrowseTab === 'leaderboards' ? 'active' : ''}" onclick="openBrowseLevels('leaderboards')">Leaderboards</button>
+      <button class="pill-tab ${currentBrowseTab === 'players' ? 'active' : ''}" onclick="openBrowseLevels('players')">Players</button>
+    </div>
+    <div id="browse-sub-tabs"></div>
+    <div id="browse-content" class="grid-levels" style="max-height:58vh; overflow-y:auto; padding-right:4px;"></div>
+    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top:15px;">BACK TO MENU</button>`;
+  if (currentBrowseTab === 'levels') renderBrowseLevels();
+  if (currentBrowseTab === 'leaderboards') renderLeaderboards();
+  if (currentBrowseTab === 'players') renderPlayers();
 }
 
 async function renderBrowseLevels() {
-  const container = document.getElementById('community-levels-container');
+  const container = document.getElementById('browse-content');
+  const sub = document.getElementById('browse-sub-tabs');
   if (!container) return;
-  container.innerHTML = '<div class="browse-empty">Loading…</div>';
-  let levels = (await getCommunityLevels()).slice();
-  const searchInput = document.getElementById('browse-search-input');
-  const query = (searchInput && searchInput.value || '').trim().toLowerCase();
-  if (query) {
-    levels = levels.filter(l => l.name.toLowerCase().includes(query) || (l.author || '').toLowerCase().includes(query));
-  }
-  if (currentBrowseTab === 'recent') {
-    levels.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  } else if (currentBrowseTab === 'trending') {
-    levels.sort((a, b) => (b.plays || 0) - (a.plays || 0));
-  } else if (currentBrowseTab === 'rated') {
-    levels.sort((a, b) => getAvgRating(b) - getAvgRating(a));
-  } else if (currentBrowseTab === 'featured') {
-    levels = levels.filter(l => getAvgRating(l) >= 4 || (l.plays || 0) >= 5);
-    levels.sort((a, b) => getAvgRating(b) - getAvgRating(a));
+  if (sub) sub.innerHTML = `
+    <div class="pill-tabs">
+      <button class="pill-tab active">Recent</button>
+      <button class="pill-tab" onclick="loadBrowseLevelTab('trending')">Trending</button>
+      <button class="pill-tab" onclick="loadBrowseLevelTab('rated')">Top Rated</button>
+      <button class="pill-tab" onclick="loadBrowseLevelTab('featured')">Featured</button>
+    </div>`;
+  container.innerHTML = '<div class="browse-empty">Loading levels…</div>';
+  const search = document.getElementById('browse-search-input')?.value || '';
+  let levels = await getCommunityLevels(search, 'recent');
+  if (!Array.isArray(levels)) levels = [];
+  if (search.trim()) {
+    const q = search.trim().toLowerCase();
+    levels = levels.filter(l => String(l.name || '').toLowerCase().includes(q) || String(l.author || '').toLowerCase().includes(q));
   }
   container.innerHTML = '';
-  if (levels.length === 0) {
-    container.innerHTML = '<div class="browse-empty">Nothing here yet. Publish a level from the editor menu to see it in this list.</div>';
+  if (!levels.length) {
+    container.innerHTML = '<div class="browse-empty">No published levels found.</div>';
     return;
   }
   levels.forEach(level => container.appendChild(renderLevelCard(level, true)));
 }
 
+async function loadBrowseLevelTab(tab) {
+  const container = document.getElementById('browse-content');
+  if (!container) return;
+  container.innerHTML = '<div class="browse-empty">Loading levels…</div>';
+  const search = document.getElementById('browse-search-input')?.value || '';
+  let levels = await getCommunityLevels(search, tab);
+  if (!Array.isArray(levels)) levels = [];
+  if (tab === 'featured') levels = levels.filter(l => Number(l.ratingAverage || 0) >= 4 || Number(l.plays || 0) >= 5);
+  container.innerHTML = '';
+  if (!levels.length) {
+    container.innerHTML = '<div class="browse-empty">No levels found.</div>';
+    return;
+  }
+  levels.forEach(level => container.appendChild(renderLevelCard(level, true)));
+}
+
+async function renderPlayers() {
+  const container = document.getElementById('browse-content');
+  if (!container) return;
+  container.innerHTML = '<div class="browse-empty">Loading players…</div>';
+  const search = document.getElementById('browse-search-input')?.value || '';
+  try {
+    const response = await fetch(API_BASE_URL + '/api/players?search=' + encodeURIComponent(search));
+    const players = response.ok ? await response.json() : [];
+    container.innerHTML = '';
+    if (!Array.isArray(players) || !players.length) {
+      container.innerHTML = '<div class="browse-empty">No players found.</div>';
+      return;
+    }
+    players.forEach(player => {
+      const card = document.createElement('div');
+      card.className = 'level-card player-browser-card';
+      const st = player.statistics || {};
+      card.innerHTML = `
+        <div class="level-card-thumb">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(player.username.slice(0,1).toUpperCase())}</div>
+        <div class="level-card-body">
+          <div class="level-card-title-row"><span class="level-card-title">${escapeHtml(player.username)}</span></div>
+          <div class="level-card-author">Online player</div>
+          <div class="level-card-stats"><span>Games ${st.gamesPlayed || 0}</span><span>Best ${st.bestScore || 0}</span></div>
+        </div>`;
+      container.appendChild(card);
+    });
+  } catch (error) {
+    container.innerHTML = '<div class="browse-empty">Could not connect to the online player list.</div>';
+  }
+}
+
+async function renderLeaderboards() {
+  const container = document.getElementById('browse-content');
+  const sub = document.getElementById('browse-sub-tabs');
+  if (!container) return;
+  if (sub) sub.innerHTML = `
+    <div class="pill-tabs">
+      <button class="pill-tab active" onclick="loadLeaderboard('bestScore')">Best Score</button>
+      <button class="pill-tab" onclick="loadLeaderboard('totalScore')">Total Score</button>
+      <button class="pill-tab" onclick="loadLeaderboard('notesHit')">Notes Hit</button>
+      <button class="pill-tab" onclick="loadLeaderboard('gamesPlayed')">Games Played</button>
+    </div>`;
+  await loadLeaderboard('bestScore');
+}
+
+async function loadLeaderboard(sort) {
+  const container = document.getElementById('browse-content');
+  if (!container) return;
+  container.innerHTML = '<div class="browse-empty">Loading leaderboard…</div>';
+  try {
+    const response = await fetch(API_BASE_URL + '/api/leaderboards?sort=' + encodeURIComponent(sort));
+    const players = response.ok ? await response.json() : [];
+    container.innerHTML = '';
+    players.forEach((player, index) => {
+      const st = player.statistics || {};
+      const value = sort === 'totalScore' ? st.totalScore : sort === 'notesHit' ? st.totalNotesHit : sort === 'gamesPlayed' ? st.gamesPlayed : st.bestScore;
+      const card = document.createElement('div');
+      card.className = 'level-card leaderboard-card';
+      card.innerHTML = `
+        <div class="leaderboard-rank">#${index + 1}</div>
+        <div class="level-card-thumb">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(player.username.slice(0,1).toUpperCase())}</div>
+        <div class="level-card-body">
+          <div class="level-card-title-row"><span class="level-card-title">${escapeHtml(player.username)}</span></div>
+          <div class="level-card-author">${sort === 'bestScore' ? 'Best score' : sort === 'totalScore' ? 'Total score' : sort === 'notesHit' ? 'Notes hit' : 'Games played'}</div>
+          <div class="level-card-stats"><span>★ ${Number(value || 0).toLocaleString()}</span></div>
+        </div>`;
+      container.appendChild(card);
+    });
+    if (!players.length) container.innerHTML = '<div class="browse-empty">No players have stats yet.</div>';
+  } catch (error) {
+    container.innerHTML = '<div class="browse-empty">Could not load the leaderboard.</div>';
+  }
+}
+
 function renderLevelCard(level, fromCommunity) {
   const diff = estimateDifficulty(level);
-  const avg = getAvgRating(level);
+  const avg = Number(level.ratingAverage || getAvgRating(level) || 0);
   const card = document.createElement('div');
   card.className = 'level-card';
   card.style.borderLeftColor = `var(--diff-${diff.toLowerCase()})`;
   card.innerHTML = `
-    <div class="level-card-thumb">${fromCommunity ? '🌐' : '📁'}</div>
+    <div class="level-card-thumb">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : (fromCommunity ? '🌐' : '📁')}</div>
     <div class="level-card-body">
       <div class="level-card-title-row">
         <span class="level-card-title">${escapeHtml(level.name)}</span>
@@ -85,8 +189,7 @@ function renderLevelCard(level, fromCommunity) {
 function openLevelDetail(level, fromCommunity) {
   levelDetailReturnTo = fromCommunity ? 'browse-levels-menu' : 'my-levels-menu';
   const diff = estimateDifficulty(level);
-  const avg = getAvgRating(level);
-
+  const avg = Number(level.ratingAverage || getAvgRating(level) || 0);
   document.getElementById('level-detail-title').innerText = level.name;
   const body = document.getElementById('level-detail-body');
   body.innerHTML = '';
@@ -94,7 +197,7 @@ function openLevelDetail(level, fromCommunity) {
   const header = document.createElement('div');
   header.className = 'level-detail-header';
   header.innerHTML = `
-    <div class="level-card-thumb">${fromCommunity ? '🌐' : '📁'}</div>
+    <div class="level-card-thumb">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : (fromCommunity ? '🌐' : '📁')}</div>
     <div>
       <div class="level-card-title-row"><b style="font-size:16px;">${escapeHtml(level.name)}</b> <span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span></div>
       <div class="level-card-author">by ${escapeHtml(level.author || 'You')} · ${(level.data || []).length} tiles</div>
@@ -114,11 +217,9 @@ function openLevelDetail(level, fromCommunity) {
       const star = document.createElement('span');
       star.className = 'rate-star';
       star.textContent = '★';
-      star.onmouseenter = () => Array.from(rateWrap.children).forEach((s, idx) => s.classList.toggle('hover', idx < i));
-      star.onmouseleave = () => Array.from(rateWrap.children).forEach(s => s.classList.remove('hover'));
       star.onclick = async () => {
         await rateLevel(level.id, i, true);
-        const updated = (await getCommunityLevels()).find(l => l.id === level.id);
+        const updated = (await getCommunityLevels('', 'recent')).find(l => l.id === level.id);
         if (updated) openLevelDetail(updated, true);
       };
       rateWrap.appendChild(star);
@@ -147,13 +248,8 @@ function openLevelDetail(level, fromCommunity) {
     delBtn.className = 'nav-btn';
     delBtn.style.cssText = 'background:var(--accent-danger); color:#fff;';
     delBtn.textContent = 'DELETE';
-    delBtn.onclick = () => {
-      if (!confirm('Delete "' + level.name + '"? This cannot be undone.')) return;
-      const levels = getCustomLevels();
-      const idx = levels.findIndex(l => l.id === level.id);
-      if (idx !== -1) levels.splice(idx, 1);
-      persistProfiles();
-      closeLevelDetail();
+    delBtn.onclick = async () => {
+      if (await deleteCustomLevel(level.id)) closeLevelDetail();
     };
     body.appendChild(delBtn);
   }
@@ -163,5 +259,6 @@ function openLevelDetail(level, fromCommunity) {
 
 function closeLevelDetail() {
   toggleMenu(levelDetailReturnTo);
-  if (levelDetailReturnTo === 'my-levels-menu') renderMyLevels(); else renderBrowseLevels();
+  if (levelDetailReturnTo === 'my-levels-menu') renderMyLevels();
+  else renderBrowseSection();
 }
