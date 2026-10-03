@@ -807,3 +807,19 @@ button, input { font-family: inherit; }
 #browse-levels-menu .browse-search-row input { color: var(--text-hi); }
 #browse-levels-menu .browse-search-row input::placeholder { color: var(--text-low); }
 #browse-levels-menu .song-card-play { background: var(--play-blue); color: #fff; }
+
+
+/* Restore the dark card theme everywhere, including My Levels/main level lists. */
+.song-card { background: var(--bg-panel) !important; color: var(--text-hi); border: 1px solid var(--border-soft); }
+.song-card-title { color: var(--text-hi) !important; }
+.song-card-artist, .song-card-meta { color: var(--text-mid) !important; }
+.song-card-icon { background: var(--bg-panel-raised) !important; color: var(--text-mid) !important; }
+.song-card-play { background: var(--play-blue) !important; color: #fff !important; }
+.admin-level-list { width:100%; max-height:58vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
+.admin-level-row { display:flex; align-items:center; gap:10px; padding:10px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:12px; }
+.admin-level-info { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.admin-level-info b { color:var(--text-hi); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.admin-level-info span { color:var(--text-mid); font-size:10px; }
+.admin-level-actions { display:flex; flex-direction:column; gap:5px; min-width:92px; }
+.admin-level-actions .nav-btn { padding:8px 10px; font-size:10px; }
+.admin-delete-btn { background:rgba(255,51,51,.14) !important; color:#ff7b7b !important; border-color:rgba(255,51,51,.32) !important; }
