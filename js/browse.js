@@ -320,14 +320,6 @@ async function loadAdminPanel() {
     return;
   }
   try {
-    const check = await authFetch(API_BASE_URL + '/api/admin/check', { cache: 'no-store' });
-    const checkData = await check.json().catch(() => ({}));
-    if (!check.ok || !checkData.isAdmin) {
-      modal.innerHTML = `<h2>ADMIN PANEL</h2><div class="menu-content"><div class="browse-empty">${escapeHtml(checkData.message || 'Admin access required for this account.')}</div><button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button></div>`;
-      toggleMenu('admin-panel');
-      return;
-    }
-
     const response = await authFetch(API_BASE_URL + '/api/admin/levels', { cache: 'no-store' });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.success) {
