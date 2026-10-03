@@ -43,7 +43,6 @@ function tileAlreadyAt(lane, time) {
 function placeTileAtPlayhead(lane, bypassSnap = false) {
   // Hold tiles are disabled for now — every placed tile is a plain instant tap.
   const snapped = getSnappedEditorTime(editorTimer, bypassSnap);
-  editorTimer = snapped;
   if (tileAlreadyAt(lane, snapped)) return;
   const t = { lane, time: snapped, isHold: false, holdDuration: 0 };
   recordedTiles.push(t);
@@ -640,4 +639,39 @@ function renderEffectTracks() {
       refreshEditorTimeline();
     });
   }
+}
+
+
+function updateEditorBackgroundBrightness(value) {
+  currentLevelBrightness = Math.max(70, Math.min(140, Number(value) || 100));
+  const output = document.getElementById('edit-bg-brightness-value');
+  if (output) output.textContent = currentLevelBrightness + '%';
+}
+
+function renderLevelIconPreview() {
+  const preview = document.getElementById('edit-level-icon-preview');
+  if (!preview) return;
+  preview.innerHTML = currentLevelIcon
+    ? '<img src="' + escapeHtml(currentLevelIcon) + '" alt="Level icon">'
+    : '<span>No level icon selected</span>';
+}
+
+const levelIconUpload = document.getElementById('edit-level-icon-upload');
+if (levelIconUpload) {
+  levelIconUpload.addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 1024 * 1024) {
+      alert('Level icon must be 1MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      currentLevelIcon = e.target.result;
+      renderLevelIconPreview();
+    };
+    reader.readAsDataURL(file);
+  });
 }
