@@ -761,3 +761,15 @@ button, input { font-family: inherit; }
 .player-browser-card, .leaderboard-card { cursor:pointer; }
 .leaderboard-rank { min-width:42px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:var(--text-hi); }
 .leaderboard-card { display:flex; align-items:center; }
+
+#browse-levels-menu .menu-content{width:min(760px,94vw);max-height:82vh;padding:18px;border:1px solid rgba(120,140,190,.22);background:linear-gradient(180deg,rgba(30,36,52,.98),rgba(18,22,33,.98));box-shadow:0 24px 70px rgba(0,0,0,.42)}
+#browse-levels-menu h2{letter-spacing:.08em;text-transform:uppercase}
+.browse-info-banner{margin-bottom:12px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,rgba(76,115,255,.16),rgba(185,58,255,.10));border:1px solid rgba(120,150,255,.20);color:var(--text-mid);font-size:12px;line-height:1.45}
+.browse-main-tabs{gap:7px;margin:10px 0 8px}.browse-main-tabs .pill-tab{flex:1;min-width:0;font-weight:800}
+#browse-sub-tabs .pill-tabs{margin-bottom:10px}
+#browse-content{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;align-content:start}
+#browse-content .level-card{min-height:84px;border:1px solid rgba(140,155,195,.16);border-left:3px solid var(--play-blue);background:rgba(37,43,57,.86);transition:transform .16s ease,border-color .16s ease,background .16s ease}
+#browse-content .level-card:hover{transform:translateY(-2px);background:rgba(48,56,74,.95);border-color:rgba(120,150,255,.34)}
+.player-browser-card .level-card-thumb,.leaderboard-card .level-card-thumb{width:58px;height:58px;border-radius:13px}
+.player-browser-card{border-left-color:var(--accent-cyan)!important}.leaderboard-card{border-left-color:var(--accent-purple)!important}
+@media(max-width:620px){#browse-content{grid-template-columns:1fr}.browse-main-tabs .pill-tab{font-size:10px;padding:9px 5px}}
