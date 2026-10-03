@@ -188,16 +188,14 @@
 
 <!-- ============================== BROWSE LEVELS (GD-style) ============================== -->
 <div id="browse-levels-menu" class="overlay hidden">
-  <h2 style="margin-bottom: 12px;">COMMUNITY LEVELS</h2>
+  <h2 style="margin-bottom: 12px;">BROWSE</h2>
   <div class="menu-content" style="max-height: 78vh;">
     <div class="browse-info-banner">
-      This library is saved in your browser's local storage, not a real server — "publishing" a
-      level here makes it visible to other profiles <em>in this same browser</em>, styled like an
-      online level list. It won't appear on anyone else's device.
+      Discover community levels, search players, and view global leaderboards.
     </div>
     <div class="browse-search-row">
       <span class="search-icon">🔎</span>
-      <input type="text" id="browse-search-input" placeholder="Search levels or creators..." oninput="renderBrowseLevels()">
+      <input type="text" id="browse-search-input" placeholder="Search levels or players..." oninput="renderBrowseContent()">
     </div>
     <div class="pill-tabs">
       <button id="tab-recent" class="pill-tab" onclick="openBrowseLevels('recent')">Recent</button>
@@ -439,7 +437,7 @@
   <div class="menu-content">
     <button class="nav-btn" onclick="closeCreatorMenu()">RESUME</button>
     <button class="nav-btn" style="background: var(--accent-purple); color: white;" onclick="downloadLevelData()">⬇ DOWNLOAD LEVEL</button>
-    <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 PUBLISH TO LIBRARY</button>
+    <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 VERIFY &amp; PUBLISH</button>
     <button class="nav-btn" style="background: var(--accent-success); color: white;" onclick="saveCustomLevel()">SAVE TO MY LEVELS</button>
     <button class="nav-btn" style="background: var(--accent-danger); color: white;" onclick="exitEditorWithoutSaving()">QUIT</button>
   </div>
