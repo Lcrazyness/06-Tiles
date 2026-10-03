@@ -62,18 +62,18 @@
   </div>
 </div>
 
-<!-- ============================== PROFILE SWITCHER (replaces password login) ============================== -->
+<!-- ============================== ONLINE ACCOUNT ============================== -->
 <div id="profile-modal" class="overlay hidden">
-  <h2>LOCAL PROFILE</h2>
+  <h2>ACCOUNT</h2>
   <div class="menu-content">
-    <p class="profile-note">
-      Profiles are stored only in this browser — there's no server, so there's no password to
-      set or lose. Pick a name to label your levels and battle presence with, or play as Guest.
-    </p>
-    <div class="profile-modal-list" id="profile-modal-list"></div>
-    <div class="profile-create-row">
-      <input type="text" id="new-profile-name" placeholder="New profile name" maxlength="16">
-      <button class="play-btn" onclick="createProfile()">CREATE</button>
+    <div class="profile-note">Create an account to save your 06-Tiles profile online. Your password is securely hashed on the server.</div>
+    <div class="profile-create-row" style="display:flex; flex-direction:column; gap:8px;">
+      <input type="text" id="account-username" placeholder="Username" maxlength="20" autocomplete="username">
+      <input type="email" id="account-email" placeholder="Email" maxlength="254" autocomplete="email">
+      <input type="password" id="account-password" placeholder="Password (8+ characters)" maxlength="128" autocomplete="current-password">
+      <button class="play-btn" onclick="loginAccount()">LOG IN</button>
+      <button class="nav-btn" onclick="registerAccount()">CREATE ACCOUNT</button>
+      <div id="account-status" class="profile-note" style="min-height:18px;"></div>
     </div>
     <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top:6px;">BACK TO MENU</button>
   </div>
@@ -463,10 +463,10 @@
 </div>
 
 <!-- ============================== SCRIPTS (load order matters — plain globals, no bundler) ============================== -->
-<script src="js/config.js"></script>
+<script src="js/config.js?v=3"></script>
 <script src="js/state.js"></script>
 <script src="js/storage.js"></script>
-<script src="js/auth.js"></script>
+<script src="js/auth.js?v=3"></script>
 <script src="js/game.js"></script>
 <script src="js/editor.js"></script>
 <script src="js/browse.js"></script>
