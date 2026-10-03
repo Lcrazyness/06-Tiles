@@ -176,18 +176,17 @@ function renderLevelCard(level, fromCommunity) {
   card.className = 'level-card';
   card.style.borderLeftColor = `var(--diff-${diff.toLowerCase()})`;
   card.innerHTML = `
-    <div class="level-card-thumb">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : (fromCommunity ? '🌐' : '📁')}</div>
-    <div class="level-card-body">
-      <div class="level-card-title-row">
-        <span class="level-card-title">${escapeHtml(level.name)}</span>
+    <div class="song-card-icon">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : (fromCommunity ? '🎵' : '📁')}</div>
+    <div class="song-card-main">
+      <div class="song-card-title">${escapeHtml(level.name)}</div>
+      <div class="song-card-artist">${escapeHtml(level.author || 'You')}</div>
+      <div class="song-card-meta">
         <span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span>
-      </div>
-      <div class="level-card-author">by ${escapeHtml(level.author || 'You')}</div>
-      <div class="level-card-stats">
-        <span class="star">★ ${avg ? avg.toFixed(1) : '—'}</span>
+        <span>★ ${avg ? avg.toFixed(1) : '—'}</span>
         <span>▶ ${level.plays || 0}</span>
       </div>
-    </div>`;
+    </div>
+    <button class="song-card-play" aria-label="Play ${escapeHtml(level.name)}">▶</button>`;
   card.onclick = () => openLevelDetail(level, fromCommunity);
   return card;
 }
