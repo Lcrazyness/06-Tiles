@@ -19,6 +19,7 @@ function saveAuthSession(token, user) {
   currentProfile = user.username;
   localStorage.setItem(CURRENT_PROFILE_KEY, currentProfile);
   refreshProfileButton();
+  updateAdminButton();
 }
 
 function clearAuthSession() {
@@ -345,4 +346,20 @@ async function uploadProfileIcon(event) {
     }
   };
   reader.readAsDataURL(file);
+}
+
+
+async function updateAdminButton() {
+  const button = document.getElementById('admin-btn');
+  if (!button || !getAuthToken() || !API_BASE_URL) {
+    if (button) button.classList.add('hidden');
+    return;
+  }
+  try {
+    const response = await authFetch(API_BASE_URL + '/api/admin/check');
+    const data = await response.json();
+    button.classList.toggle('hidden', !data.isAdmin);
+  } catch {
+    button.classList.add('hidden');
+  }
 }
