@@ -4,6 +4,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   refreshProfileButton();
+  restoreAuthSession();
   wireSpeedSliders();
   setEditorGrid(2);
   initArenaChannel();
