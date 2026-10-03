@@ -742,3 +742,22 @@ button, input { font-family: inherit; }
   padding:18px; background:var(--bg-panel); border:1px solid var(--border-soft);
   border-radius:var(--radius-md); color:var(--text-mid); text-align:center; line-height:1.5;
 }
+
+
+.extra-settings-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+}
+.keybind-settings { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
+.keybind-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0; }
+.keybind-grid label { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:var(--text-mid); }
+.keybind-grid input { width:42px; text-align:center; text-transform:uppercase; }
+.level-icon-preview { width:70px; height:70px; border-radius:14px; overflow:hidden; display:flex; align-items:center; justify-content:center; margin-top:8px; background:var(--bg-panel-raised); border:1px solid var(--border-soft); color:var(--text-low); font-size:9px; }
+.level-icon-preview img, .level-card-thumb img, .profile-avatar-image img { width:100%; height:100%; object-fit:cover; display:block; }
+.profile-icon-controls { display:flex; justify-content:center; margin:8px 0; }
+.player-browser-card, .leaderboard-card { cursor:pointer; }
+.leaderboard-rank { min-width:42px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:var(--text-hi); }
+.leaderboard-card { display:flex; align-items:center; }
