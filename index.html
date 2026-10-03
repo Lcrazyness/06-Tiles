@@ -53,11 +53,12 @@
   <h1>EXTREME TILES</h1>
   <div class="menu-content">
     <button class="nav-btn" style="background: linear-gradient(135deg, var(--play-blue), #0055ff); color: #fff;" onclick="toggleMenu('levels-menu')">▶ MAIN LEVELS</button>
-    <button class="nav-btn" onclick="openBrowseLevels('recent')">🌐 BROWSE LEVELS</button>
+    <button class="nav-btn" onclick="openBrowseLevels('recent')">🌐 BROWSE</button>
     <button class="nav-btn" style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-purple-deep)); color: #fff;" onclick="openMyLevels()">📁 MY LEVELS</button>
     <button class="nav-btn" style="background: linear-gradient(135deg, var(--accent-pink), #b3195f); color: #fff;" onclick="openBattleMenu()">⚔ BATTLE</button>
     <button class="nav-btn pink-btn" onclick="startEditor()">🛠 CREATE LEVEL</button>
     <button class="nav-btn secondary-btn" onclick="toggleMenu('settings-menu')">⚙ SETTINGS</button>
+    <button class="nav-btn secondary-btn" onclick="openStatsModal()">📊 STATS</button>
     <button class="nav-btn secondary-btn" id="profile-btn" onclick="openProfileModal()">👤 Guest</button>
   </div>
 </div>
@@ -78,6 +79,9 @@
     <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top:6px;">BACK TO MENU</button>
   </div>
 </div>
+
+<!-- ============================== PLAYER STATS ============================== -->
+<div id="stats-modal" class="overlay hidden"></div>
 
 <!-- ============================== SETTINGS ============================== -->
 <div id="settings-menu" class="overlay hidden">
