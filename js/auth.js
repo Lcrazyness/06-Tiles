@@ -185,3 +185,116 @@ function authFetch(url, options = {}) {
   if (token) headers.Authorization = 'Bearer ' + token;
   return fetch(url, { ...options, headers });
 }
+async function beginStatsGame() {
+  if (!getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode) return;
+  statsGameFinalized = false;
+  try {
+    await authFetch(API_BASE_URL + '/api/stats/game', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ completed: false, score: 0, notesHit: 0 })
+    });
+  } catch (error) {
+    console.warn('Could not record game start.', error);
+  }
+}
+
+async function finishStatsGame(completed) {
+  if (statsGameFinalized || !getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode) return;
+  statsGameFinalized = true;
+  try {
+    const response = await authFetch(API_BASE_URL + '/api/stats/game', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        completed: !!completed,
+        score: Math.floor(score),
+        notesHit: notesHitThisGame
+      })
+    });
+    const data = await response.json();
+    if (response.ok && data.success && data.user) {
+      saveAuthSession(getAuthToken(), data.user);
+    }
+  } catch (error) {
+    console.warn('Could not save game statistics.', error);
+  }
+}
+
+async function refreshOnlineStats() {
+  if (!getAuthToken() || !API_BASE_URL) return null;
+  try {
+    const response = await authFetch(API_BASE_URL + '/api/auth/me');
+    const data = await response.json();
+    if (response.ok && data.success && data.user) {
+      saveAuthSession(getAuthToken(), data.user);
+      return data.user;
+    }
+  } catch (error) {
+    console.warn('Could not refresh online statistics.', error);
+  }
+  return null;
+}
+
+function formatBattleWinRate(statistics) {
+  const wins = Number(statistics.battleWins || 0);
+  const losses = Number(statistics.battleLosses || 0);
+  const total = wins + losses;
+  return total ? Math.round((wins / total) * 100) + '%' : '—';
+}
+
+async function openStatsModal() {
+  const modal = document.getElementById('stats-modal');
+  if (!modal) return;
+  const user = getAuthUser();
+  if (!user) {
+    modal.innerHTML = `
+      <h2>PLAYER STATS</h2>
+      <div class="menu-content">
+        <div class="stats-login-card">Log in to view your online player statistics.</div>
+        <button class="nav-btn" onclick="openProfileModal()">ACCOUNT</button>
+        <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button>
+      </div>`;
+    toggleMenu('stats-modal');
+    return;
+  }
+
+  modal.innerHTML = `
+    <h2>PLAYER STATS</h2>
+    <div class="menu-content">
+      <div class="stats-profile">
+        <div class="stats-avatar">${escapeHtml(user.username.slice(0, 1).toUpperCase())}</div>
+        <div>
+          <div class="stats-username">${escapeHtml(user.username)}</div>
+          <div class="stats-online">ONLINE ACCOUNT</div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><span>GAMES PLAYED</span><b id="stat-games-played">${(user.statistics || {}).gamesPlayed || 0}</b></div>
+        <div class="stat-card"><span>COMPLETED</span><b id="stat-games-completed">${(user.statistics || {}).gamesCompleted || 0}</b></div>
+        <div class="stat-card"><span>BEST SCORE</span><b id="stat-best-score">${(user.statistics || {}).bestScore || 0}</b></div>
+        <div class="stat-card"><span>TOTAL SCORE</span><b id="stat-total-score">${(user.statistics || {}).totalScore || 0}</b></div>
+        <div class="stat-card"><span>NOTES HIT</span><b id="stat-notes-hit">${(user.statistics || {}).totalNotesHit || 0}</b></div>
+        <div class="stat-card"><span>WIN RATE</span><b id="stat-win-rate">${formatBattleWinRate(user.statistics || {})}</b></div>
+      </div>
+      <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button>
+    </div>`;
+  toggleMenu('stats-modal');
+
+  const freshUser = await refreshOnlineStats();
+  if (freshUser) {
+    const st = freshUser.statistics || {};
+    const values = {
+      'stat-games-played': st.gamesPlayed || 0,
+      'stat-games-completed': st.gamesCompleted || 0,
+      'stat-best-score': st.bestScore || 0,
+      'stat-total-score': st.totalScore || 0,
+      'stat-notes-hit': st.totalNotesHit || 0,
+      'stat-win-rate': formatBattleWinRate(st)
+    };
+    Object.entries(values).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    });
+  }
+}
