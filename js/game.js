@@ -186,6 +186,8 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
         document.getElementById('score-container').classList.add('hidden');
         if (pendingPublishAfterVerification) {
           pendingPublishAfterVerification = false;
+          document.getElementById('editor-ui').classList.remove('hidden');
+          inEditor = true;
           publishVerifiedLevel();
         } else {
           alert('Verification complete! Your level is verified and ready to publish.');
@@ -525,7 +527,9 @@ function die(reason) {
 function restartGame() {
   clearTimeout(autoRetryTimer);
   document.getElementById('death-screen').classList.add('hidden');
-  if (isPlaytesting || isVerifying) { startPlaytest(); return; }
+  if (isVerifying) { startLevelVerification(); return; }
+  if (lastStartArgs && lastStartArgs[0] === 'verify') { startLevelVerification(); return; }
+  if (isPlaytesting) { startPlaytest(); return; }
   if (lastStartArgs) startGame.apply(null, lastStartArgs);
 }
 
