@@ -173,7 +173,7 @@ function renderLevelCard(level, fromCommunity) {
   const diff = estimateDifficulty(level);
   const avg = Number(level.ratingAverage || getAvgRating(level) || 0);
   const card = document.createElement('div');
-  card.className = 'level-card';
+  card.className = 'level-card song-card';
   card.style.borderLeftColor = `var(--diff-${diff.toLowerCase()})`;
   card.innerHTML = `
     <div class="song-card-icon">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : (fromCommunity ? '🎵' : '📁')}</div>
