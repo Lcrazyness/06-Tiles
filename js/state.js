@@ -23,7 +23,7 @@ const overlays = [
 // --- gameplay constants (single source of truth — used to live as magic
 // numbers copy-pasted in half a dozen places) ---
 const laneW = canvas.width / 4;
-const keyMap = ['r', 't', 'y', 'u'];
+let keyMap = ['r', 't', 'y', 'u'];
 const keys = { r: false, t: false, y: false, u: false };
 const lineY = 540;
 const TILE_H = 150;
@@ -55,6 +55,15 @@ let tempLoadedLevel = null;
 let lastStartArgs = null; // remembers how the current level was launched, so Retry can replay it
 
 let isCustomGame = false, customPlayTime = 0, customGameInterval = null, isPlaytesting = false, isVerifying = false;
+let gameBrightness = Number(localStorage.getItem('et_gameBrightness') || 100);
+let showHitboxes = localStorage.getItem('et_showHitboxes') === 'true';
+let showLaneText = localStorage.getItem('et_showLaneText') === 'true';
+let hideDeathScreen = localStorage.getItem('et_hideDeathScreen') === 'true';
+let autoRetry = localStorage.getItem('et_autoRetry') === 'true';
+let currentLevelBackground = '#202738';
+let currentLevelBrightness = 100;
+let currentLevelIcon = null;
+let autoRetryTimer = null;
 let verifyEndTime = 0;
 
 // --- editor state ---
