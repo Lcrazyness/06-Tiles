@@ -28,6 +28,7 @@ function clearAuthSession() {
   currentProfile = 'Guest';
   localStorage.setItem(CURRENT_PROFILE_KEY, 'Guest');
   refreshProfileButton();
+  updateAdminButton();
 }
 
 function setAccountStatus(message) {
@@ -193,15 +194,6 @@ function authFetch(url, options = {}) {
 async function beginStatsGame() {
   if (!getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode) return;
   statsGameFinalized = false;
-  try {
-    await authFetch(API_BASE_URL + '/api/stats/game', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ started: true, completed: false, score: 0, notesHit: 0 })
-    });
-  } catch (error) {
-    console.warn('Could not record game start.', error);
-  }
 }
 
 async function finishStatsGame(completed) {
@@ -212,6 +204,7 @@ async function finishStatsGame(completed) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        started: true,
         completed: !!completed,
         score: Math.floor(score),
         notesHit: notesHitThisGame
@@ -351,14 +344,15 @@ async function uploadProfileIcon(event) {
 
 async function updateAdminButton() {
   const button = document.getElementById('admin-btn');
-  if (!button || !getAuthToken() || !API_BASE_URL) {
-    if (button) button.classList.add('hidden');
-    return;
-  }
+  if (!button) return;
+  const user = getAuthUser();
+  const localAdmin = !!user && String(user.username || '').toLowerCase() === 'wcrazyness';
+  button.classList.toggle('hidden', !localAdmin);
+  if (!localAdmin || !getAuthToken() || !API_BASE_URL) return;
   try {
     const response = await authFetch(API_BASE_URL + '/api/admin/check');
     const data = await response.json();
-    button.classList.toggle('hidden', !data.isAdmin);
+    if (!response.ok || !data.isAdmin) button.classList.add('hidden');
   } catch {
     button.classList.add('hidden');
   }
