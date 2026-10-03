@@ -208,6 +208,18 @@ function saveCustomLevel() {
   alert('Saved to My Levels.');
 }
 
+function startLevelVerification() {
+  if (recordedTiles.length === 0) {
+    alert('Place some tiles first!');
+    pendingPublishAfterVerification = false;
+    return;
+  }
+  levelVerified = false;
+  isVerifying = true;
+  closeCreatorMenu();
+  startGame('verify', true, -1, recordedTiles, recordedEffects, false, null);
+}
+
 async function publishLevel() {
   if (recordedTiles.length === 0) { alert('Place some tiles first!'); return; }
   if (!levelVerified) {
