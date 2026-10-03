@@ -788,3 +788,22 @@ button, input { font-family: inherit; }
 #browse-content .level-card:hover{transform:none;background:transparent}
 #browse-content .song-card{cursor:pointer}
 @media(max-width:620px){.song-card-icon{width:58px;height:58px;flex-basis:58px}.song-card{min-height:76px}.song-card-play{width:40px;height:40px;flex-basis:40px}}
+
+
+/* Final dark readability pass */
+#browse-levels-menu .menu-content,
+#browse-levels-menu .song-card,
+#browse-levels-menu .level-card,
+#browse-levels-menu .player-browser-card,
+#browse-levels-menu .leaderboard-card { color: var(--text-hi); }
+#browse-levels-menu .song-card { background: var(--bg-panel); color: var(--text-hi); }
+#browse-levels-menu .song-card-title { color: var(--text-hi); }
+#browse-levels-menu .song-card-artist,
+#browse-levels-menu .song-card-meta { color: var(--text-mid); background: transparent; }
+#browse-levels-menu .song-card-icon { background: var(--bg-panel-raised); color: var(--text-mid); }
+#browse-levels-menu .browse-search-row,
+#browse-levels-menu .pill-tab,
+#browse-levels-menu .browse-info-banner { color: var(--text-hi); }
+#browse-levels-menu .browse-search-row input { color: var(--text-hi); }
+#browse-levels-menu .browse-search-row input::placeholder { color: var(--text-low); }
+#browse-levels-menu .song-card-play { background: var(--play-blue); color: #fff; }
