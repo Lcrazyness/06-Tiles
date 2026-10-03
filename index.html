@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Extreme Tiles: Hyper Edition</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261003-1">
 </head>
 <body>
 
@@ -53,7 +53,7 @@
   <h1>EXTREME TILES</h1>
   <div class="menu-content">
     <button class="nav-btn" style="background: linear-gradient(135deg, var(--play-blue), #0055ff); color: #fff;" onclick="toggleMenu('levels-menu')">▶ MAIN LEVELS</button>
-    <button class="nav-btn" onclick="openBrowseLevels('recent')">🌐 BROWSE</button>
+    <button class="nav-btn" onclick="openBrowseLevels('levels')">Browse</button>
     <button class="nav-btn" style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-purple-deep)); color: #fff;" onclick="openMyLevels()">📁 MY LEVELS</button>
     <button class="nav-btn" style="background: linear-gradient(135deg, var(--accent-pink), #b3195f); color: #fff;" onclick="openBattleMenu()">⚔ BATTLE</button>
     <button class="nav-btn pink-btn" onclick="startEditor()">🛠 CREATE LEVEL</button>
@@ -92,12 +92,30 @@
       <input type="color" id="primary-color-picker" value="#3c096c" onchange="updatePrimaryColor(this.value)">
     </div>
     <div class="settings-row">
-      <span>Main Levels BG Color</span>
-      <input type="color" id="bg-color-picker" value="#3c096c">
+      <span>Game Brightness</span>
+      <input type="range" id="game-brightness" min="70" max="140" value="100" step="1" oninput="updateGameBrightness(this.value)">
+      <b id="game-brightness-value">100%</b>
     </div>
     <div class="settings-row">
       <span>Enable CBF (Sub-frame Clicks)</span>
       <input type="checkbox" id="setting-cbf" checked>
+    </div>
+    <button class="nav-btn secondary-btn" onclick="toggleExtraSettings()">EXTRA SETTINGS <kbd>O</kbd></button>
+    <div id="extra-settings-panel" class="extra-settings-panel hidden">
+      <div class="settings-row"><span>Show Hitboxes</span><input type="checkbox" id="setting-show-hitboxes"></div>
+      <div class="settings-row"><span>Show Lane Text On Tiles</span><input type="checkbox" id="setting-show-lane-text"></div>
+      <div class="settings-row"><span>Hide Death Screen</span><input type="checkbox" id="setting-hide-death"></div>
+      <div class="settings-row"><span>Auto Retry After 2 Seconds</span><input type="checkbox" id="setting-auto-retry"></div>
+      <div class="keybind-settings">
+        <div class="editor-settings-title">KEYBINDS</div>
+        <div class="keybind-grid">
+          <label>Lane 1 <input id="keybind-0" maxlength="1" value="r"></label>
+          <label>Lane 2 <input id="keybind-1" maxlength="1" value="t"></label>
+          <label>Lane 3 <input id="keybind-2" maxlength="1" value="y"></label>
+          <label>Lane 4 <input id="keybind-3" maxlength="1" value="u"></label>
+        </div>
+        <button class="nav-btn" onclick="applyKeybindSettings()">APPLY KEYBINDS</button>
+      </div>
     </div>
     <button class="nav-btn" onclick="toggleMenu('main-menu')">SAVE &amp; BACK</button>
   </div>
@@ -380,6 +398,24 @@
       </select>
     </div>
     <div class="editor-settings-section">
+      <div class="editor-settings-title">LEVEL APPEARANCE</div>
+      <div class="editor-settings-subtitle">Choose how this creation looks when people play it.</div>
+      <div class="settings-row">
+        <span>Level Background</span>
+        <input type="color" id="edit-bg-color" value="#202738">
+      </div>
+      <div class="settings-row">
+        <span>Level Brightness</span>
+        <input type="range" id="edit-bg-brightness" min="70" max="140" value="100" step="1" oninput="updateEditorBackgroundBrightness(this.value)">
+        <b id="edit-bg-brightness-value">100%</b>
+      </div>
+      <div class="settings-row">
+        <span>Level Icon</span>
+        <input type="file" id="edit-level-icon-upload" accept="image/*">
+      </div>
+      <div id="edit-level-icon-preview" class="level-icon-preview"></div>
+    </div>
+    <div class="editor-settings-section">
       <div class="editor-settings-title">TIMING GRID</div>
       <div class="editor-settings-subtitle">Choose how tile placement snaps on the editor timeline.</div>
       <div class="editor-grid-controls settings-grid-controls">
@@ -400,7 +436,7 @@
   <h2>EDITOR MENU</h2>
   <div class="menu-content">
     <button class="nav-btn" onclick="closeCreatorMenu()">RESUME</button>
-    <button class="nav-btn" style="background: var(--accent-purple); color: white;" onclick="verifyAndDownloadLevel()">▶ VERIFY &amp; DOWNLOAD</button>
+    <button class="nav-btn" style="background: var(--accent-purple); color: white;" onclick="downloadLevelData()">⬇ DOWNLOAD LEVEL</button>
     <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 PUBLISH TO LIBRARY</button>
     <button class="nav-btn" style="background: var(--accent-success); color: white;" onclick="saveCustomLevel()">SAVE TO MY LEVELS</button>
     <button class="nav-btn" style="background: var(--accent-danger); color: white;" onclick="exitEditorWithoutSaving()">QUIT</button>
@@ -467,15 +503,15 @@
 </div>
 
 <!-- ============================== SCRIPTS (load order matters — plain globals, no bundler) ============================== -->
-<script src="js/config.js?v=3"></script>
-<script src="js/state.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/auth.js?v=3"></script>
-<script src="js/game.js"></script>
-<script src="js/editor.js"></script>
-<script src="js/browse.js"></script>
-<script src="js/battle.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/main.js"></script>
+<script src="js/config.js?v=20261003-1"></script>
+<script src="js/state.js?v=20261003-1"></script>
+<script src="js/storage.js?v=20261003-1"></script>
+<script src="js/auth.js?v=20261003-1"></script>
+<script src="js/game.js?v=20261003-1"></script>
+<script src="js/editor.js?v=20261003-1"></script>
+<script src="js/browse.js?v=20261003-1"></script>
+<script src="js/battle.js?v=20261003-1"></script>
+<script src="js/ui.js?v=20261003-1"></script>
+<script src="js/main.js?v=20261003-1"></script>
 </body>
 </html>
