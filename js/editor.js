@@ -105,7 +105,6 @@ function recordTileFromKeydown(laneIndex, e) {
     newTile = { lane: laneIndex, time: snappedTime, isHold: false, holdDuration: 0 };
     recordedTiles.push(newTile);
     recordedTiles.sort((a, b) => a.time - b.time || a.lane - b.lane);
-    editorTimer = snappedTime;
     refreshEditorTimeline();
   }
   editorVisualTiles.push({ lane: laneIndex, y: lineY, alpha: 1.0, ref: newTile });
