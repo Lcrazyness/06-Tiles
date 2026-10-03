@@ -178,9 +178,21 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
       if (isVerifying && customPlayTime >= verifyEndTime && tiles.length === 0 && !isDead) {
         clearInterval(customGameInterval);
         gameActive = false;
-        alert("Verification Complete! Level will now download.");
-        downloadLevelData();
-        quitPlaytestOrGame();
+        bgAudio.pause();
+        isVerifying = false;
+        levelVerified = true;
+        document.getElementById('lives-display').classList.add('hidden');
+        document.getElementById('game-hud').classList.add('hidden');
+        document.getElementById('score-container').classList.add('hidden');
+        if (pendingPublishAfterVerification) {
+          pendingPublishAfterVerification = false;
+          publishVerifiedLevel();
+        } else {
+          alert('Verification complete! Your level is verified and ready to publish.');
+          document.getElementById('editor-ui').classList.remove('hidden');
+          inEditor = true;
+          requestAnimationFrame(gameLoop);
+        }
       }
 
       if (!isBattleMode && !isVerifying && customPlayTime >= levelEndTime && tiles.length === 0 && !isDead && gameActive) {
@@ -473,6 +485,11 @@ function gameLoop(timestamp) {
 // --- death / retry / quit ---
 function die(reason) {
   if (isDead) return;
+  if (isVerifying) {
+    isVerifying = false;
+    levelVerified = false;
+    pendingPublishAfterVerification = false;
+  }
   isDead = true;
   gameActive = false;
   if (customGameInterval) clearInterval(customGameInterval);
