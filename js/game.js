@@ -36,7 +36,8 @@ function resetState() {
   frameCount = 0;
   lastFpsTime = performance.now();
   levelEndTime = 0;
-  document.body.style.background = document.getElementById('bg-color-picker').value || 'var(--bg-void)';
+  document.body.style.background = currentLevelBackground || 'var(--bg-void)';
+  canvas.style.filter = 'brightness(' + (Number(currentLevelBrightness || gameBrightness) / 100) + ')';
   document.getElementById('bg-image-container').style.opacity = 0;
   document.getElementById('fg-image-container').style.opacity = 0;
   document.getElementById('bg-flash').style.opacity = 0;
@@ -64,7 +65,16 @@ function handleHit() {
 
 function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, testEffects = null, isCommunity = false, loadedLevelObj = null) {
   lastStartArgs = [mode, isCustom, customIndex, testTiles, testEffects, isCommunity, loadedLevelObj];
-  currentMode = mode; isCustomGame = isCustom; gameActive = true;
+  currentMode = mode; isCustomGame = isCustom;
+  currentLevelBackground = isCustom && loadedLevelObj ? (loadedLevelObj.backgroundColor || '#202738') : '#202738';
+  currentLevelBrightness = isCustom && loadedLevelObj ? Number(loadedLevelObj.backgroundBrightness || 100) : gameBrightness;
+  if (isCustom && testTiles) {
+    const editorBg = document.getElementById('edit-bg-color');
+    const editorBrightness = document.getElementById('edit-bg-brightness');
+    if (mode === 'playtest' && editorBg) currentLevelBackground = editorBg.value || '#202738';
+    if (mode === 'playtest' && editorBrightness) currentLevelBrightness = Number(editorBrightness.value || 100);
+  }
+  gameActive = true;
   resetState();
   if (!isPlaytesting && !isVerifying && !isBattleMode) beginStatsGame();
   overlays.forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -82,9 +92,10 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
   } else {
     document.getElementById('progress-display').classList.remove('hidden');
     speed = EDITOR_BASE_SPEED; targetSpeed = EDITOR_BASE_SPEED; customPlayTime = 0;
-    let sourceArray = isCommunity ? getCommunityLevels() : getCustomLevels();
-    let pendingTiles = testTiles ? JSON.parse(JSON.stringify(testTiles)) : JSON.parse(JSON.stringify(sourceArray[customIndex].data));
-    let pendingEffects = testEffects ? JSON.parse(JSON.stringify(testEffects)) : (sourceArray[customIndex] && sourceArray[customIndex].effects ? JSON.parse(JSON.stringify(sourceArray[customIndex].effects)) : []);
+    let sourceArray = isCommunity ? (loadedLevelObj ? [loadedLevelObj] : []) : getCustomLevels();
+    let sourceLevel = loadedLevelObj || (customIndex !== -1 ? sourceArray[customIndex] : null);
+    let pendingTiles = testTiles ? JSON.parse(JSON.stringify(testTiles)) : JSON.parse(JSON.stringify(sourceLevel?.data || []));
+    let pendingEffects = testEffects ? JSON.parse(JSON.stringify(testEffects)) : JSON.parse(JSON.stringify(sourceLevel?.effects || []));
 
     let allTimes = [0];
     pendingTiles.forEach(t => allTimes.push(t.time + (t.holdDuration || 0)));
@@ -252,13 +263,22 @@ function fireSFX(fx) { let audio = new Audio(fx.src); audio.play().catch(() => {
 
 window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
+  if (k === 'o' && !inEditor && !gameActive && !isDead) {
+    toggleExtraSettings();
+    return;
+  }
+  if (k === ' ' && isDead && !isPlaytesting && !isVerifying) {
+    e.preventDefault();
+    restartGame();
+    return;
+  }
   if (k === 'q' && !inEditor && !gameActive && typeof isBattleMenuOpenish === 'function' && isBattleMenuOpenish()) {
     startQuickMatch();
     return;
   }
-  if (keys[k] === false) {
+  const laneIndex = keyMap.indexOf(k);
+  if (laneIndex !== -1 && keys[k] !== true) {
     keys[k] = true;
-    const laneIndex = keyMap.indexOf(k);
 
     if (inEditor && isRecording && laneIndex !== -1 && !deleteMode) {
       recordTileFromKeydown(laneIndex, e);
@@ -360,6 +380,19 @@ function gameLoop(timestamp) {
         ctx.globalAlpha = isSelected ? 0.9 : 0.6;
         ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.5)" : "rgba(0, 255, 255, 0.5)";
         ctx.fillRect(t.lane * laneW + 4, drawY, laneW - 8, h);
+        if (showHitboxes) {
+          ctx.strokeStyle = "#ff3b81";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(t.lane * laneW + 4, drawY, laneW - 8, h);
+        }
+        if (showLaneText) {
+          ctx.fillStyle = "#ffffff";
+          ctx.globalAlpha = 1;
+          ctx.font = "700 24px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2, drawY + h / 2);
+        }
         if (isSelected) {
           ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
           ctx.strokeRect(t.lane * laneW + 4, drawY, laneW - 8, h);
@@ -407,6 +440,20 @@ function gameLoop(timestamp) {
     ctx.globalAlpha = t.interacted ? 0.25 : currentTileStyle.alpha;
     ctx.fillStyle = t.interacted ? "#222" : currentTileStyle.c1;
     ctx.fillRect(t.lane * laneW + 2, headTop, laneW - 4, TILE_H);
+    if (showHitboxes) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#ff3b81";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(t.lane * laneW + 2, headTop, laneW - 4, TILE_H);
+    }
+    if (showLaneText) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "700 28px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2, headTop + TILE_H / 2);
+    }
     ctx.globalAlpha = 1.0;
   }
 
@@ -445,10 +492,21 @@ function die(reason) {
   document.getElementById('death-retry-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-quit-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
-  toggleMenu('death-screen');
+  if (autoRetry && !isPlaytesting) {
+    clearTimeout(autoRetryTimer);
+    autoRetryTimer = setTimeout(() => {
+      if (isDead) restartGame();
+    }, 2000);
+  }
+  if (hideDeathScreen && !isPlaytesting) {
+    document.getElementById('death-screen').classList.add('hidden');
+  } else {
+    toggleMenu('death-screen');
+  }
 }
 
 function restartGame() {
+  clearTimeout(autoRetryTimer);
   document.getElementById('death-screen').classList.add('hidden');
   if (isPlaytesting || isVerifying) { startPlaytest(); return; }
   if (lastStartArgs) startGame.apply(null, lastStartArgs);
