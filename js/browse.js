@@ -37,7 +37,7 @@ function renderBrowseSection() {
   content.innerHTML = `
     <div class="browse-search-row">
       <span class="search-icon">🔎</span>
-      <input type="text" id="browse-search-input" placeholder="Search levels or players..." oninput="renderBrowseContent()">
+      <input type="text" id="browse-search-input" placeholder="${currentBrowseTab === 'players' ? 'Search players...' : currentBrowseTab === 'leaderboards' ? 'Search players...' : 'Search levels...'}" oninput="renderBrowseContent()">
     </div>
     <div class="pill-tabs browse-main-tabs">
       <button class="pill-tab ${currentBrowseTab === 'levels' ? 'active' : ''}" onclick="openBrowseLevels('levels')">Levels</button>
@@ -98,32 +98,75 @@ async function loadBrowseLevelTab(tab) {
 async function renderPlayers() {
   const container = document.getElementById('browse-content');
   if (!container) return;
-  container.innerHTML = '<div class="browse-empty">Loading players…</div>';
-  const search = document.getElementById('browse-search-input')?.value || '';
+  container.innerHTML = '<div class="browse-empty">Searching players…</div>';
+  const search = (document.getElementById('browse-search-input')?.value || '').trim();
   try {
-    const response = await fetch(API_BASE_URL + '/api/players?search=' + encodeURIComponent(search));
-    const players = response.ok ? await response.json() : [];
+    const response = await fetch(API_BASE_URL + '/api/players?search=' + encodeURIComponent(search), {
+      cache: 'no-store'
+    });
+    let data = [];
+    try { data = await response.json(); } catch {}
+    if (!response.ok) {
+      container.innerHTML = '<div class="browse-empty">' + escapeHtml(data?.message || 'Could not load players.') + '</div>';
+      return;
+    }
+    const players = Array.isArray(data) ? data : [];
     container.innerHTML = '';
-    if (!Array.isArray(players) || !players.length) {
-      container.innerHTML = '<div class="browse-empty">No players found.</div>';
+    if (!players.length) {
+      container.innerHTML = '<div class="browse-empty">' + (search ? 'No players matched “' + escapeHtml(search) + '”.' : 'No players found.') + '</div>';
       return;
     }
     players.forEach(player => {
       const card = document.createElement('div');
       card.className = 'level-card player-browser-card';
       const st = player.statistics || {};
+      const username = String(player.username || 'Unknown');
       card.innerHTML = `
-        <div class="level-card-thumb">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(player.username.slice(0,1).toUpperCase())}</div>
+        <div class="level-card-thumb">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(username.slice(0,1).toUpperCase())}</div>
         <div class="level-card-body">
-          <div class="level-card-title-row"><span class="level-card-title">${escapeHtml(player.username)}</span></div>
+          <div class="level-card-title-row"><span class="level-card-title">${escapeHtml(username)}</span></div>
           <div class="level-card-author">Online player</div>
-          <div class="level-card-stats"><span>Games ${st.gamesPlayed || 0}</span><span>Best ${st.bestScore || 0}</span></div>
+          <div class="level-card-stats"><span>Games ${Number(st.gamesPlayed || 0).toLocaleString()}</span><span>Best ${Number(st.bestScore || 0).toLocaleString()}</span></div>
         </div>`;
+      card.onclick = () => openPlayerProfile(player);
       container.appendChild(card);
     });
   } catch (error) {
+    console.error('Player search error:', error);
     container.innerHTML = '<div class="browse-empty">Could not connect to the online player list.</div>';
   }
+}
+
+function openPlayerProfile(player) {
+  const modal = document.getElementById('stats-modal');
+  if (!modal) return;
+  const st = player.statistics || {};
+  const wins = Number(st.battleWins || 0);
+  const losses = Number(st.battleLosses || 0);
+  const total = wins + losses;
+  const winRate = total ? Math.round((wins / total) * 100) + '%' : '—';
+  const username = String(player.username || 'Unknown');
+  modal.innerHTML = `
+    <h2>PLAYER PROFILE</h2>
+    <div class="menu-content">
+      <div class="stats-profile">
+        <div class="stats-avatar">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : escapeHtml(username.slice(0,1).toUpperCase())}</div>
+        <div>
+          <div class="stats-username">${escapeHtml(username)}</div>
+          <div class="stats-online">ONLINE PLAYER</div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><span>GAMES PLAYED</span><b>${Number(st.gamesPlayed || 0).toLocaleString()}</b></div>
+        <div class="stat-card"><span>COMPLETED</span><b>${Number(st.gamesCompleted || 0).toLocaleString()}</b></div>
+        <div class="stat-card"><span>BEST SCORE</span><b>${Number(st.bestScore || 0).toLocaleString()}</b></div>
+        <div class="stat-card"><span>TOTAL SCORE</span><b>${Number(st.totalScore || 0).toLocaleString()}</b></div>
+        <div class="stat-card"><span>NOTES HIT</span><b>${Number(st.totalNotesHit || 0).toLocaleString()}</b></div>
+        <div class="stat-card"><span>WIN RATE</span><b>${winRate}</b></div>
+      </div>
+      <button class="nav-btn secondary-btn" onclick="toggleMenu('browse-levels-menu')">BACK TO PLAYERS</button>
+    </div>`;
+  toggleMenu('stats-modal');
 }
 
 async function renderLeaderboards() {
@@ -270,17 +313,28 @@ function closeLevelDetail() {
 
 async function loadAdminPanel() {
   const modal = document.getElementById('admin-panel');
-  if (!modal || !getAuthToken()) return;
+  if (!modal) return;
+  if (!getAuthToken()) {
+    modal.innerHTML = '<h2>ADMIN PANEL</h2><div class="menu-content"><div class="browse-empty">Please log in as wCrazyNess first.</div><button class="nav-btn secondary-btn" onclick="toggleMenu(\'main-menu\')">BACK TO MENU</button></div>';
+    toggleMenu('admin-panel');
+    return;
+  }
   try {
-    const check = await authFetch(API_BASE_URL + '/api/admin/check');
-    const checkData = await check.json();
-    if (!checkData.isAdmin) {
-      alert('Admin access required.');
+    const check = await authFetch(API_BASE_URL + '/api/admin/check', { cache: 'no-store' });
+    const checkData = await check.json().catch(() => ({}));
+    if (!check.ok || !checkData.isAdmin) {
+      modal.innerHTML = `<h2>ADMIN PANEL</h2><div class="menu-content"><div class="browse-empty">${escapeHtml(checkData.message || 'Admin access required for this account.')}</div><button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button></div>`;
+      toggleMenu('admin-panel');
       return;
     }
-    const response = await authFetch(API_BASE_URL + '/api/admin/levels');
-    const data = await response.json();
-    const levels = data.levels || [];
+
+    const response = await authFetch(API_BASE_URL + '/api/admin/levels', { cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || ('Admin levels request failed (' + response.status + ').'));
+    }
+
+    const levels = Array.isArray(data.levels) ? data.levels : [];
     modal.innerHTML = `
       <h2>ADMIN PANEL</h2>
       <div class="menu-content">
@@ -293,7 +347,10 @@ async function loadAdminPanel() {
                 <b>${escapeHtml(level.name)}</b>
                 <span>by ${escapeHtml(level.author || 'Unknown')} · ★ ${Number(level.ratingAverage || 0).toFixed(1)}</span>
               </div>
-              <button class="nav-btn ${level.featured ? 'admin-unfeature' : ''}" onclick="toggleFeaturedLevel('${level.id}', ${!level.featured})">${level.featured ? 'UNFEATURE' : 'FEATURE'}</button>
+              <div class="admin-level-actions">
+                <button class="nav-btn ${level.featured ? 'admin-unfeature' : ''}" onclick="toggleFeaturedLevel('${level.id}', ${!level.featured})">${level.featured ? 'UNFEATURE' : 'FEATURE'}</button>
+                <button class="nav-btn admin-delete-btn" onclick="deleteAdminLevel('${level.id}')">DELETE</button>
+              </div>
             </div>
           `).join('') : '<div class="browse-empty">No published levels.</div>'}
         </div>
@@ -301,7 +358,23 @@ async function loadAdminPanel() {
       </div>`;
     toggleMenu('admin-panel');
   } catch (error) {
-    alert('Could not load the admin panel.');
+    console.error('Admin panel error:', error);
+    modal.innerHTML = `<h2>ADMIN PANEL</h2><div class="menu-content"><div class="browse-empty">Could not load the admin panel.<br><small>${escapeHtml(error.message || 'Unknown server error.')}</small></div><button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button></div>`;
+    toggleMenu('admin-panel');
+  }
+}
+
+async function deleteAdminLevel(levelId) {
+  try {
+    const response = await authFetch(API_BASE_URL + '/api/admin/levels/' + encodeURIComponent(levelId), { method: 'DELETE' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) {
+      alert(data.message || 'Could not delete level.');
+      return;
+    }
+    await loadAdminPanel();
+  } catch (error) {
+    alert('Could not connect to the 06-Tiles server.');
   }
 }
 
