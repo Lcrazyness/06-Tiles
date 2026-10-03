@@ -44,12 +44,16 @@ function renderAccountModal() {
     <div class="menu-content">
       <div class="profile-modal-list">
         <div class="profile-row current">
-          <div class="profile-avatar">${user.username.slice(0, 1).toUpperCase()}</div>
+          <div class="profile-avatar profile-avatar-image">${user.profileIcon ? '<img src="' + escapeHtml(user.profileIcon) + '" alt="">' : escapeHtml(user.username.slice(0, 1).toUpperCase())}</div>
           <div style="flex:1;">
             <div class="profile-row-name">${escapeHtml(user.username)}</div>
             <div class="profile-row-tag">Online account</div>
           </div>
         </div>
+      </div>
+      <div class="profile-icon-controls">
+        <label class="nav-btn secondary-btn" for="profile-icon-upload">CHANGE PROFILE ICON</label>
+        <input type="file" id="profile-icon-upload" accept="image/*" style="display:none" onchange="uploadProfileIcon(event)">
       </div>
       <div class="profile-note">Games played: ${(user.statistics || {}).gamesPlayed || 0} · Completed: ${(user.statistics || {}).gamesCompleted || 0} · Best score: ${(user.statistics || {}).bestScore || 0}</div>
       <button class="nav-btn secondary-btn" onclick="logoutAccount()">LOG OUT</button>
@@ -297,4 +301,48 @@ async function openStatsModal() {
       if (el) el.textContent = value;
     });
   }
+}
+
+
+async function uploadProfileIcon(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('Please choose an image.');
+    return;
+  }
+  if (file.size > 1024 * 1024) {
+    alert('Profile icon must be 1MB or smaller.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const icon = e.target.result;
+    if (!getAuthToken() || !API_BASE_URL) {
+      const local = loadProfiles();
+      if (!local[currentProfile]) local[currentProfile] = { customLevels: [] };
+      local[currentProfile].profileIcon = icon;
+      saveProfilesObject(local);
+      profiles = local;
+      renderAccountModal();
+      return;
+    }
+    try {
+      const response = await authFetch(API_BASE_URL + '/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileIcon: icon })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        alert(data.message || 'Could not update profile icon.');
+        return;
+      }
+      saveAuthSession(getAuthToken(), data.user);
+      renderAccountModal();
+    } catch (error) {
+      alert('Could not connect to the 06-Tiles server.');
+    }
+  };
+  reader.readAsDataURL(file);
 }
