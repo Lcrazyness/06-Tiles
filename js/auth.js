@@ -192,7 +192,7 @@ async function beginStatsGame() {
     await authFetch(API_BASE_URL + '/api/stats/game', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ completed: false, score: 0, notesHit: 0 })
+      body: JSON.stringify({ started: true, completed: false, score: 0, notesHit: 0 })
     });
   } catch (error) {
     console.warn('Could not record game start.', error);
