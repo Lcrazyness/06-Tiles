@@ -4,4 +4,4 @@
 // keeps working exactly as before, purely local to this browser.
 // ============================================================================
 
-const API_BASE_URL = ''; // e.g. 'https://extreme-tiles-server.onrender.com' (no trailing slash)
+const API_BASE_URL = 'https://zero6-tiles-backend-1-test.onrender.com'; // no trailing slash
