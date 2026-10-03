@@ -28,7 +28,7 @@ class Particle {
 }
 
 function resetState() {
-  score = 0; tiles = []; particles = []; isDead = false; patternStep = 0; scoreEl.innerText = "0";
+  score = 0; notesHitThisGame = 0; tiles = []; particles = []; isDead = false; patternStep = 0; scoreEl.innerText = "0";
   distanceTraveled = 0; nextSpawnDistance = 0; currentLives = maxLives;
   document.getElementById('lives-count').innerText = currentLives;
   document.getElementById('fps-display').innerText = "60 FPS";
@@ -66,6 +66,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
   lastStartArgs = [mode, isCustom, customIndex, testTiles, testEffects, isCommunity, loadedLevelObj];
   currentMode = mode; isCustomGame = isCustom; gameActive = true;
   resetState();
+  if (!isPlaytesting && !isVerifying && !isBattleMode) beginStatsGame();
   overlays.forEach(id => document.getElementById(id).classList.add('hidden'));
   document.getElementById('editor-ui').classList.add('hidden');
   document.getElementById('lives-display').classList.remove('hidden');
@@ -171,6 +172,23 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
         quitPlaytestOrGame();
       }
 
+      if (!isBattleMode && !isVerifying && customPlayTime >= levelEndTime && tiles.length === 0 && !isDead && gameActive) {
+        clearInterval(customGameInterval);
+        gameActive = false;
+        bgAudio.pause();
+        finishStatsGame(true);
+        finishStatsGame(false);
+  document.getElementById('lives-display').classList.add('hidden');
+        document.getElementById('game-hud').classList.add('hidden');
+        document.getElementById('score-container').classList.add('hidden');
+        document.getElementById('death-title').innerText = 'COMPLETED';
+        document.getElementById('final-score').innerText = 'Score: ' + Math.floor(score);
+        document.getElementById('death-retry-btn').classList.remove('hidden');
+        document.getElementById('death-quit-btn').classList.remove('hidden');
+        document.getElementById('death-stop-playtest-btn').classList.add('hidden');
+        toggleMenu('death-screen');
+      }
+
       if (isBattleMode && !isVerifying && customPlayTime >= levelEndTime && tiles.length === 0 && !isDead && gameActive) {
         clearInterval(customGameInterval);
         gameActive = false;
@@ -262,7 +280,7 @@ window.addEventListener("keydown", (e) => {
           if (activeTiles[0]) firstTileY += speed * subFrameDt;
         }
         if (target && (target === activeTiles[0] || targetY > firstTileY - TILE_H)) {
-          target.interacted = true; score += 10;
+          target.interacted = true; score += 10; notesHitThisGame++;
           for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
         } else if (firstTileY + TILE_H > 0) {
           if (!handleHit()) die("WRONG ORDER!");
