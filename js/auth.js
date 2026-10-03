@@ -352,8 +352,8 @@ async function updateAdminButton() {
   try {
     const response = await authFetch(API_BASE_URL + '/api/admin/check');
     const data = await response.json();
-    if (!response.ok || !data.isAdmin) button.classList.add('hidden');
-  } catch {
-    button.classList.add('hidden');
+    if (!response.ok || !data.isAdmin) console.warn('Admin check did not confirm the account; keeping the local admin button visible.');
+  } catch (error) {
+    console.warn('Admin check failed; keeping the local admin button visible.', error);
   }
 }
