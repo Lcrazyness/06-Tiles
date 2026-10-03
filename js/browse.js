@@ -86,7 +86,7 @@ async function loadBrowseLevelTab(tab) {
   const search = document.getElementById('browse-search-input')?.value || '';
   let levels = await getCommunityLevels(search, tab);
   if (!Array.isArray(levels)) levels = [];
-  if (tab === 'featured') levels = levels.filter(l => Number(l.ratingAverage || 0) >= 4 || Number(l.plays || 0) >= 5);
+  if (tab === 'featured') levels = levels.filter(l => !!l.featured);
   container.innerHTML = '';
   if (!levels.length) {
     container.innerHTML = '<div class="browse-empty">No levels found.</div>';
