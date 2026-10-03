@@ -40,6 +40,8 @@ const patterns = {
 
 // --- core game state ---
 let score = 0, speed = EDITOR_BASE_SPEED, lastTime = 0;
+let notesHitThisGame = 0;
+let statsGameFinalized = false;
 let tiles = [], particles = [], isDead = false, gameActive = false;
 let currentMode = 'practice', patternStep = 0;
 let distanceTraveled = 0, nextSpawnDistance = 0;
