@@ -19,7 +19,8 @@ function renderMyLevels() {
 
 function openBrowseLevels(tab = 'levels') {
   currentBrowseTab = tab;
-  toggleMenu('browse-levels-menu');
+  const menu = document.getElementById('browse-levels-menu');
+  if (menu && menu.classList.contains('hidden')) toggleMenu('browse-levels-menu');
   renderBrowseSection();
 }
 
