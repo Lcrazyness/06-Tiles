@@ -177,8 +177,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
         gameActive = false;
         bgAudio.pause();
         finishStatsGame(true);
-        finishStatsGame(false);
-  document.getElementById('lives-display').classList.add('hidden');
+        document.getElementById('lives-display').classList.add('hidden');
         document.getElementById('game-hud').classList.add('hidden');
         document.getElementById('score-container').classList.add('hidden');
         document.getElementById('death-title').innerText = 'COMPLETED';
@@ -437,6 +436,7 @@ function die(reason) {
     return;
   }
 
+  finishStatsGame(false);
   document.getElementById('lives-display').classList.add('hidden');
   document.getElementById('game-hud').classList.add('hidden');
   document.getElementById('score-container').classList.add('hidden');
