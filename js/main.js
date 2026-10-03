@@ -80,3 +80,13 @@ function loadSavedKeybinds() {
 }
 
 loadSavedKeybinds();
+
+
+// Admin shortcut: pressing 0 opens the admin panel for the wCrazyNess account.
+document.addEventListener('keydown', event => {
+  if (event.key !== '0' || event.repeat) return;
+  const user = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+  if (!user || String(user.username || '').trim().toLowerCase() !== 'wcrazyness' || !token) return;
+  if (typeof loadAdminPanel === 'function') loadAdminPanel();
+});
