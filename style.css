@@ -9,10 +9,10 @@
 
 :root {
   /* --- brand tokens (extends the game's existing neon-arcade identity) --- */
-  --bg-void: #05050a;
-  --bg-panel: #12121c;
-  --bg-panel-raised: #1c1c2c;
-  --bg-panel-hover: #23233a;
+  --bg-void: #10131c;
+  --bg-panel: #1a1f2b;
+  --bg-panel-raised: #252b39;
+  --bg-panel-hover: #30384a;
   --border-soft: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
 
@@ -33,8 +33,8 @@
   --diff-extreme: #ff2d55;
 
   --text-hi: #f4f4fb;
-  --text-mid: #b7b7cc;
-  --text-low: #7d7d95;
+  --text-mid: #c9ccda;
+  --text-low: #9ba1b5;
 
   --font-display: 'Rubik', system-ui, sans-serif;
   --font-mono-display: 'Rubik Mono One', 'Rubik', system-ui, sans-serif;
@@ -95,7 +95,7 @@ button, input { font-family: inherit; }
   position: fixed;
   left: 50%; top: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.16);
   z-index: 10;
   border-radius: var(--radius-sm);
   touch-action: none;
@@ -150,7 +150,7 @@ button, input { font-family: inherit; }
      (e.g. leftover score/HUD text) can show through; the gradient is a
      purely decorative layer on top of that solid base. */
   background-color: var(--bg-void);
-  background-image: radial-gradient(circle at 50% 0%, rgba(60,9,108,0.45), transparent 70%);
+  background-image: radial-gradient(circle at 50% 0%, rgba(90,45,150,0.42), transparent 70%);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 24px 18px;
   animation: overlayIn var(--dur-med) var(--ease-out);
@@ -716,4 +716,29 @@ button, input { font-family: inherit; }
 @media (max-width: 420px) {
   .drawer { width: 82vw; }
   #battle-race-hud { width: 88vw; }
+}
+
+
+/* PLAYER STATS */
+.stats-profile {
+  display:flex; align-items:center; gap:12px; padding:14px;
+  background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:var(--radius-md);
+}
+.stats-avatar {
+  width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg,var(--accent-purple),var(--play-blue)); color:#fff;
+  font-size:20px; font-weight:800;
+}
+.stats-username { font-size:16px; font-weight:800; }
+.stats-online { margin-top:3px; font-size:9px; letter-spacing:1.5px; color:var(--accent-success); }
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.stat-card {
+  padding:14px 12px; background:var(--bg-panel); border:1px solid var(--border-soft);
+  border-radius:var(--radius-md); text-align:center;
+}
+.stat-card span { display:block; font-size:9px; letter-spacing:1px; color:var(--text-low); }
+.stat-card b { display:block; margin-top:5px; font-size:23px; font-variant-numeric:tabular-nums; }
+.stats-login-card {
+  padding:18px; background:var(--bg-panel); border:1px solid var(--border-soft);
+  border-radius:var(--radius-md); color:var(--text-mid); text-align:center; line-height:1.5;
 }
