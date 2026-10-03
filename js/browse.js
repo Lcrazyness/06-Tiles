@@ -37,7 +37,8 @@ function renderBrowseSection() {
   content.innerHTML = `
     <div class="browse-search-row">
       <span class="search-icon">🔎</span>
-      <input type="text" id="browse-search-input" placeholder="${currentBrowseTab === 'players' ? 'Search players...' : currentBrowseTab === 'leaderboards' ? 'Search players...' : 'Search levels...'}" oninput="renderBrowseContent()">
+      <input type="text" id="browse-search-input" placeholder="${currentBrowseTab === 'players' ? 'Search players...' : currentBrowseTab === 'leaderboards' ? 'Search players...' : 'Search levels...'}" onkeydown="if(event.key==='Enter') renderBrowseContent()">
+      <button class="nav-btn browse-search-button" type="button" onclick="renderBrowseContent()">SEARCH</button>
     </div>
     <div class="pill-tabs browse-main-tabs">
       <button class="pill-tab ${currentBrowseTab === 'levels' ? 'active' : ''}" onclick="openBrowseLevels('levels')">Levels</button>
