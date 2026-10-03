@@ -23,6 +23,12 @@ function openBrowseLevels(tab = 'levels') {
   renderBrowseSection();
 }
 
+function renderBrowseContent() {
+  if (currentBrowseTab === 'levels') renderBrowseLevels();
+  else if (currentBrowseTab === 'players') renderPlayers();
+  else renderLeaderboards();
+}
+
 function renderBrowseSection() {
   const menu = document.getElementById('browse-levels-menu');
   if (!menu) return;
@@ -31,7 +37,7 @@ function renderBrowseSection() {
   content.innerHTML = `
     <div class="browse-search-row">
       <span class="search-icon">🔎</span>
-      <input type="text" id="browse-search-input" placeholder="Search levels or players..." oninput="renderBrowseSection()">
+      <input type="text" id="browse-search-input" placeholder="Search levels or players..." oninput="renderBrowseContent()">
     </div>
     <div class="pill-tabs browse-main-tabs">
       <button class="pill-tab ${currentBrowseTab === 'levels' ? 'active' : ''}" onclick="openBrowseLevels('levels')">Levels</button>
