@@ -1,54 +1,63 @@
+// ============================================================================
+// browse.js — My Levels, Browse (levels / leaderboards / players), level
+// detail sheet, and the admin panel. Cards use the Magic-Tiles song-row look.
+// ============================================================================
 let currentBrowseTab = 'levels';
+let currentLevelSort = 'recent';
+let currentMyTab = 'device';
 let levelDetailReturnTo = 'my-levels-menu';
+let browseRequestId = 0;
 
-function openMyLevels() {
-  toggleMenu('my-levels-menu');
-  renderMyLevels();
+function errorBox(msg, retry) {
+  return '<div class="empty">' + escapeHtml(msg) + (retry ? '<br><button class="btn btn-ghost small" onclick="' + retry + '">Try again</button>' : '') + '</div>';
 }
 
-function renderMyLevels() {
-  const container = document.getElementById('custom-levels-container');
-  const levels = getCustomLevels();
-  container.innerHTML = '';
-  if (levels.length === 0) {
-    container.innerHTML = '<div class="browse-empty">No levels yet — tap CREATE LEVEL to make one.</div>';
+// ---------------- My Levels ----------------
+function openMyLevels() { toggleMenu('my-levels-menu'); renderMyLevels(); }
+
+async function renderMyLevels() {
+  const menu = document.getElementById('my-levels-menu');
+  menu.innerHTML = screenHtml('MY LEVELS', null, `
+    <div class="tabs"><button class="tab ${currentMyTab === 'device' ? 'active' : ''}" onclick="currentMyTab='device';renderMyLevels()">On this device</button>
+    <button class="tab ${currentMyTab === 'online' ? 'active' : ''}" onclick="currentMyTab='online';renderMyLevels()">Published</button></div>
+    <div id="my-levels-list" class="song-list"></div>`, '<button class="btn small" onclick="startEditor()">＋ New</button>');
+  const list = document.getElementById('my-levels-list');
+  if (currentMyTab === 'device') {
+    const levels = getCustomLevels();
+    if (!levels.length) { list.innerHTML = '<div class="empty">No levels yet.<br>Tap <b>＋ New</b> to make one.</div>'; return; }
+    levels.slice().reverse().forEach(l => list.appendChild(renderLevelCard(l, 'local')));
     return;
   }
-  levels.slice().reverse().forEach(level => container.appendChild(renderLevelCard(level, false)));
+  if (!getAuthToken()) { list.innerHTML = '<div class="empty">Log in to see levels you published.<br><button class="btn btn-ghost small" onclick="openProfileModal()">Log in</button></div>'; return; }
+  list.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const levels = await getMyPublishedLevels();
+    list.innerHTML = '';
+    if (!levels.length) { list.innerHTML = '<div class="empty">You haven\'t published anything yet.</div>'; return; }
+    levels.forEach(l => list.appendChild(renderLevelCard(l, 'mine-online')));
+  } catch (e) { list.innerHTML = errorBox(e.message, 'renderMyLevels()'); }
 }
 
+// ---------------- Browse ----------------
 function openBrowseLevels(tab = 'levels') {
-  currentBrowseTab = tab;
-  const menu = document.getElementById('browse-levels-menu');
-  if (menu && menu.classList.contains('hidden')) toggleMenu('browse-levels-menu');
+  currentBrowseTab = ['levels', 'leaderboards', 'players'].includes(tab) ? tab : 'levels';
+  toggleMenu('browse-levels-menu');
   renderBrowseSection();
 }
 
 function renderBrowseContent() {
   if (currentBrowseTab === 'levels') renderBrowseLevels();
   else if (currentBrowseTab === 'players') renderPlayers();
-  else renderLeaderboards();
 }
 
 function renderBrowseSection() {
   const menu = document.getElementById('browse-levels-menu');
-  if (!menu) return;
-  const content = menu.querySelector('.menu-content');
-  if (!content) return;
-  content.innerHTML = `
-    <div class="browse-search-row">
-      <span class="search-icon">🔎</span>
-      <input type="text" id="browse-search-input" placeholder="${currentBrowseTab === 'players' ? 'Search players...' : currentBrowseTab === 'leaderboards' ? 'Search players...' : 'Search levels...'}" onkeydown="if(event.key==='Enter') renderBrowseContent()">
-      <button class="nav-btn browse-search-button" type="button" onclick="renderBrowseContent()">SEARCH</button>
-    </div>
-    <div class="pill-tabs browse-main-tabs">
-      <button class="pill-tab ${currentBrowseTab === 'levels' ? 'active' : ''}" onclick="openBrowseLevels('levels')">Levels</button>
-      <button class="pill-tab ${currentBrowseTab === 'leaderboards' ? 'active' : ''}" onclick="openBrowseLevels('leaderboards')">Leaderboards</button>
-      <button class="pill-tab ${currentBrowseTab === 'players' ? 'active' : ''}" onclick="openBrowseLevels('players')">Players</button>
-    </div>
+  const tabBtn = (id, label) => `<button class="tab ${currentBrowseTab === id ? 'active' : ''}" onclick="openBrowseLevels('${id}')">${label}</button>`;
+  menu.innerHTML = screenHtml('BROWSE', null, `
+    <div class="tabs">${tabBtn('levels', 'Levels')}${tabBtn('leaderboards', 'Leaderboards')}${tabBtn('players', 'Players')}</div>
+    ${currentBrowseTab === 'leaderboards' ? '' : `<div class="searchbar"><span>🔎</span><input type="text" id="browse-search-input" placeholder="${currentBrowseTab === 'players' ? 'Search players…' : 'Search levels or authors…'}" onkeydown="if(event.key==='Enter')renderBrowseContent()"><button class="btn small" onclick="renderBrowseContent()">Search</button></div>`}
     <div id="browse-sub-tabs"></div>
-    <div id="browse-content" class="grid-levels" style="max-height:58vh; overflow-y:auto; padding-right:4px;"></div>
-    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top:15px;">BACK TO MENU</button>`;
+    <div id="browse-content" class="song-list"></div>`);
   if (currentBrowseTab === 'levels') renderBrowseLevels();
   if (currentBrowseTab === 'leaderboards') renderLeaderboards();
   if (currentBrowseTab === 'players') renderPlayers();
@@ -58,334 +67,174 @@ async function renderBrowseLevels() {
   const container = document.getElementById('browse-content');
   const sub = document.getElementById('browse-sub-tabs');
   if (!container) return;
-  if (sub) sub.innerHTML = `
-    <div class="pill-tabs">
-      <button class="pill-tab active">Recent</button>
-      <button class="pill-tab" onclick="loadBrowseLevelTab('trending')">Trending</button>
-      <button class="pill-tab" onclick="loadBrowseLevelTab('rated')">Top Rated</button>
-      <button class="pill-tab" onclick="loadBrowseLevelTab('featured')">Featured</button>
-    </div>`;
-  container.innerHTML = '<div class="browse-empty">Loading levels…</div>';
+  const sorts = [['recent', 'Recent'], ['trending', 'Trending'], ['rated', 'Top Rated'], ['featured', 'Featured']];
+  sub.innerHTML = '<div class="tabs small">' + sorts.map(([id, l]) => `<button class="tab ${currentLevelSort === id ? 'active' : ''}" onclick="currentLevelSort='${id}';renderBrowseLevels()">${l}</button>`).join('') + '</div>';
+  container.innerHTML = '<div class="empty">Loading levels…</div>';
+  const reqId = ++browseRequestId;
   const search = document.getElementById('browse-search-input')?.value || '';
-  let levels = await getCommunityLevels(search, 'recent');
-  if (!Array.isArray(levels)) levels = [];
-  if (search.trim()) {
-    const q = search.trim().toLowerCase();
-    levels = levels.filter(l => String(l.name || '').toLowerCase().includes(q) || String(l.author || '').toLowerCase().includes(q));
-  }
-  container.innerHTML = '';
-  if (!levels.length) {
-    container.innerHTML = '<div class="browse-empty">No published levels found.</div>';
-    return;
-  }
-  levels.forEach(level => container.appendChild(renderLevelCard(level, true)));
+  try {
+    const levels = await getCommunityLevels(search, currentLevelSort);
+    if (reqId !== browseRequestId) return;
+    container.innerHTML = '';
+    if (!levels.length) { container.innerHTML = '<div class="empty">No levels found.</div>'; return; }
+    levels.forEach(level => container.appendChild(renderLevelCard(level, 'community')));
+  } catch (e) { if (reqId === browseRequestId) container.innerHTML = errorBox(e.message, 'renderBrowseLevels()'); }
 }
 
-async function loadBrowseLevelTab(tab) {
-  const container = document.getElementById('browse-content');
-  if (!container) return;
-  container.innerHTML = '<div class="browse-empty">Loading levels…</div>';
-  const search = document.getElementById('browse-search-input')?.value || '';
-  let levels = await getCommunityLevels(search, tab);
-  if (!Array.isArray(levels)) levels = [];
-  if (tab === 'featured') levels = levels.filter(l => !!l.featured);
-  container.innerHTML = '';
-  if (!levels.length) {
-    container.innerHTML = '<div class="browse-empty">No levels found.</div>';
-    return;
-  }
-  levels.forEach(level => container.appendChild(renderLevelCard(level, true)));
+function playerRow(player, rankText, subText, valueText) {
+  const username = String(player.username || 'Unknown');
+  const row = document.createElement('div');
+  row.className = 'song-row player-row';
+  row.innerHTML = `<div class="song-art" style="${player.profileIcon ? '' : 'background:' + artGradient(username)}">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(username.slice(0, 1).toUpperCase())}</div>
+    <div class="song-info"><div class="song-title">${rankText}${escapeHtml(username)}</div><div class="song-sub">${subText}</div></div><div class="player-value">${valueText}</div>`;
+  row.onclick = () => openPlayerProfile(player);
+  return row;
 }
 
 async function renderPlayers() {
   const container = document.getElementById('browse-content');
-  if (!container) return;
-  container.innerHTML = '<div class="browse-empty">Searching players…</div>';
+  document.getElementById('browse-sub-tabs').innerHTML = '';
+  container.innerHTML = '<div class="empty">Searching players…</div>';
   const search = (document.getElementById('browse-search-input')?.value || '').trim();
   try {
-    const response = await fetch(API_BASE_URL + '/api/players?search=' + encodeURIComponent(search), {
-      cache: 'no-store'
-    });
-    let data = [];
-    try { data = await response.json(); } catch {}
-    if (!response.ok) {
-      container.innerHTML = '<div class="browse-empty">' + escapeHtml(data?.message || 'Could not load players.') + '</div>';
-      return;
-    }
-    const players = Array.isArray(data) ? data : [];
+    const players = await apiRequest('/api/players?search=' + encodeURIComponent(search));
     container.innerHTML = '';
-    if (!players.length) {
-      container.innerHTML = '<div class="browse-empty">' + (search ? 'No players matched “' + escapeHtml(search) + '”.' : 'No players found.') + '</div>';
-      return;
-    }
-    players.forEach(player => {
-      const card = document.createElement('div');
-      card.className = 'level-card player-browser-card';
-      const st = player.statistics || {};
-      const username = String(player.username || 'Unknown');
-      card.innerHTML = `
-        <div class="level-card-thumb">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(username.slice(0,1).toUpperCase())}</div>
-        <div class="level-card-body">
-          <div class="level-card-title-row"><span class="level-card-title">${escapeHtml(username)}</span></div>
-          <div class="level-card-author">Online player</div>
-          <div class="level-card-stats"><span>Games ${Number(st.gamesPlayed || 0).toLocaleString()}</span><span>Best ${Number(st.bestScore || 0).toLocaleString()}</span></div>
-        </div>`;
-      card.onclick = () => openPlayerProfile(player);
-      container.appendChild(card);
-    });
-  } catch (error) {
-    console.error('Player search error:', error);
-    container.innerHTML = '<div class="browse-empty">Could not connect to the online player list.</div>';
-  }
+    if (!players.length) { container.innerHTML = '<div class="empty">No players found.</div>'; return; }
+    players.forEach(p => container.appendChild(playerRow(p, '', 'Games ' + Number(p.statistics.gamesPlayed || 0).toLocaleString(), '★ ' + Number(p.statistics.bestScore || 0).toLocaleString())));
+  } catch (e) { container.innerHTML = errorBox(e.message, 'renderPlayers()'); }
 }
 
 function openPlayerProfile(player) {
-  const modal = document.getElementById('stats-modal');
-  if (!modal) return;
-  const st = player.statistics || {};
-  const wins = Number(st.battleWins || 0);
-  const losses = Number(st.battleLosses || 0);
-  const total = wins + losses;
-  const winRate = total ? Math.round((wins / total) * 100) + '%' : '—';
   const username = String(player.username || 'Unknown');
-  modal.innerHTML = `
-    <h2>PLAYER PROFILE</h2>
-    <div class="menu-content">
-      <div class="stats-profile">
-        <div class="stats-avatar">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : escapeHtml(username.slice(0,1).toUpperCase())}</div>
-        <div>
-          <div class="stats-username">${escapeHtml(username)}</div>
-          <div class="stats-online">ONLINE PLAYER</div>
-        </div>
-      </div>
-      <div class="stats-grid">
-        <div class="stat-card"><span>GAMES PLAYED</span><b>${Number(st.gamesPlayed || 0).toLocaleString()}</b></div>
-        <div class="stat-card"><span>COMPLETED</span><b>${Number(st.gamesCompleted || 0).toLocaleString()}</b></div>
-        <div class="stat-card"><span>BEST SCORE</span><b>${Number(st.bestScore || 0).toLocaleString()}</b></div>
-        <div class="stat-card"><span>TOTAL SCORE</span><b>${Number(st.totalScore || 0).toLocaleString()}</b></div>
-        <div class="stat-card"><span>NOTES HIT</span><b>${Number(st.totalNotesHit || 0).toLocaleString()}</b></div>
-        <div class="stat-card"><span>WIN RATE</span><b>${winRate}</b></div>
-      </div>
-      <button class="nav-btn secondary-btn" onclick="toggleMenu('browse-levels-menu')">BACK TO PLAYERS</button>
-    </div>`;
+  document.getElementById('stats-modal').innerHTML = screenHtml('PLAYER', "toggleMenu('browse-levels-menu')", `<div class="panel profile-hero"><div class="avatar big">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(username)}</div><div class="hero-sub">Online player</div></div></div>` + statsGridHtml(player.statistics || {}));
   toggleMenu('stats-modal');
 }
 
 async function renderLeaderboards() {
-  const container = document.getElementById('browse-content');
-  const sub = document.getElementById('browse-sub-tabs');
-  if (!container) return;
-  if (sub) sub.innerHTML = `
-    <div class="pill-tabs">
-      <button class="pill-tab active" onclick="loadLeaderboard('bestScore')">Best Score</button>
-      <button class="pill-tab" onclick="loadLeaderboard('totalScore')">Total Score</button>
-      <button class="pill-tab" onclick="loadLeaderboard('notesHit')">Notes Hit</button>
-      <button class="pill-tab" onclick="loadLeaderboard('gamesPlayed')">Games Played</button>
-    </div>`;
+  document.getElementById('browse-sub-tabs').innerHTML = '<div class="tabs small">' +
+    [['bestScore', 'Best Score'], ['totalScore', 'Total'], ['notesHit', 'Notes'], ['battleWins', 'Battle Wins']].map(([id, l]) => `<button class="tab" data-sort="${id}" onclick="loadLeaderboard('${id}')">${l}</button>`).join('') + '</div>';
   await loadLeaderboard('bestScore');
 }
 
 async function loadLeaderboard(sort) {
   const container = document.getElementById('browse-content');
-  if (!container) return;
-  container.innerHTML = '<div class="browse-empty">Loading leaderboard…</div>';
+  document.querySelectorAll('#browse-sub-tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.sort === sort));
+  container.innerHTML = '<div class="empty">Loading leaderboard…</div>';
   try {
-    const response = await fetch(API_BASE_URL + '/api/leaderboards?sort=' + encodeURIComponent(sort));
-    const players = response.ok ? await response.json() : [];
+    const players = await apiRequest('/api/leaderboards?sort=' + encodeURIComponent(sort));
     container.innerHTML = '';
-    players.forEach((player, index) => {
-      const st = player.statistics || {};
-      const value = sort === 'totalScore' ? st.totalScore : sort === 'notesHit' ? st.totalNotesHit : sort === 'gamesPlayed' ? st.gamesPlayed : st.bestScore;
-      const card = document.createElement('div');
-      card.className = 'level-card leaderboard-card';
-      card.innerHTML = `
-        <div class="leaderboard-rank">#${index + 1}</div>
-        <div class="level-card-thumb">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(player.username.slice(0,1).toUpperCase())}</div>
-        <div class="level-card-body">
-          <div class="level-card-title-row"><span class="level-card-title">${escapeHtml(player.username)}</span></div>
-          <div class="level-card-author">${sort === 'bestScore' ? 'Best score' : sort === 'totalScore' ? 'Total score' : sort === 'notesHit' ? 'Notes hit' : 'Games played'}</div>
-          <div class="level-card-stats"><span>★ ${Number(value || 0).toLocaleString()}</span></div>
-        </div>`;
-      container.appendChild(card);
+    if (!players.length) { container.innerHTML = '<div class="empty">No players have stats yet.</div>'; return; }
+    players.forEach((p, i) => {
+      const st = p.statistics || {};
+      const value = sort === 'totalScore' ? st.totalScore : sort === 'notesHit' ? st.totalNotesHit : sort === 'battleWins' ? st.battleWins : st.bestScore;
+      container.appendChild(playerRow(p, '<span class="rank">#' + (i + 1) + '</span> ', 'Games ' + Number(st.gamesPlayed || 0).toLocaleString(), '★ ' + Number(value || 0).toLocaleString()));
     });
-    if (!players.length) container.innerHTML = '<div class="browse-empty">No players have stats yet.</div>';
-  } catch (error) {
-    container.innerHTML = '<div class="browse-empty">Could not load the leaderboard.</div>';
-  }
+  } catch (e) { container.innerHTML = errorBox(e.message, "loadLeaderboard('" + sort + "')"); }
 }
 
-function renderLevelCard(level, fromCommunity) {
+// ---------------- Level cards (Magic Tiles song rows) ----------------
+function renderLevelCard(level, source) {
   const diff = estimateDifficulty(level);
   const avg = Number(level.ratingAverage || getAvgRating(level) || 0);
-  const card = document.createElement('div');
-  card.className = 'level-card song-card';
-  card.style.borderLeftColor = `var(--diff-${diff.toLowerCase()})`;
-  card.innerHTML = `
-    <div class="song-card-icon">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : (fromCommunity ? '🎵' : '📁')}</div>
-    <div class="song-card-main">
-      <div class="song-card-title">${escapeHtml(level.name)}</div>
-      <div class="song-card-artist">${escapeHtml(level.author || 'You')}</div>
-      <div class="song-card-meta">
-        <span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span>
-        <span>★ ${avg ? avg.toFixed(1) : '—'}</span>
-        <span>▶ ${level.plays || 0}</span>
-      </div>
+  const row = document.createElement('div');
+  row.className = 'song-row';
+  row.innerHTML = `
+    <div class="song-art" style="${level.icon ? '' : 'background:' + artGradient(level.name)}">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : '♪'}<span class="speaker">🔊</span></div>
+    <div class="song-info">
+      <div class="song-title">${escapeHtml(level.name)}</div>
+      <div class="song-sub">${escapeHtml(level.author || 'You')}</div>
+      <div class="song-meta"><span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span><span>★ ${avg ? avg.toFixed(1) : '—'}</span><span>▶ ${level.plays || 0}</span>${level.featured ? '<span class="feat">FEATURED</span>' : ''}</div>
     </div>
-    <button class="song-card-play" aria-label="Play ${escapeHtml(level.name)}">▶</button>`;
-  card.onclick = () => openLevelDetail(level, fromCommunity);
-  return card;
+    <button class="play-btn">PLAY</button>`;
+  row.onclick = () => openLevelDetail(level, source);
+  row.querySelector('.play-btn').onclick = (e) => { e.stopPropagation(); playLevelEntry(level, source); };
+  return row;
 }
 
-function openLevelDetail(level, fromCommunity) {
-  levelDetailReturnTo = fromCommunity ? 'browse-levels-menu' : 'my-levels-menu';
-  const diff = estimateDifficulty(level);
-  const avg = Number(level.ratingAverage || getAvgRating(level) || 0);
-  document.getElementById('level-detail-title').innerText = level.name;
-  const body = document.getElementById('level-detail-body');
-  body.innerHTML = '';
-
-  const header = document.createElement('div');
-  header.className = 'level-detail-header';
-  header.innerHTML = `
-    <div class="level-card-thumb">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : (fromCommunity ? '🌐' : '📁')}</div>
-    <div>
-      <div class="level-card-title-row"><b style="font-size:16px;">${escapeHtml(level.name)}</b> <span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span></div>
-      <div class="level-card-author">by ${escapeHtml(level.author || 'You')} · ${(level.data || []).length} tiles</div>
-    </div>`;
-  body.appendChild(header);
-
-  const statsRow = document.createElement('div');
-  statsRow.className = 'level-card-stats';
-  statsRow.style.justifyContent = 'center';
-  statsRow.innerHTML = `<span class="star">★ ${avg ? avg.toFixed(1) : 'No ratings'}</span><span>▶ ${level.plays || 0} plays</span><span>❤️ ${level.lives || 3} lives</span>`;
-  body.appendChild(statsRow);
-
-  if (fromCommunity) {
-    const rateWrap = document.createElement('div');
-    rateWrap.className = 'level-detail-rate';
-    for (let i = 1; i <= 5; i++) {
-      const star = document.createElement('span');
-      star.className = 'rate-star';
-      star.textContent = '★';
-      star.onclick = async () => {
-        await rateLevel(level.id, i, true);
-        const updated = (await getCommunityLevels('', 'recent')).find(l => l.id === level.id);
-        if (updated) openLevelDetail(updated, true);
-      };
-      rateWrap.appendChild(star);
-    }
-    body.appendChild(rateWrap);
-  }
-
-  const playBtn = document.createElement('button');
-  playBtn.className = 'nav-btn';
-  playBtn.style.cssText = 'background:var(--play-blue); color:#fff;';
-  playBtn.textContent = '▶ PLAY';
-  playBtn.onclick = () => {
-    registerPlay(level.id, fromCommunity);
-    startGame(level.name, true, -1, level.data, level.effects || [], fromCommunity, level);
-  };
-  body.appendChild(playBtn);
-
-  if (!fromCommunity) {
-    const editBtn = document.createElement('button');
-    editBtn.className = 'nav-btn secondary-btn';
-    editBtn.textContent = '✎ EDIT';
-    editBtn.onclick = () => startEditor(level);
-    body.appendChild(editBtn);
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'nav-btn';
-    delBtn.style.cssText = 'background:var(--accent-danger); color:#fff;';
-    delBtn.textContent = 'DELETE';
-    delBtn.onclick = async () => {
-      if (await deleteCustomLevel(level.id)) closeLevelDetail();
-    };
-    body.appendChild(delBtn);
-  }
-
-  toggleMenu('level-detail-menu');
-}
-
-function closeLevelDetail() {
-  toggleMenu(levelDetailReturnTo);
-  if (levelDetailReturnTo === 'my-levels-menu') renderMyLevels();
-  else renderBrowseSection();
-}
-
-async function loadAdminPanel() {
-  const modal = document.getElementById('admin-panel');
-  if (!modal) return;
-  if (!getAuthToken()) {
-    modal.innerHTML = '<h2>ADMIN PANEL</h2><div class="menu-content"><div class="browse-empty">Please log in as wCrazyNess first.</div><button class="nav-btn secondary-btn" onclick="toggleMenu(\'main-menu\')">BACK TO MENU</button></div>';
-    toggleMenu('admin-panel');
+async function playLevelEntry(level, source) {
+  levelDetailReturnTo = source === 'local' ? 'my-levels-menu' : 'browse-levels-menu';
+  if (source === 'local') {
+    registerPlay(level.id, false);
+    currentEditingId = null;
+    startGame(level.name, true, -1, level.data, level.effects || [], false, level);
     return;
   }
   try {
-    const response = await authFetch(API_BASE_URL + '/api/admin/levels', { cache: 'no-store' });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || ('Admin levels request failed (' + response.status + ').'));
-    }
+    toast('Loading level…');
+    const full = level.data ? level : await getCommunityLevel(level.id);
+    registerPlay(level.id, true);
+    startGame(full.name, true, -1, full.data, full.effects || [], true, full);
+  } catch (e) { toast(e.message, 'bad'); }
+}
 
-    const levels = Array.isArray(data.levels) ? data.levels : [];
-    modal.innerHTML = `
-      <h2>ADMIN PANEL</h2>
-      <div class="menu-content">
-        <div class="profile-note">Signed in as wCrazyNess · Admin controls</div>
-        <div class="admin-level-list">
-          ${levels.length ? levels.map(level => `
-            <div class="admin-level-row">
-              <div class="level-card-thumb">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : '📁'}</div>
-              <div class="admin-level-info">
-                <b>${escapeHtml(level.name)}</b>
-                <span>by ${escapeHtml(level.author || 'Unknown')} · ★ ${Number(level.ratingAverage || 0).toFixed(1)}</span>
-              </div>
-              <div class="admin-level-actions">
-                <button class="nav-btn ${level.featured ? 'admin-unfeature' : ''}" onclick="toggleFeaturedLevel('${level.id}', ${!level.featured})">${level.featured ? 'UNFEATURE' : 'FEATURE'}</button>
-                <button class="nav-btn admin-delete-btn" onclick="deleteAdminLevel('${level.id}')">DELETE</button>
-              </div>
-            </div>
-          `).join('') : '<div class="browse-empty">No published levels.</div>'}
-        </div>
-        <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button>
-      </div>`;
-    toggleMenu('admin-panel');
-  } catch (error) {
-    console.error('Admin panel error:', error);
-    modal.innerHTML = `<h2>ADMIN PANEL</h2><div class="menu-content"><div class="browse-empty">Could not load the admin panel.<br><small>${escapeHtml(error.message || 'Unknown server error.')}</small></div><button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button></div>`;
-    toggleMenu('admin-panel');
-  }
+function openLevelDetail(level, source) {
+  const online = source !== 'local';
+  levelDetailReturnTo = source === 'community' ? 'browse-levels-menu' : 'my-levels-menu';
+  const diff = estimateDifficulty(level);
+  const avg = Number(level.ratingAverage || getAvgRating(level) || 0);
+  const tiles = level.tileCount || (level.data || []).length;
+  const body = `
+    <div class="panel detail-head"><div class="song-art" style="${level.icon ? '' : 'background:' + artGradient(level.name)}">${level.icon ? '<img src="' + escapeHtml(level.icon) + '" alt="">' : '♪'}</div>
+      <div><div class="hero-name">${escapeHtml(level.name)}</div><div class="hero-sub">by ${escapeHtml(level.author || 'You')}</div><div class="song-meta"><span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span></div></div></div>
+    <div class="stats-grid three"><div class="stat-card"><span>TILES</span><b>${tiles}</b></div><div class="stat-card"><span>RATING</span><b>${avg ? avg.toFixed(1) : '—'}</b></div><div class="stat-card"><span>PLAYS</span><b>${level.plays || 0}</b></div></div>
+    ${source === 'community' ? '<div class="rate-row" id="rate-row">' + [1, 2, 3, 4, 5].map(i => '<span class="rate-star" data-v="' + i + '">★</span>').join('') + '</div><div class="note center">Tap a star to rate</div>' : ''}
+    <button class="btn btn-play" id="detail-play">▶ PLAY</button>
+    ${source === 'local' ? '<button class="btn btn-ghost" id="detail-edit">✎ Edit</button><button class="btn btn-danger" id="detail-del">Delete from device</button>' : ''}
+    ${source === 'mine-online' ? '<button class="btn btn-danger" id="detail-unpub">Remove from Browse</button>' : ''}`;
+  document.getElementById('level-detail-menu').innerHTML = screenHtml('LEVEL', 'closeLevelDetail()', body);
+  toggleMenu('level-detail-menu');
+  document.getElementById('detail-play').onclick = () => playLevelEntry(level, source);
+  const q = id => document.getElementById(id);
+  if (q('detail-edit')) q('detail-edit').onclick = () => { currentEditingId = level.id; startEditor(level); };
+  if (q('detail-del')) q('detail-del').onclick = async () => { if (await deleteCustomLevel(level.id)) closeLevelDetail(); };
+  if (q('detail-unpub')) q('detail-unpub').onclick = async () => {
+    if (!(await uiConfirm('Remove "' + level.name + '" from Browse for everyone?', 'Remove', true))) return;
+    try { await apiRequest('/api/levels/' + encodeURIComponent(level.id), { method: 'DELETE', auth: true }); toast('Removed.', 'good'); closeLevelDetail(); }
+    catch (e) { toast(e.message, 'bad'); }
+  };
+  document.querySelectorAll('#rate-row .rate-star').forEach(star => {
+    star.onmouseenter = () => document.querySelectorAll('#rate-row .rate-star').forEach(s => s.classList.toggle('filled', Number(s.dataset.v) <= Number(star.dataset.v)));
+    star.onclick = async () => {
+      try { const r = await rateLevel(level.id, Number(star.dataset.v)); toast('Thanks! Average is now ★ ' + Number(r.ratingAverage).toFixed(1), 'good'); level.ratingAverage = r.ratingAverage; openLevelDetail(level, source); }
+      catch (e) { toast(e.message, 'bad'); }
+    };
+  });
+}
+
+function closeLevelDetail() {
+  if (levelDetailReturnTo === 'my-levels-menu') { toggleMenu('my-levels-menu'); renderMyLevels(); }
+  else { toggleMenu('browse-levels-menu'); renderBrowseSection(); }
+}
+
+// ---------------- Admin panel ----------------
+let adminSearch = '';
+async function loadAdminPanel() {
+  const modal = document.getElementById('admin-panel');
+  const draw = (inner) => { modal.innerHTML = screenHtml('ADMIN', null, inner, '<button class="btn small" onclick="loadAdminPanel()">↻</button>'); };
+  toggleMenu('admin-panel');
+  if (!getAuthToken()) { draw('<div class="empty">Log in as an admin first.</div>'); return; }
+  draw('<div class="empty">Loading…</div>');
+  try {
+    const [overview, data] = await Promise.all([
+      apiRequest('/api/admin/overview', { auth: true }),
+      apiRequest('/api/admin/levels?search=' + encodeURIComponent(adminSearch), { auth: true })
+    ]);
+    const levels = data.levels || [];
+    draw(`<div class="stats-grid three"><div class="stat-card"><span>PLAYERS</span><b>${overview.users}</b></div><div class="stat-card"><span>LEVELS</span><b>${overview.levels}</b></div><div class="stat-card"><span>ONLINE NOW</span><b>${overview.onlineNow}</b></div></div>
+      <div class="searchbar"><span>🔎</span><input id="admin-search" placeholder="Search levels or authors…" value="${escapeHtml(adminSearch)}" onkeydown="if(event.key==='Enter'){adminSearch=this.value;loadAdminPanel()}"></div>
+      <div class="song-list">${levels.length ? levels.map(l => `
+        <div class="song-row admin-row"><div class="song-art" style="${l.icon ? '' : 'background:' + artGradient(l.name)}">${l.icon ? '<img src="' + escapeHtml(l.icon) + '" alt="">' : '♪'}</div>
+          <div class="song-info"><div class="song-title">${escapeHtml(l.name)}</div><div class="song-sub">by ${escapeHtml(l.author)} · ★ ${Number(l.ratingAverage || 0).toFixed(1)} · ▶ ${l.plays}</div></div>
+          <div class="admin-actions"><button class="btn small ${l.featured ? 'btn-ghost' : ''}" onclick="toggleFeaturedLevel('${l.id}', ${!l.featured})">${l.featured ? 'Unfeature' : 'Feature'}</button><button class="btn small btn-danger" onclick="deleteAdminLevel('${l.id}', this)">Delete</button></div></div>`).join('') : '<div class="empty">No levels.</div>'}</div>`);
+  } catch (e) { draw(errorBox(e.message, 'loadAdminPanel()')); }
 }
 
 async function deleteAdminLevel(levelId) {
-  try {
-    const response = await authFetch(API_BASE_URL + '/api/admin/levels/' + encodeURIComponent(levelId), { method: 'DELETE' });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.success) {
-      alert(data.message || 'Could not delete level.');
-      return;
-    }
-    await loadAdminPanel();
-  } catch (error) {
-    alert('Could not connect to the 06-Tiles server.');
-  }
+  if (!(await uiConfirm('Delete this level for everyone?', 'Delete', true))) return;
+  try { await apiRequest('/api/admin/levels/' + encodeURIComponent(levelId), { method: 'DELETE', auth: true }); toast('Deleted.', 'good'); loadAdminPanel(); }
+  catch (e) { toast(e.message, 'bad'); }
 }
-
 async function toggleFeaturedLevel(levelId, featured) {
-  try {
-    const response = await authFetch(API_BASE_URL + '/api/admin/levels/' + encodeURIComponent(levelId) + '/feature', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ featured })
-    });
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      alert(data.message || 'Could not update featured status.');
-      return;
-    }
-    loadAdminPanel();
-  } catch (error) {
-    alert('Could not connect to the 06-Tiles server.');
-  }
+  try { await apiRequest('/api/admin/levels/' + encodeURIComponent(levelId) + '/feature', { method: 'PATCH', auth: true, body: { featured } }); loadAdminPanel(); }
+  catch (e) { toast(e.message, 'bad'); }
 }
