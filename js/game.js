@@ -1,9 +1,20 @@
 // ============================================================================
-// game.js — the actual rhythm-game engine: entities, the render/update loop,
-// level playback (built-in + custom JSON levels), effect firing, and the
-// death/retry/quit flow. Also owns starting and stopping an editor session,
-// since "start editing" and "stop playing" are two sides of the same state
-// machine.
+// game.js — the rhythm-game engine: entities, the render/update loop, level
+// playback (built-in + custom levels), effect firing, input, pause, and the
+// death/retry/quit flow. Also owns starting/stopping an editor session.
+//
+// What changed in this rewrite (all of it is glitch-fixing — tile rules,
+// speeds, hit windows and tile visuals are untouched):
+//   * ONE clock. Level time, tile movement and effects now all advance from the
+//     same animation-frame delta. Before, a 16ms setInterval drove spawning
+//     while requestAnimationFrame drove movement, so they drifted apart and
+//     tiles could spawn out of order after a hitch ("WRONG ORDER!").
+//   * Exactly one loop can ever run (startLoop/stopLoop). Restarting a level
+//     or re-entering the editor used to stack extra loops.
+//   * The frame limiter no longer drops random frames on 60Hz screens.
+//   * Touch / mouse input (it was keyboard-only), pause (Esc / button / tab
+//     switch), and crisp rendering on big / hi-dpi screens.
+//   * Hotkeys are ignored while typing in a text box.
 // ============================================================================
 
 class Tile {
@@ -24,30 +35,50 @@ class Particle {
     this.vy = (Math.random() - 0.5) * 15;
     this.life = 1.0;
   }
-  update() { this.x += this.vx; this.y += this.vy; this.life -= 0.05; }
+  update(dt = 1) { this.x += this.vx * dt; this.y += this.vy * dt; this.life -= 0.05 * dt; }
 }
 
+// --- loop control: exactly one requestAnimationFrame chain, ever ---
+function startLoop() {
+  stopLoop();
+  lastTime = performance.now();
+  nextFrameAt = 0;
+  rafId = requestAnimationFrame(gameLoop);
+}
+function stopLoop() {
+  if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+function fxLater(fn, ms) {
+  const id = setTimeout(() => { fxTimeouts = fxTimeouts.filter(x => x !== id); fn(); }, Math.max(0, ms));
+  fxTimeouts.push(id);
+}
+function clearFxTimeouts() { fxTimeouts.forEach(clearTimeout); fxTimeouts = []; }
+
+let lastScoreShown = -1, lastPctShown = -1;
+
 function resetState() {
-  score = 0; notesHitThisGame = 0; tiles = []; particles = []; isDead = false; patternStep = 0; scoreEl.innerText = "0";
+  score = 0; notesHitThisGame = 0; tiles = []; particles = []; isDead = false; isPaused = false; patternStep = 0;
+  scoreEl.innerText = "0"; lastScoreShown = 0; lastPctShown = -1;
   distanceTraveled = 0; nextSpawnDistance = 0; currentLives = maxLives;
   document.getElementById('lives-count').innerText = currentLives;
   document.getElementById('fps-display').innerText = "60 FPS";
   document.getElementById('progress-display').innerText = "0%";
   frameCount = 0;
   lastFpsTime = performance.now();
-  levelEndTime = 0;
+  levelEndTime = 0; customPlayTime = 0;
+  pendingTiles = []; pendingTileIdx = 0; pendingEffects = []; pendingEffectIdx = 0;
+  levelAudioStarted = false;
+  clearFxTimeouts();
   document.body.style.background = currentLevelBackground || 'var(--bg-void)';
   canvas.style.filter = 'brightness(' + (Number(currentLevelBrightness || gameBrightness) / 100) + ')';
-  document.getElementById('bg-image-container').style.opacity = 0;
-  document.getElementById('fg-image-container').style.opacity = 0;
-  document.getElementById('bg-flash').style.opacity = 0;
-  document.getElementById('fg-flash').style.opacity = 0;
+  ['bg-image-container', 'fg-image-container', 'bg-flash', 'fg-flash'].forEach(id => { document.getElementById(id).style.opacity = 0; });
   document.getElementById('extra-images-bg').innerHTML = "";
   document.getElementById('extra-images-fg').innerHTML = "";
   currentTileStyle = { c1: "#000000", c2: "#000000", alpha: 1.0 };
-  targetSpeed = speed; speedTransitionTime = 0; speedTransitionDuration = 0;
-  bgAudio.pause(); bgAudio.currentTime = 0;
-  if (customGameInterval) clearInterval(customGameInterval);
+  targetSpeed = speed; speedTransitionTime = 0; speedTransitionDuration = 0; initialSpeed = speed;
+  bgAudio.pause();
+  try { bgAudio.currentTime = 0; } catch (e) {}
   lastTime = performance.now();
 }
 
@@ -58,179 +89,101 @@ function triggerRedFlash() {
 
 function handleHit() {
   const noclip = document.getElementById('edit-noclip');
-  if (noclip && noclip.checked && (inEditor || isPlaytesting || isVerifying)) return true;
+  // NoClip is a playtest convenience only — it must never count when verifying a level for publishing.
+  if (noclip && noclip.checked && (inEditor || (isPlaytesting && !isVerifying))) return true;
   if (currentLives > 1) { currentLives--; document.getElementById('lives-count').innerText = currentLives; triggerRedFlash(); return true; }
   return false;
 }
 
+function showGameHud(show, battle) {
+  ['lives-display', 'game-hud', 'score-container'].forEach(id => document.getElementById(id).classList.toggle('hidden', !show));
+  document.getElementById('pause-btn').classList.toggle('hidden', !show || !!battle);
+  if (!show) document.getElementById('battle-race-hud').classList.add('hidden');
+}
+
+function editorLevelConfig() {
+  return {
+    lives: parseInt(document.getElementById('edit-lives').value) || 3,
+    fps: parseInt(document.getElementById('edit-fps').value) || 60,
+    audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
+    disableHolds: document.getElementById('edit-disable-holds').checked
+  };
+}
+
 function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, testEffects = null, isCommunity = false, loadedLevelObj = null) {
   lastStartArgs = [mode, isCustom, customIndex, testTiles, testEffects, isCommunity, loadedLevelObj];
+  stopLoop();
+  stopEditorTransport();
+  clearTimeout(autoRetryTimer);
   currentMode = mode; isCustomGame = isCustom;
+  inEditor = false;   // (verify used to leave this true, which silently disabled all input)
+
   currentLevelBackground = isCustom && loadedLevelObj ? (loadedLevelObj.backgroundColor || '#202738') : '#202738';
   currentLevelBrightness = isCustom && loadedLevelObj ? Number(loadedLevelObj.backgroundBrightness || 100) : gameBrightness;
-  if (isCustom && testTiles) {
+  if (isCustom && testTiles && !loadedLevelObj) {
     const editorBg = document.getElementById('edit-bg-color');
     const editorBrightness = document.getElementById('edit-bg-brightness');
-    if (mode === 'playtest' && editorBg) currentLevelBackground = editorBg.value || '#202738';
-    if (mode === 'playtest' && editorBrightness) currentLevelBrightness = Number(editorBrightness.value || 100);
+    if (editorBg) currentLevelBackground = editorBg.value || '#202738';
+    if (editorBrightness) currentLevelBrightness = Number(editorBrightness.value || 100);
   }
+  if (!isCustom) maxLives = 3;   // built-in levels used to inherit hearts from whatever level you played last
+
   gameActive = true;
   resetState();
   if (!isPlaytesting && !isVerifying && !isBattleMode) beginStatsGame();
-  overlays.forEach(id => document.getElementById(id).classList.add('hidden'));
+  toggleMenu(null);
   document.getElementById('editor-ui').classList.add('hidden');
-  document.getElementById('lives-display').classList.remove('hidden');
-  document.getElementById('game-hud').classList.remove('hidden');
-  document.getElementById('score-container').classList.remove('hidden');
+  document.getElementById('stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
+  showGameHud(true, isBattleMode);
+  layoutCanvas();
 
   if (!isCustom) {
     const customSpeed = document.getElementById('speed-' + mode);
-    speed = customSpeed ? parseInt(customSpeed.value) : EDITOR_BASE_SPEED; targetSpeed = speed;
+    speed = customSpeed ? parseInt(customSpeed.value) : EDITOR_BASE_SPEED; targetSpeed = speed; initialSpeed = speed;
     windowLevelFPS = 60;
     document.getElementById('progress-display').classList.add('hidden');
     spawnTile();
   } else {
     document.getElementById('progress-display').classList.remove('hidden');
-    speed = EDITOR_BASE_SPEED; targetSpeed = EDITOR_BASE_SPEED; customPlayTime = 0;
-    let sourceArray = isCommunity ? (loadedLevelObj ? [loadedLevelObj] : []) : getCustomLevels();
-    let sourceLevel = loadedLevelObj || (customIndex !== -1 ? sourceArray[customIndex] : null);
-    let pendingTiles = testTiles ? JSON.parse(JSON.stringify(testTiles)) : JSON.parse(JSON.stringify(sourceLevel?.data || []));
-    let pendingEffects = testEffects ? JSON.parse(JSON.stringify(testEffects)) : JSON.parse(JSON.stringify(sourceLevel?.effects || []));
+    speed = EDITOR_BASE_SPEED; targetSpeed = EDITOR_BASE_SPEED; initialSpeed = EDITOR_BASE_SPEED;
 
-    let allTimes = [0];
+    const sourceLevel = loadedLevelObj || (customIndex !== -1 ? getCustomLevels()[customIndex] : null);
+    const tilesIn = testTiles || (sourceLevel && sourceLevel.data) || [];
+    const effectsIn = testEffects || (sourceLevel && sourceLevel.effects) || [];
+    pendingTiles = JSON.parse(JSON.stringify(tilesIn)).sort((a, b) => a.time - b.time || a.lane - b.lane);
+    pendingEffects = JSON.parse(JSON.stringify(effectsIn)).sort((a, b) => a.time - b.time);
+    pendingTileIdx = 0; pendingEffectIdx = 0;
+
+    const allTimes = [0];
     pendingTiles.forEach(t => allTimes.push(t.time + (t.holdDuration || 0)));
     pendingEffects.forEach(e => allTimes.push(e.time));
     levelEndTime = Math.max(...allTimes) + 4.0;
     verifyEndTime = levelEndTime;
 
-    if (loadedLevelObj) {
-      maxLives = loadedLevelObj.lives !== undefined ? loadedLevelObj.lives : 3;
-      currentLives = maxLives;
-      windowLevelFPS = loadedLevelObj.fps || 60;
-    } else if (customIndex !== -1 && sourceArray[customIndex] && sourceArray[customIndex].lives) {
-      maxLives = sourceArray[customIndex].lives; currentLives = maxLives;
-      windowLevelFPS = sourceArray[customIndex].fps || 60;
-    } else {
-      windowLevelFPS = testTiles ? parseInt(document.getElementById('edit-fps').value) : 60;
-    }
+    const cfg = sourceLevel
+      ? { lives: sourceLevel.lives !== undefined ? sourceLevel.lives : 3, fps: sourceLevel.fps || 60, audioOffset: sourceLevel.audioOffset || 0, disableHolds: !!sourceLevel.disableHolds }
+      : editorLevelConfig();
+    if (sourceLevel) maxLives = Math.max(1, Math.min(10, Number(cfg.lives) || 3));
+    currentLives = maxLives;
+    windowLevelFPS = cfg.fps >= 10 ? cfg.fps : 60;
+    levelDisableHolds = cfg.disableHolds;
+    levelAudioOffsetMs = parseInt(cfg.audioOffset) || 0;
     document.getElementById('lives-count').innerText = currentLives;
-    if (!windowLevelFPS || windowLevelFPS < 10) windowLevelFPS = 60;
 
-    let currentAudioOffset = loadedLevelObj && loadedLevelObj.audioOffset !== undefined ? loadedLevelObj.audioOffset
-      : (customIndex !== -1 && sourceArray[customIndex] && sourceArray[customIndex].audioOffset !== undefined ? sourceArray[customIndex].audioOffset
-        : (testTiles ? parseInt(document.getElementById('edit-audio-offset').value) : 0));
-    let currentDisableHolds = loadedLevelObj && loadedLevelObj.disableHolds !== undefined ? loadedLevelObj.disableHolds
-      : (customIndex !== -1 && sourceArray[customIndex] && sourceArray[customIndex].disableHolds !== undefined ? sourceArray[customIndex].disableHolds
-        : (testTiles ? document.getElementById('edit-disable-holds').checked : false));
-
-    let offsetMs = parseInt(currentAudioOffset) || 0;
-    if (bgAudio.src) {
-      bgAudio.currentTime = 0;
-      if (offsetMs < 0) {
-        bgAudio.currentTime = Math.abs(offsetMs) / 1000;
-        bgAudio.play().catch(e => console.warn(e));
-      } else if (offsetMs > 0) {
-        setTimeout(() => { if (gameActive && !isDead) bgAudio.play().catch(e => console.warn(e)); }, offsetMs);
-      } else {
-        bgAudio.play().catch(e => console.warn(e));
+    // The song only belongs to the level being edited. Levels opened from My Levels / Browse / battles
+    // don't carry audio, so they must not play whatever song happened to be loaded last.
+    levelUsesAudio = !loadedLevelObj && !!bgAudio.src;
+    if (levelUsesAudio) {
+      if (levelAudioOffsetMs <= 0) {
+        try { bgAudio.currentTime = Math.abs(levelAudioOffsetMs) / 1000; } catch (e) {}
+        bgAudio.play().catch(() => {});
+        levelAudioStarted = true;
       }
     }
-
-    if (customIndex !== -1 && sourceArray[customIndex] && sourceArray[customIndex].id) {
-      registerPlay(sourceArray[customIndex].id, isCommunity);
-    }
-
-    customGameInterval = setInterval(() => {
-      if (isDead || !gameActive) { clearInterval(customGameInterval); bgAudio.pause(); return; }
-      customPlayTime += 0.016;
-      let spawnOffset = 690 / (speed * 60);
-      for (let i = pendingTiles.length - 1; i >= 0; i--) {
-        if (customPlayTime >= pendingTiles[i].time - spawnOffset) {
-          let isHold = pendingTiles[i].isHold;
-          if (currentDisableHolds) isHold = false;
-          tiles.push(new Tile(pendingTiles[i].lane, -TILE_H, isHold, pendingTiles[i].holdDuration));
-          pendingTiles.splice(i, 1);
-        }
-      }
-      for (let i = pendingEffects.length - 1; i >= 0; i--) {
-        if (customPlayTime >= pendingEffects[i].time) {
-          let fx = pendingEffects[i];
-          if (fx.type === 'pulse') fireAdvancedPulse(fx);
-          if (fx.type === 'image') fireAdvancedImage(fx);
-          if (fx.type === 'extra_image') fireExtraImage(fx);
-          if (fx.type === 'tile_style') fireTileStyle(fx);
-          if (fx.type === 'speed') fireSpeedChange(fx);
-          if (fx.type === 'sfx') fireSFX(fx);
-          pendingEffects.splice(i, 1);
-        }
-      }
-
-      let pct = 0;
-      if (levelEndTime > 0) {
-        pct = Math.min(100, Math.floor((customPlayTime / levelEndTime) * 100));
-        document.getElementById('progress-display').innerText = pct + '%';
-      }
-
-      if (isBattleMode && typeof updateBattleProgress === 'function') {
-        updateBattleProgress(pct, Math.floor(score));
-      }
-
-      if (isVerifying && customPlayTime >= verifyEndTime && tiles.length === 0 && !isDead) {
-        clearInterval(customGameInterval);
-        gameActive = false;
-        bgAudio.pause();
-        isVerifying = false;
-        levelVerified = true;
-        document.getElementById('lives-display').classList.add('hidden');
-        document.getElementById('game-hud').classList.add('hidden');
-        document.getElementById('score-container').classList.add('hidden');
-        if (pendingPublishAfterVerification) {
-          pendingPublishAfterVerification = false;
-          document.getElementById('editor-ui').classList.remove('hidden');
-          inEditor = true;
-          publishVerifiedLevel();
-        } else {
-          alert('Verification complete! Your level is verified and ready to publish.');
-          document.getElementById('editor-ui').classList.remove('hidden');
-          inEditor = true;
-          requestAnimationFrame(gameLoop);
-        }
-      }
-
-      if (!isBattleMode && !isVerifying && customPlayTime >= levelEndTime && tiles.length === 0 && !isDead && gameActive) {
-        clearInterval(customGameInterval);
-        gameActive = false;
-        bgAudio.pause();
-        finishStatsGame(true);
-        document.getElementById('lives-display').classList.add('hidden');
-        document.getElementById('game-hud').classList.add('hidden');
-        document.getElementById('score-container').classList.add('hidden');
-        document.getElementById('death-title').innerText = 'COMPLETED';
-        document.getElementById('final-score').innerText = 'Score: ' + Math.floor(score);
-        document.getElementById('death-retry-btn').classList.remove('hidden');
-        document.getElementById('death-quit-btn').classList.remove('hidden');
-        document.getElementById('death-stop-playtest-btn').classList.add('hidden');
-        toggleMenu('death-screen');
-      }
-
-      if (isBattleMode && !isVerifying && customPlayTime >= levelEndTime && tiles.length === 0 && !isDead && gameActive) {
-        clearInterval(customGameInterval);
-        gameActive = false;
-        bgAudio.pause();
-        if (typeof handleBattleFinish === 'function') handleBattleFinish(true, 'FINISHED');
-      }
-
-      if (speedTransitionDuration > 0) {
-        speedTransitionTime += 0.016;
-        let progress = Math.min(speedTransitionTime / speedTransitionDuration, 1.0);
-        speed = initialSpeed + (targetSpeed - initialSpeed) * progress;
-        if (progress >= 1.0) speedTransitionDuration = 0;
-      }
-    }, 16);
   }
-
-  requestAnimationFrame(gameLoop);
+  startLoop();
 }
+let levelUsesAudio = false;
 
 function spawnTile() {
   let currentSpawn = patterns[currentMode] ? patterns[currentMode][patternStep] : Math.floor(Math.random() * 4);
@@ -244,44 +197,148 @@ function spawnTile() {
 function fireAdvancedPulse(fx) {
   const target = (fx.layer == 1) ? document.getElementById('fg-flash') : document.getElementById('bg-flash');
   target.style.transition = `opacity ${fx.inTrans}s ease-out`; target.style.background = fx.color; target.style.opacity = 1;
-  setTimeout(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
+  fxLater(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
 }
 function fireAdvancedImage(fx) {
   const target = (fx.layer == 1) ? document.getElementById('fg-image-container') : document.getElementById('bg-image-container');
   target.style.backgroundImage = `url(${fx.src})`; target.style.transition = `opacity ${fx.inTrans}s ease-out`; target.style.opacity = fx.alpha;
-  setTimeout(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
+  fxLater(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
 }
 function fireExtraImage(fx) {
-  let img = document.createElement('img');
+  // Positions are stored in board coordinates (360x640); the layer is sized to the board, so use percentages.
+  const img = document.createElement('img');
   img.src = fx.src;
   img.style.position = 'absolute';
-  img.style.left = fx.x + 'px';
-  img.style.top = fx.y + 'px';
-  img.style.width = fx.w + 'px';
-  img.style.height = fx.h + 'px';
+  img.style.left = (fx.x / GW * 100) + '%';
+  img.style.top = (fx.y / GH * 100) + '%';
+  img.style.width = (fx.w / GW * 100) + '%';
+  img.style.height = (fx.h / GH * 100) + '%';
   img.style.opacity = fx.alpha;
   img.style.transform = 'translate(-50%, -50%)';
-  let container = fx.layer == 1 ? document.getElementById('extra-images-fg') : document.getElementById('extra-images-bg');
+  const container = fx.layer == 1 ? document.getElementById('extra-images-fg') : document.getElementById('extra-images-bg');
   container.appendChild(img);
-  setTimeout(() => { if (img.parentNode) img.parentNode.removeChild(img); }, fx.duration * 1000);
+  fxLater(() => { if (img.parentNode) img.parentNode.removeChild(img); }, fx.duration * 1000);
 }
 function fireTileStyle(fx) { currentTileStyle.c1 = fx.c1; currentTileStyle.c2 = fx.c2; currentTileStyle.alpha = fx.alpha; }
 function fireSpeedChange(fx) { initialSpeed = speed; targetSpeed = fx.target; speedTransitionDuration = fx.transDuration; speedTransitionTime = 0; }
-function fireSFX(fx) { let audio = new Audio(fx.src); audio.play().catch(() => {}); }
+function fireSFX(fx) { const audio = new Audio(fx.src); audio.play().catch(() => {}); }
 
-// --- input: gameplay hit detection + hand-off to editor recording ---
-// (canvas pointer handling for tile placement lives in editor.js, since it's
-// purely an editor concern — keeping it here would mean this file has to
-// load after editor.js just for one listener, which defeats the point of
-// splitting them up)
+// --- level clock: runs from the same frame delta as tile movement ---
+function updateCustomLevel(dtSec) {
+  customPlayTime += dtSec;
+
+  if (levelUsesAudio && !levelAudioStarted && customPlayTime * 1000 >= levelAudioOffsetMs) {
+    levelAudioStarted = true;
+    try { bgAudio.currentTime = 0; } catch (e) {}
+    bgAudio.play().catch(() => {});
+  }
+
+  const pxPerSec = speed * 60;
+  while (pendingTileIdx < pendingTiles.length) {
+    const n = pendingTiles[pendingTileIdx];
+    const spawnAt = n.time - 690 / pxPerSec;
+    if (customPlayTime < spawnAt) break;
+    // If a frame ran long, start the tile where it *should* be so arrival time stays exact.
+    const y = -TILE_H + pxPerSec * (customPlayTime - spawnAt);
+    tiles.push(new Tile(n.lane, y, levelDisableHolds ? false : n.isHold, n.holdDuration));
+    pendingTileIdx++;
+  }
+  while (pendingEffectIdx < pendingEffects.length && customPlayTime >= pendingEffects[pendingEffectIdx].time) {
+    const fx = pendingEffects[pendingEffectIdx++];
+    if (fx.type === 'pulse') fireAdvancedPulse(fx);
+    else if (fx.type === 'image') fireAdvancedImage(fx);
+    else if (fx.type === 'extra_image') fireExtraImage(fx);
+    else if (fx.type === 'tile_style') fireTileStyle(fx);
+    else if (fx.type === 'speed') fireSpeedChange(fx);
+    else if (fx.type === 'sfx') fireSFX(fx);
+  }
+
+  if (speedTransitionDuration > 0) {
+    speedTransitionTime += dtSec;
+    const progress = Math.min(speedTransitionTime / speedTransitionDuration, 1.0);
+    speed = initialSpeed + (targetSpeed - initialSpeed) * progress;
+    if (progress >= 1.0) speedTransitionDuration = 0;
+  }
+
+  let pct = 0;
+  if (levelEndTime > 0) {
+    pct = Math.min(100, Math.floor((customPlayTime / levelEndTime) * 100));
+    if (pct !== lastPctShown) { lastPctShown = pct; document.getElementById('progress-display').innerText = pct + '%'; }
+  }
+  if (isBattleMode && typeof updateBattleProgress === 'function') updateBattleProgress(pct, Math.floor(score));
+
+  const reachedEnd = customPlayTime >= levelEndTime && pendingTileIdx >= pendingTiles.length && tiles.length === 0 && !isDead && gameActive;
+  if (!reachedEnd) return;
+  stopLoop();
+  gameActive = false;
+  bgAudio.pause();
+
+  if (isVerifying) {
+    isVerifying = false; levelVerified = true;
+    showGameHud(false);
+    if (pendingPublishAfterVerification) {
+      pendingPublishAfterVerification = false;
+      enterEditorView();
+      publishVerifiedLevel();
+    } else {
+      enterEditorView();
+      toast('Verified! Your level is ready to publish.', 'good');
+    }
+  } else if (isBattleMode) {
+    if (typeof handleBattleFinish === 'function') handleBattleFinish(true, 'FINISHED');
+  } else {
+    finishStatsGame(true);
+    showCompletionScreen();
+  }
+}
+
+function showCompletionScreen() {
+  showGameHud(false);
+  const lost = maxLives - currentLives;
+  const stars = lost === 0 ? 3 : lost <= Math.ceil(maxLives / 2) ? 2 : 1;
+  document.getElementById('death-title').innerText = 'COMPLETED';
+  document.getElementById('death-title').classList.add('good');
+  document.getElementById('death-stars').innerHTML = [1, 2, 3].map(i => '<span class="' + (i <= stars ? 'on' : '') + '">★</span>').join('');
+  document.getElementById('final-score').innerText = 'Score: ' + Math.floor(score);
+  document.getElementById('death-retry-btn').classList.toggle('hidden', isPlaytesting);
+  document.getElementById('death-quit-btn').classList.toggle('hidden', isPlaytesting);
+  document.getElementById('death-stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
+  toggleMenu('death-screen');
+}
+
+// ---------------------------------------------------------------------------
+// Input: keyboard + touch/mouse share one hit routine
+// ---------------------------------------------------------------------------
+function pressLane(laneIndex) {
+  if (!gameActive || isDead || inEditor || isPaused) return;
+  const activeTiles = tiles.filter(t => !t.interacted);
+  if (activeTiles.length === 0) return;
+  const target = activeTiles.find(t => t.lane === laneIndex);
+  let targetY = target ? target.y : 0;
+  let firstTileY = activeTiles[0] ? activeTiles[0].y : 0;
+  const cbfToggle = document.getElementById('setting-cbf');
+  if (cbfToggle && cbfToggle.checked) {
+    const subFrameDt = Math.min(2, (performance.now() - lastTime) / 16.666);
+    if (target) targetY += speed * subFrameDt;
+    if (activeTiles[0]) firstTileY += speed * subFrameDt;
+  }
+  if (target && (target === activeTiles[0] || targetY > firstTileY - TILE_H)) {
+    target.interacted = true; score += 10; notesHitThisGame++;
+    for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
+  } else if (firstTileY + TILE_H > 0) {
+    if (!handleHit()) die("WRONG ORDER!");
+  }
+}
 
 window.addEventListener("keydown", (e) => {
+  if (dialogOpen() || isTypingTarget(e)) return;
   const k = e.key.toLowerCase();
-  if (k === 'o' && !inEditor && !gameActive && !isDead) {
+  if (k === 'escape') { handleEscape(); return; }
+  if (k === 'o' && !gameActive && !inEditor && !document.getElementById('settings-menu').classList.contains('hidden')) {
     toggleExtraSettings();
     return;
   }
-  if (k === ' ' && isDead && !isPlaytesting && !isVerifying) {
+  if (k === ' ' && isDead && !isPlaytesting && !isVerifying && !isBattleMode) {
     e.preventDefault();
     restartGame();
     return;
@@ -293,33 +350,8 @@ window.addEventListener("keydown", (e) => {
   const laneIndex = keyMap.indexOf(k);
   if (laneIndex !== -1 && keys[k] !== true) {
     keys[k] = true;
-
-    if (inEditor && isRecording && laneIndex !== -1 && !deleteMode) {
-      recordTileFromKeydown(laneIndex, e);
-      return;
-    }
-
-    if (laneIndex !== -1 && gameActive && !isDead && !inEditor) {
-      const activeTiles = tiles.filter(t => !t.interacted);
-      if (activeTiles.length > 0) {
-        const target = activeTiles.find(t => t.lane === laneIndex);
-        let targetY = target ? target.y : 0;
-        let firstTileY = activeTiles[0] ? activeTiles[0].y : 0;
-        const cbfToggle = document.getElementById('setting-cbf');
-        if (cbfToggle && cbfToggle.checked) {
-          const timeSinceLastFrame = performance.now() - lastTime;
-          const subFrameDt = timeSinceLastFrame / 16.666;
-          if (target) targetY += speed * subFrameDt;
-          if (activeTiles[0]) firstTileY += speed * subFrameDt;
-        }
-        if (target && (target === activeTiles[0] || targetY > firstTileY - TILE_H)) {
-          target.interacted = true; score += 10; notesHitThisGame++;
-          for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
-        } else if (firstTileY + TILE_H > 0) {
-          if (!handleHit()) die("WRONG ORDER!");
-        }
-      }
-    }
+    if (inEditor && isRecording && !deleteMode) { recordTileFromKeydown(laneIndex, e); return; }
+    pressLane(laneIndex);
   }
 });
 
@@ -327,103 +359,163 @@ window.addEventListener("keyup", (e) => {
   const k = e.key.toLowerCase();
   keys[k] = false;
   const laneIndex = keyMap.indexOf(k);
-  if (inEditor && isRecording && laneIndex !== -1 && editorKeyTimes[laneIndex] !== null) {
-    recordTileFromKeyup(laneIndex);
-  }
+  if (inEditor && isRecording && laneIndex !== -1 && editorKeyTimes[laneIndex] !== null) recordTileFromKeyup(laneIndex);
 });
 
+// Touch / mouse: tap a lane to hit it. Each pointer remembers its lane so hold-release works.
+const activePointers = new Map();
+canvas.addEventListener('pointerdown', (e) => {
+  if (inEditor) { handleEditorPointer(e); return; }
+  if (!gameActive || isDead || isPaused) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const lane = Math.max(0, Math.min(3, Math.floor(((e.clientX - rect.left) / rect.width) * 4)));
+  activePointers.set(e.pointerId, lane);
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  keys[keyMap[lane]] = true;
+  pressLane(lane);
+});
+function releasePointer(e) {
+  if (!activePointers.has(e.pointerId)) return;
+  const lane = activePointers.get(e.pointerId);
+  activePointers.delete(e.pointerId);
+  keys[keyMap[lane]] = false;
+}
+canvas.addEventListener('pointerup', releasePointer);
+canvas.addEventListener('pointercancel', releasePointer);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+function handleEscape() {
+  if (isPaused) { resumeGame(); return; }
+  if (gameActive && !isDead && !inEditor) {
+    if (isBattleMode) { forfeitBattlePrompt(); return; }
+    pauseGame();
+    return;
+  }
+  if (inEditor && typeof closeAllDrawers === 'function') {
+    const open = ['drawer-left', 'drawer-right'].some(id => document.getElementById(id).classList.contains('open'));
+    if (open) closeAllDrawers(); else openCreatorMenu();
+  }
+}
+
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
+function drawBoard() {
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, GH); ctx.stroke(); }
+  ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(GW, lineY); ctx.stroke();
+}
+function drawIdleFrame() {
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  ctx.clearRect(0, 0, GW, GH);
+  drawBoard();
+}
+
+function drawEditorLayer() {
+  const pps = getEditorPPS();
+  const step = getEditorGridStep();
+  const tMin = editorTimer - (GH - lineY) / pps;
+  const tMax = editorTimer + lineY / pps;
+  const first = Math.ceil((tMin - editorGridOffset) / step);
+  const last = Math.floor((tMax - editorGridOffset) / step);
+  ctx.save();
+  ctx.font = "600 9px system-ui, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+  for (let gi = first; gi <= last; gi++) {
+    const gt = editorGridOffset + gi * step;
+    if (gt < -1e-6) continue;
+    const gy = lineY + (editorTimer - gt) * pps;
+    const isBeat = ((gi % editorGridDivision) + editorGridDivision) % editorGridDivision === 0;
+    ctx.globalAlpha = isBeat ? 0.42 : 0.16;
+    ctx.strokeStyle = isBeat ? "#9ad0ff" : "#78bfff";
+    ctx.lineWidth = isBeat ? 1.5 : 1;
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(GW, gy); ctx.stroke();
+    if (isBeat) { ctx.globalAlpha = 0.6; ctx.fillStyle = "#cfe6ff"; ctx.fillText(gt.toFixed(2) + 's', 4, gy - 2); }
+  }
+  ctx.restore();
+
+  const tileH = TILE_H * editorZoom;
+  recordedTiles.forEach(t => {
+    const bottom = lineY + (editorTimer - t.time) * pps;          // tile's bottom edge sits on the hit line at its time — same as gameplay
+    const holdLen = t.isHold ? t.holdDuration * pps : 0;
+    const top = bottom - tileH - holdLen;
+    const h = tileH + holdLen;
+    if (top > GH + 4 || top + h < -4) return;
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.6)" : "rgba(0, 235, 255, 0.55)";
+    ctx.fillRect(t.lane * laneW + 3, top, laneW - 6, h);
+    ctx.globalAlpha = 1; ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 1;
+    ctx.strokeRect(t.lane * laneW + 3.5, top + 0.5, laneW - 7, h - 1);
+    if (showHitboxes) { ctx.strokeStyle = "#ff3b81"; ctx.lineWidth = 2; ctx.strokeRect(t.lane * laneW + 3, top, laneW - 6, h); }
+    if (showLaneText) {
+      ctx.fillStyle = "#ffffff"; ctx.font = "700 20px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2, top + h / 2);
+    }
+  });
+  // flashes for tiles you just recorded with the keyboard
+  for (let i = editorVisualTiles.length - 1; i >= 0; i--) {
+    const v = editorVisualTiles[i];
+    v.alpha -= 0.06;
+    if (v.alpha <= 0) { editorVisualTiles.splice(i, 1); continue; }
+    ctx.globalAlpha = v.alpha * 0.5; ctx.fillStyle = "#00ffff";
+    ctx.fillRect(v.lane * laneW, lineY - 6, laneW, 12);
+  }
+  ctx.globalAlpha = 1;
+}
+
 // --- main loop ---
-function gameLoop(timestamp) {
-  if (isDead || (!gameActive && !inEditor)) return;
-  let fpsInterval = 1000 / (windowLevelFPS || 60);
-  let elapsed = timestamp - lastTime;
-  if (elapsed < fpsInterval - 0.1) { requestAnimationFrame(gameLoop); return; }
+function gameLoop(ts) {
+  rafId = null;
+  if (isPaused || isDead || (!gameActive && !inEditor)) return;
+  rafId = requestAnimationFrame(gameLoop);
+
+  // Frame limiter (the level's "Target FPS"): schedule-based so a 60fps cap on a 60Hz or 144Hz screen is steady.
+  const interval = 1000 / ((gameActive ? windowLevelFPS : 60) || 60);
+  if (!nextFrameAt || ts - nextFrameAt > interval * 3) nextFrameAt = ts;
+  if (ts < nextFrameAt - 1.5) return;
+  nextFrameAt += interval;
+
+  const elapsed = Math.max(0, Math.min(ts - lastTime, 50));   // clamp so a hitch can't teleport tiles
+  lastTime = ts;
   const dt = elapsed / 16.666;
-  lastTime = timestamp;
 
   if (gameActive) {
     frameCount++;
-    if (timestamp - lastFpsTime >= 1000) {
+    if (ts - lastFpsTime >= 1000) {
       document.getElementById('fps-display').innerText = frameCount + ' FPS';
       frameCount = 0;
-      lastFpsTime = timestamp;
+      lastFpsTime = ts;
     }
-    scoreEl.innerText = Math.floor(score);
+    const s = Math.floor(score);
+    if (s !== lastScoreShown) { lastScoreShown = s; scoreEl.innerText = s; }
+    if (isCustomGame) updateCustomLevel(elapsed / 1000);
+    if (isDead || !gameActive) return;
   }
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 1;
-  for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, canvas.height); ctx.stroke(); }
-  ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(canvas.width, lineY); ctx.stroke();
+  if (inEditor) editorTick(elapsed / 1000, ts);
+
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  ctx.clearRect(0, 0, GW, GH);
+  drawBoard();
 
   if (!isCustomGame && !inEditor && gameActive) {
     distanceTraveled += speed * dt;
     if (distanceTraveled >= nextSpawnDistance) spawnTile();
   }
+  if (restEl) restEl.style.opacity = (gameActive && !isCustomGame && !inEditor && tiles.length === 0) ? '1' : '0';
 
-  if (restEl) {
-    restEl.style.opacity = (gameActive && !isCustomGame && !inEditor && tiles.length === 0) ? '1' : '0';
-  }
-
-  if (inEditor) {
-    ctx.save();
-    ctx.globalAlpha = 0.16;
-    ctx.strokeStyle = "#78bfff";
-    ctx.lineWidth = 1;
-    const gridStep = getEditorGridStep();
-    const pixelsPerSecond = EDITOR_PPS;
-    const firstGridIndex = Math.floor((editorTimer - lineY / pixelsPerSecond) / gridStep) - 2;
-    const lastGridIndex = Math.ceil((editorTimer + (canvas.height - lineY) / pixelsPerSecond) / gridStep) + 2;
-    for (let gi = firstGridIndex; gi <= lastGridIndex; gi++) {
-      const gt = gi * gridStep;
-      const gy = lineY + (editorTimer - gt) * pixelsPerSecond;
-      if (gy < 0 || gy > canvas.height) continue;
-      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(canvas.width, gy); ctx.stroke();
-    }
-    ctx.restore();
-
-    recordedTiles.forEach(t => {
-      let yOffset = (editorTimer - t.time) * EDITOR_PPS;
-      let y = lineY + yOffset;
-      let holdLen = t.isHold ? (t.holdDuration * EDITOR_PPS) : 0;
-      let h = TILE_H + holdLen;
-      let drawY = y - holdLen;
-      if (drawY < canvas.height + TILE_H && drawY + h > -TILE_H) {
-        const isSelected = selectedEffect === t;
-        ctx.globalAlpha = isSelected ? 0.9 : 0.6;
-        ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.5)" : "rgba(0, 255, 255, 0.5)";
-        ctx.fillRect(t.lane * laneW + 4, drawY, laneW - 8, h);
-        if (showHitboxes) {
-          ctx.strokeStyle = "#ff3b81";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(t.lane * laneW + 4, drawY, laneW - 8, h);
-        }
-        if (showLaneText) {
-          ctx.fillStyle = "#ffffff";
-          ctx.globalAlpha = 1;
-          ctx.font = "700 24px Arial";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2, drawY + h / 2);
-        }
-        if (isSelected) {
-          ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
-          ctx.strokeRect(t.lane * laneW + 4, drawY, laneW - 8, h);
-        }
-        ctx.globalAlpha = 1.0;
-      }
-    });
-  }
+  if (inEditor) drawEditorLayer();
 
   for (let i = tiles.length - 1; i >= 0; i--) {
-    let t = tiles[i]; t.y += speed * dt;
-    let holdLength = t.isHold ? (t.holdDuration * speed * 60) : 0;
-    let h = TILE_H + holdLength;
-    let headTop = t.y - TILE_H;
-    let tailTop = t.y - TILE_H - holdLength;
+    const t = tiles[i]; t.y += speed * dt;
+    const holdLength = t.isHold ? (t.holdDuration * speed * 60) : 0;
+    const headTop = t.y - TILE_H;
+    const tailTop = t.y - TILE_H - holdLength;
 
-    if (tailTop > canvas.height) {
+    if (tailTop > GH) {
       if (!t.interacted) {
         if (handleHit()) { tiles.splice(i, 1); continue; }
         else { die("MISSED!"); return; }
@@ -437,35 +529,27 @@ function gameLoop(timestamp) {
           t.failed = true;
           if (!handleHit()) { die("RELEASED EARLY!"); return; }
         } else {
-          score += 0.5;
+          score += 0.5 * dt;
           if (Math.random() > 0.7) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY));
         }
       }
     }
 
-    // Plain flat tiles — classic Magic Tiles look, no gradient/glow/border.
-    // (Hold tiles are disabled in the editor for now — this block only still
-    // runs for old level files that already have some.)
+    // Plain flat tiles — the classic look, unchanged.
     if (t.isHold) {
       ctx.fillStyle = t.interacted ? "#333" : "#000";
       ctx.fillRect(t.lane * laneW + 12, tailTop, laneW - 24, holdLength);
     }
-
     ctx.globalAlpha = t.interacted ? 0.25 : currentTileStyle.alpha;
     ctx.fillStyle = t.interacted ? "#222" : currentTileStyle.c1;
     ctx.fillRect(t.lane * laneW + 2, headTop, laneW - 4, TILE_H);
     if (showHitboxes) {
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = "#ff3b81";
-      ctx.lineWidth = 2;
+      ctx.globalAlpha = 1; ctx.strokeStyle = "#ff3b81"; ctx.lineWidth = 2;
       ctx.strokeRect(t.lane * laneW + 2, headTop, laneW - 4, TILE_H);
     }
     if (showLaneText) {
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "700 28px Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
+      ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff"; ctx.font = "700 28px Arial";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2, headTop + TILE_H / 2);
     }
     ctx.globalAlpha = 1.0;
@@ -473,28 +557,58 @@ function gameLoop(timestamp) {
 
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
-    p.update();
+    p.update(dt);
     if (p.life <= 0) { particles.splice(i, 1); continue; }
     ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillStyle = "#00ffff";
     ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1.0;
-
-  requestAnimationFrame(gameLoop);
 }
 
-// --- death / retry / quit ---
+// ---------------------------------------------------------------------------
+// Pause / death / retry / quit
+// ---------------------------------------------------------------------------
+function pauseGame() {
+  if (!gameActive || isDead || isPaused || inEditor || isBattleMode) return;
+  isPaused = true;
+  stopLoop();
+  if (!bgAudio.paused) bgAudio.pause();
+  document.getElementById('pause-stop-btn').classList.toggle('hidden', !isPlaytesting);
+  document.getElementById('pause-quit-btn').classList.toggle('hidden', isPlaytesting);
+  toggleMenu('pause-menu');
+}
+
+function runCountdown(seconds, done) {
+  const el = document.getElementById('countdown');
+  let n = seconds;
+  el.classList.remove('hidden');
+  const tick = () => {
+    if (n <= 0) { el.classList.add('hidden'); done(); return; }
+    el.textContent = n;
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    n--;
+    setTimeout(tick, 700);
+  };
+  tick();
+}
+
+function resumeGame() {
+  if (!isPaused || !document.getElementById('countdown').classList.contains('hidden')) return;
+  toggleMenu(null);
+  runCountdown(3, () => {
+    isPaused = false;
+    if (levelUsesAudio && levelAudioStarted) bgAudio.play().catch(() => {});
+    startLoop();
+  });
+}
+
 function die(reason) {
   if (isDead) return;
-  if (isVerifying) {
-    isVerifying = false;
-    levelVerified = false;
-    pendingPublishAfterVerification = false;
-  }
+  if (isVerifying) { isVerifying = false; levelVerified = false; pendingPublishAfterVerification = false; }
   isDead = true;
   gameActive = false;
-  if (customGameInterval) clearInterval(customGameInterval);
+  stopLoop();
   bgAudio.pause();
 
   if (isBattleMode) {
@@ -503,22 +617,20 @@ function die(reason) {
   }
 
   finishStatsGame(false);
-  document.getElementById('lives-display').classList.add('hidden');
-  document.getElementById('game-hud').classList.add('hidden');
-  document.getElementById('score-container').classList.add('hidden');
+  showGameHud(false);
   document.getElementById('death-title').innerText = reason || 'FAILED';
+  document.getElementById('death-title').classList.remove('good');
+  document.getElementById('death-stars').innerHTML = '';
   document.getElementById('final-score').innerText = 'Score: ' + Math.floor(score);
   document.getElementById('death-retry-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-quit-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
   if (autoRetry && !isPlaytesting) {
     clearTimeout(autoRetryTimer);
-    autoRetryTimer = setTimeout(() => {
-      if (isDead) restartGame();
-    }, 2000);
+    autoRetryTimer = setTimeout(() => { if (isDead) restartGame(); }, 2000);
   }
   if (hideDeathScreen && !isPlaytesting) {
-    document.getElementById('death-screen').classList.add('hidden');
+    toggleMenu(null);
   } else {
     toggleMenu('death-screen');
   }
@@ -527,6 +639,8 @@ function die(reason) {
 function restartGame() {
   clearTimeout(autoRetryTimer);
   document.getElementById('death-screen').classList.add('hidden');
+  document.getElementById('pause-menu').classList.add('hidden');
+  isPaused = false;
   if (isVerifying) { startLevelVerification(); return; }
   if (lastStartArgs && lastStartArgs[0] === 'verify') { startLevelVerification(); return; }
   if (isPlaytesting) { startPlaytest(); return; }
@@ -534,44 +648,72 @@ function restartGame() {
 }
 
 function quitPlaytestOrGame() {
-  gameActive = false; isDead = true; score = 0; scoreEl.innerText = "0";
-  if (customGameInterval) clearInterval(customGameInterval);
+  const wasBattle = isBattleMode;
+  stopLoop();
+  gameActive = false; isDead = true; isPaused = false; score = 0; scoreEl.innerText = "0";
   bgAudio.pause();
+  if (wasBattle && typeof leaveActiveMatch === 'function') leaveActiveMatch();
   if (isPlaytesting || isVerifying) { stopPlaytest(); return; }
-  document.getElementById('lives-display').classList.add('hidden');
-  document.getElementById('game-hud').classList.add('hidden');
-  document.getElementById('score-container').classList.add('hidden');
-  document.getElementById('battle-race-hud').classList.add('hidden');
+  showGameHud(false);
   isBattleMode = false;
   toggleMenu('main-menu');
 }
 
-// --- editor session lifecycle ---
+// ---------------------------------------------------------------------------
+// Editor session lifecycle
+// ---------------------------------------------------------------------------
+function applyEditorBackground() {
+  const bg = document.getElementById('edit-bg-color');
+  document.body.style.background = (bg && bg.value) || '#202738';
+}
+
+function enterEditorView() {
+  inEditor = true; gameActive = false; isDead = false; isPaused = false;
+  tiles = []; particles = [];   // leftovers from a playtest must not show up in the editor
+  showGameHud(false);
+  document.getElementById('stop-playtest-btn').classList.add('hidden');
+  document.getElementById('death-screen').classList.add('hidden');
+  document.getElementById('editor-ui').classList.remove('hidden');
+  canvas.style.filter = '';
+  applyEditorBackground();
+  layoutCanvas();
+  refreshEditorTimeline();
+  startLoop();
+}
+
 function startEditor(existingLevel) {
   toggleMenu(null);
-  document.getElementById('editor-ui').classList.remove('hidden');
-  inEditor = true; gameActive = false; isDead = false; isPlaytesting = false; isVerifying = false; isBattleMode = false;
-  recordedTiles = existingLevel ? JSON.parse(JSON.stringify(existingLevel.data)) : [];
+  stopLoop();
+  isPlaytesting = false; isVerifying = false; isBattleMode = false;
+  recordedTiles = existingLevel ? JSON.parse(JSON.stringify(existingLevel.data || [])) : [];
   recordedEffects = existingLevel ? JSON.parse(JSON.stringify(existingLevel.effects || [])) : [];
   currentEditingName = existingLevel ? existingLevel.name : "";
-  editorTimer = 0; isRecording = false; deleteMode = false; selectedEffect = null;
-  document.getElementById('edit-lives').value = existingLevel ? (existingLevel.lives || 3) : 3;
-  document.getElementById('edit-fps').value = existingLevel ? (existingLevel.fps || 60) : 60;
-  document.getElementById('edit-audio-offset').value = existingLevel ? (existingLevel.audioOffset || 0) : 0;
+  currentLevelIcon = existingLevel ? (existingLevel.icon || null) : null;
+  editorTimer = 0; isRecording = false; deleteMode = false; selectedEffect = null; editorPlaying = false; levelVerified = false;
+  editorBpm = existingLevel && existingLevel.bpm ? existingLevel.bpm : 120;
+  editorGridOffset = existingLevel && existingLevel.gridOffset ? existingLevel.gridOffset : 0;
+  const val = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  val('edit-lives', existingLevel ? (existingLevel.lives || 3) : 3);
+  val('edit-fps', existingLevel ? (existingLevel.fps || 60) : 60);
+  val('edit-audio-offset', existingLevel ? (existingLevel.audioOffset || 0) : 0);
+  val('edit-bpm', editorBpm);
+  val('edit-grid-offset', editorGridOffset);
+  val('edit-difficulty', existingLevel ? (existingLevel.difficulty || 'Normal') : 'Normal');
+  val('edit-bg-color', existingLevel && existingLevel.backgroundColor ? existingLevel.backgroundColor : '#202738');
+  val('edit-bg-brightness', existingLevel && existingLevel.backgroundBrightness ? existingLevel.backgroundBrightness : 100);
   document.getElementById('edit-disable-holds').checked = existingLevel ? !!existingLevel.disableHolds : false;
-  document.getElementById('edit-difficulty').value = existingLevel ? (existingLevel.difficulty || 'Normal') : 'Normal';
+  document.getElementById('btn-create-tiles').classList.remove('active');
+  document.getElementById('btn-delete-mode').classList.remove('active');
+  document.getElementById('btn-delete-mode-2').classList.remove('active');
+  renderLevelIconPreview();
   closeAllDrawers();
-  refreshEditorTimeline();
-  updateEditorView();
+  setEditorGrid(editorGridDivision);
   renderSelectedEffectPanels();
-  requestAnimationFrame(gameLoop);
+  enterEditorView();
 }
 
 function toggleRecording() {
-  // "Record" is one button that does the whole job: start the song playing
-  // and the playhead advancing at the same time you arm key recording, so
-  // there's no separate step to forget. (Previously you had to also find
-  // and press a transport play button, which is what made this confusing.)
+  // One button does the whole job: start the song + playhead and arm key recording together.
   isRecording = !isRecording;
   const btn = document.getElementById('btn-create-tiles');
   if (btn) btn.classList.toggle('active', isRecording);
@@ -580,9 +722,9 @@ function toggleRecording() {
 }
 
 function toggleSongTester() {
+  if (!bgAudio.src) { toast('Load a song first!'); return; }
   isSongTesting = !isSongTesting;
   const btn = document.getElementById('btn-song-test');
-  if (!bgAudio.src) { alert('Load a song first!'); isSongTesting = false; if (btn) btn.classList.remove('active'); return; }
   if (btn) btn.classList.toggle('active', isSongTesting);
   if (isSongTesting) { bgAudio.currentTime = editorTimer; bgAudio.play().catch(() => {}); }
   else { bgAudio.pause(); }
@@ -594,51 +736,39 @@ function toggleDeleteMode() {
     const btn = document.getElementById(id);
     if (btn) btn.classList.toggle('active', deleteMode);
   });
+  canvas.classList.toggle('delete-cursor', deleteMode);
 }
 
-function openCreatorMenu() { document.getElementById('creator-menu').classList.remove('hidden'); }
-function closeCreatorMenu() { document.getElementById('creator-menu').classList.add('hidden'); }
+function openCreatorMenu() { document.getElementById('creator-menu').classList.remove('hidden'); document.body.classList.add('menus-open'); }
+function closeCreatorMenu() { document.getElementById('creator-menu').classList.add('hidden'); document.body.classList.remove('menus-open'); }
 
-function exitEditorWithoutSaving() {
-  if (!confirm('Quit without saving? Unsaved changes will be lost.')) return;
+async function exitEditorWithoutSaving() {
+  if (!(await uiConfirm('Quit without saving? Unsaved changes will be lost.', 'Quit', true))) return;
   closeCreatorMenu();
   document.getElementById('editor-ui').classList.add('hidden');
+  stopEditorTransport();
+  stopLoop();
   inEditor = false; isRecording = false; isSongTesting = false;
   bgAudio.pause();
-  if (editorInterval) clearInterval(editorInterval);
+  canvas.classList.remove('delete-cursor');
   toggleMenu('main-menu');
 }
 
-function openEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.remove('hidden'); }
-function closeEditorSettingsMenu() { document.getElementById('editor-level-settings').classList.add('hidden'); }
+function openEditorSettingsMenu() { toggleMenu('editor-level-settings'); }
+function closeEditorSettingsMenu() { toggleMenu(null); }
 
 function startPlaytest() {
-  if (recordedTiles.length === 0) { alert("Place some tiles first!"); return; }
+  if (recordedTiles.length === 0) { toast("Place some tiles first!"); return; }
   maxLives = parseInt(document.getElementById('edit-lives').value) || 1;
   isPlaytesting = true; inEditor = false; deleteMode = false;
+  canvas.classList.remove('delete-cursor');
   ['btn-delete-mode', 'btn-delete-mode-2'].forEach(id => document.getElementById(id)?.classList.remove('active'));
-  document.getElementById('editor-ui').classList.add('hidden');
-  document.getElementById('stop-playtest-btn').classList.remove('hidden');
+  closeAllDrawers();
   startGame('playtest', true, -1, recordedTiles, recordedEffects);
 }
 
 function stopPlaytest() {
-  isPlaytesting = false; isVerifying = false; gameActive = false; isDead = true; resetState();
-  document.getElementById('stop-playtest-btn').classList.add('hidden');
-  document.getElementById('lives-display').classList.add('hidden');
-  document.getElementById('game-hud').classList.add('hidden');
-  document.getElementById('score-container').classList.add('hidden');
-  document.getElementById('death-screen').classList.add('hidden');
-  document.getElementById('editor-ui').classList.remove('hidden');
-  inEditor = true;
-  requestAnimationFrame(gameLoop);
+  isPlaytesting = false; isVerifying = false; stopLoop(); gameActive = false; isDead = true; resetState();
+  enterEditorView();
 }
-
 function stopPlaytestFromDeath() { stopPlaytest(); }
-
-function verifyAndDownloadLevel() {
-  if (recordedTiles.length === 0) { alert("Place some tiles first!"); return; }
-  closeCreatorMenu();
-  isVerifying = true;
-  startPlaytest();
-}
