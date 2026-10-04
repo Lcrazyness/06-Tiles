@@ -1,131 +1,169 @@
 // ============================================================================
 // editor.js — everything about building a level.
 //
-// Layout notes (this is the part that answers "the timeline is in the way"
-// and "make the editor smoother/cleaner"):
-//   - The always-on floating panels from the old editor are gone. Tools now
-//     live in a slide-out left drawer, and effect inspection in a slide-out
-//     right drawer — both closed by default, opened with one tap, and they
-//     never sit on top of the canvas.
-//   - The timeline is docked to the true bottom edge of the screen (not
-//     floating mid-canvas) and can be collapsed to a 34px strip by tapping
-//     its grip handle, so it's never in the way of placing tiles.
+// Fixes in this version:
+//   * Tapping the board now places a tile WHERE YOU TAPPED (snapped to the
+//     grid) instead of always at the playhead.
+//   * Snapping is real: BPM + grid offset are level settings, beat lines are
+//     drawn brighter than sub-beat lines, and there's a visible Snap toggle.
+//   * Tiles in the editor are drawn exactly where they will appear in the game
+//     (they used to be a full tile-height too low).
+//   * Playback runs off a real clock / the song's own time instead of a 50ms
+//     setInterval that drifted away from the music.
+//   * The timeline no longer covers the board — the board is laid out above it.
 // ============================================================================
 
-const EFFECT_STUDIO_PPS = 80; // px/sec in the full effects-studio timeline
+const EFFECT_STUDIO_PPS = 80;
 const TRACK_ROWS = ['visual', 'speed', 'image', 'audio'];
 const EFFECT_COLORS = { pulse: '#ff2e88', tile_style: '#00f0ff', speed: '#ffc93c', image: '#9d4edd', extra_image: '#b34dff', sfx: '#37b6ff' };
 
 // ---------------------------------------------------------------------------
 // Grid / snapping
 // ---------------------------------------------------------------------------
-
-function getSnappedEditorTime(time, bypassSnap = false) {
+function snapTime(time, bypass = false) {
   const raw = Math.max(0, Number(time) || 0);
-  if (bypassSnap) return raw;
+  if (bypass || !editorSnapEnabled) return Math.round(raw * 1000) / 1000;
   const step = getEditorGridStep();
-  return Math.max(0, Math.round(raw / step) * step);
+  const snapped = Math.round((raw - editorGridOffset) / step) * step + editorGridOffset;
+  return Math.max(0, Math.round(snapped * 1000) / 1000);
 }
 
 function setEditorGrid(division) {
-  editorGridDivision = [2, 4, 8, 12].includes(Number(division)) ? Number(division) : 2;
-  document.querySelectorAll('.grid-btn').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.grid) === editorGridDivision));
+  editorGridDivision = [1, 2, 3, 4, 8].includes(Number(division)) ? Number(division) : 2;
+  document.querySelectorAll('.grid-btn[data-grid]').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.grid) === editorGridDivision));
+  updateGridReadout();
+}
+
+function updateGridReadout() {
   const readout = document.getElementById('grid-readout');
   if (readout) readout.textContent = getEditorGridStep().toFixed(3) + 's';
+  const bpm = document.getElementById('bpm-readout');
+  if (bpm) bpm.textContent = Math.round(editorBpm) + ' BPM';
+}
+
+function toggleEditorSnap() {
+  editorSnapEnabled = !editorSnapEnabled;
+  const btn = document.getElementById('btn-snap');
+  if (btn) { btn.classList.toggle('active', editorSnapEnabled); btn.textContent = editorSnapEnabled ? '🧲 Snap ON' : '🧲 Snap OFF'; }
+}
+
+function onBpmChanged(value) {
+  const bpm = Number(value);
+  if (!Number.isFinite(bpm)) return;
+  editorBpm = Math.max(30, Math.min(300, bpm));
+  updateGridReadout();
+}
+function onGridOffsetChanged(value) {
+  const off = Number(value);
+  editorGridOffset = Number.isFinite(off) ? Math.max(-5, Math.min(5, off)) : 0;
+}
+
+function setEditorZoom(delta) {
+  editorZoom = Math.max(0.25, Math.min(1.5, Math.round((editorZoom + delta) * 100) / 100));
+  const el = document.getElementById('zoom-readout');
+  if (el) el.textContent = Math.round(editorZoom * 100) + '%';
+}
+
+function snapAllTiles() {
+  if (!recordedTiles.length) return;
+  let moved = 0;
+  recordedTiles.forEach(t => { const s = snapTime(t.time, false); if (Math.abs(s - t.time) > 0.0005) moved++; t.time = s; });
+  // two tiles may now share a lane+time; drop the duplicates
+  const seen = new Set();
+  recordedTiles = recordedTiles.filter(t => { const k = t.lane + '@' + t.time; if (seen.has(k)) return false; seen.add(k); return true; });
+  recordedTiles.sort((a, b) => a.time - b.time || a.lane - b.lane);
   refreshEditorTimeline();
+  toast(moved ? 'Snapped ' + moved + ' tile' + (moved === 1 ? '' : 's') + ' to the grid.' : 'Everything was already on the grid.');
 }
 
 function tileAlreadyAt(lane, time) {
-  const epsilon = getEditorGridStep() * 0.25;
+  const epsilon = Math.min(0.02, getEditorGridStep() * 0.25);
   return recordedTiles.some(t => t.lane === lane && Math.abs(t.time - time) < epsilon);
 }
 
-function placeTileAtPlayhead(lane, bypassSnap = false) {
-  // Hold tiles are disabled for now — every placed tile is a plain instant tap.
-  const snapped = getSnappedEditorTime(editorTimer, bypassSnap);
-  if (tileAlreadyAt(lane, snapped)) return;
-  const t = { lane, time: snapped, isHold: false, holdDuration: 0 };
+function addTile(lane, time) {
+  if (tileAlreadyAt(lane, time)) return null;
+  const t = { lane, time, isHold: false, holdDuration: 0 };
   recordedTiles.push(t);
   recordedTiles.sort((a, b) => a.time - b.time || a.lane - b.lane);
+  levelVerified = false;
   refreshEditorTimeline();
+  return t;
 }
 
 // ---------------------------------------------------------------------------
-// Canvas placement / deletion (pointer input owned entirely by the editor)
+// Board pointer input (called from game.js when inEditor)
 // ---------------------------------------------------------------------------
-
-function handleCanvasMouseDown(e) {
-  if (!inEditor) return;
+function boardPoint(e) {
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const mouseX = (e.clientX - rect.left) * scaleX;
-  const mouseY = (e.clientY - rect.top) * scaleY;
-  const clickedLane = Math.floor(mouseX / laneW);
-
-  if (!deleteMode && mouseY >= 0 && mouseY <= canvas.height) {
-    placeTileAtPlayhead(Math.max(0, Math.min(3, clickedLane)), e.shiftKey);
-    return;
-  }
-  if (!deleteMode) return;
-
-  const clickedTime = editorTimer - (mouseY - lineY) / EDITOR_PPS;
-  let bestIndex = -1;
-  let bestDistance = Infinity;
-  for (let i = 0; i < recordedTiles.length; i++) {
-    const t = recordedTiles[i];
-    if (t.lane !== clickedLane) continue;
-    const tileEnd = t.time + (t.holdDuration || 0);
-    const distance = clickedTime < t.time ? t.time - clickedTime : clickedTime > tileEnd ? clickedTime - tileEnd : 0;
-    if (distance <= 0.35 && distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = i;
-    }
-  }
-  if (bestIndex !== -1) {
-    const removed = recordedTiles.splice(bestIndex, 1)[0];
-    editorVisualTiles = editorVisualTiles.filter(vt => vt.ref !== removed);
-    refreshEditorTimeline();
-  }
+  return { x: ((e.clientX - rect.left) / rect.width) * GW, y: ((e.clientY - rect.top) / rect.height) * GH };
 }
-canvas.addEventListener("mousedown", handleCanvasMouseDown);
-canvas.addEventListener("touchstart", (e) => {
+
+function handleEditorPointer(e) {
   if (!inEditor) return;
   e.preventDefault();
-  const t = e.touches[0];
-  handleCanvasMouseDown({ clientX: t.clientX, clientY: t.clientY, shiftKey: false });
-}, { passive: false });
+  const { x, y } = boardPoint(e);
+  if (x < 0 || x > GW || y < 0 || y > GH) return;
+  const lane = Math.max(0, Math.min(3, Math.floor(x / laneW)));
+  // A tile's BOTTOM edge sits on the hit line at its time (same as gameplay). The player taps where they want the
+  // tile's middle to be, so shift by half a tile height to get that tile's time.
+  const pps = getEditorPPS();
+  const halfTile = (TILE_H * editorZoom * 0.5) / pps;
+  const tapTime = editorTimer - (y - lineY) / pps - halfTile;
+
+  if (deleteMode) {
+    let best = -1, bestDist = Infinity;
+    recordedTiles.forEach((t, i) => {
+      if (t.lane !== lane) return;
+      const dist = Math.max(0, Math.abs(t.time - tapTime) - halfTile);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    });
+    if (best !== -1 && bestDist <= 0.12) {
+      recordedTiles.splice(best, 1);
+      levelVerified = false;
+      refreshEditorTimeline();
+    }
+    return;
+  }
+  addTile(lane, snapTime(tapTime, e.shiftKey));
+}
 
 function recordTileFromKeydown(laneIndex, e) {
   if (editorKeyTimes[laneIndex] !== null) return;
-  const snappedTime = getSnappedEditorTime(editorTimer, e.shiftKey);
-  editorKeyTimes[laneIndex] = snappedTime;
-  let newTile = null;
-  if (!tileAlreadyAt(laneIndex, snappedTime)) {
-    newTile = { lane: laneIndex, time: snappedTime, isHold: false, holdDuration: 0 };
-    recordedTiles.push(newTile);
-    recordedTiles.sort((a, b) => a.time - b.time || a.lane - b.lane);
-    refreshEditorTimeline();
-  }
-  editorVisualTiles.push({ lane: laneIndex, y: lineY, alpha: 1.0, ref: newTile });
+  const t = snapTime(editorTimer, e.shiftKey);
+  editorKeyTimes[laneIndex] = t;
+  addTile(laneIndex, t);
+  editorVisualTiles.push({ lane: laneIndex, alpha: 1.0 });
 }
+function recordTileFromKeyup(laneIndex) { editorKeyTimes[laneIndex] = null; }
 
-function recordTileFromKeyup(laneIndex) {
-  // Hold tiles are disabled for now, so key-up doesn't need to do anything —
-  // the tile was already placed on key-down as a plain instant tap.
-  editorKeyTimes[laneIndex] = null;
+// Mouse wheel / arrow keys scrub the playhead by one grid step.
+canvas.addEventListener('wheel', (e) => {
+  if (!inEditor) return;
+  e.preventDefault();
+  stepEditorTime(e.deltaY < 0 ? 1 : -1);
+}, { passive: false });
+window.addEventListener('keydown', (e) => {
+  if (!inEditor || isTypingTarget(e) || dialogOpen()) return;
+  if (e.key === 'ArrowUp') { e.preventDefault(); stepEditorTime(1); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); stepEditorTime(-1); }
+  else if (e.key === 'Enter' && !isRecording) { e.preventDefault(); toggleEditorTransport(); }
+});
+
+function stepEditorTime(dir) {
+  const step = getEditorGridStep();
+  const idx = Math.round((editorTimer - editorGridOffset) / step) + dir;
+  setEditorTime(Math.max(0, idx * step + editorGridOffset));
 }
 
 // ---------------------------------------------------------------------------
 // Drawers (left = tools, right = quick inspector)
 // ---------------------------------------------------------------------------
-
 function toggleDrawer(side) {
   const other = side === 'left' ? 'right' : 'left';
   const el = document.getElementById('drawer-' + side);
-  const otherEl = document.getElementById('drawer-' + other);
   const willOpen = !el.classList.contains('open');
-  otherEl.classList.remove('open');
+  document.getElementById('drawer-' + other).classList.remove('open');
   el.classList.toggle('open', willOpen);
   updateDrawerBackdrop();
 }
@@ -142,28 +180,28 @@ function updateDrawerBackdrop() {
 // ---------------------------------------------------------------------------
 // Docked bottom timeline
 // ---------------------------------------------------------------------------
-
-function refreshEditorTimeline() {
-  const timeEl = document.getElementById('editor-timeline-time');
-  const timerPanel = document.getElementById('editor-timer-panel');
-  if (timeEl) timeEl.innerText = editorTimer.toFixed(2) + 's';
-  if (timerPanel) timerPanel.innerText = editorTimer.toFixed(2) + 's';
-
-  const slider = document.getElementById('timeline-slider');
-  let maxT = parseFloat(slider.max) || 60;
-  if (bgAudio.duration && bgAudio.duration > maxT) maxT = bgAudio.duration;
+function timelineMax() {
+  let maxT = 30;
+  if (bgAudio.duration && isFinite(bgAudio.duration)) maxT = Math.max(maxT, bgAudio.duration);
   recordedTiles.forEach(t => { if (t.time + 5 > maxT) maxT = t.time + 5; });
   recordedEffects.forEach(e => { if (e.time + 5 > maxT) maxT = e.time + 5; });
+  return maxT;
+}
+
+// Rebuilds markers — only when tiles/effects change, never every frame.
+function refreshEditorTimeline() {
+  const maxT = timelineMax();
+  const slider = document.getElementById('timeline-slider');
   slider.max = maxT;
-  slider.value = editorTimer;
 
   const layer = document.getElementById('editor-marker-layer');
   layer.innerHTML = '';
+  const frag = document.createDocumentFragment();
   recordedTiles.forEach(t => {
     const m = document.createElement('div');
     m.className = 'timeline-marker' + (t.isHold ? ' hold' : '');
     m.style.left = Math.min(100, (t.time / maxT) * 100) + '%';
-    layer.appendChild(m);
+    frag.appendChild(m);
   });
   recordedEffects.forEach(fx => {
     const m = document.createElement('div');
@@ -171,42 +209,63 @@ function refreshEditorTimeline() {
     m.style.left = Math.min(100, (fx.time / maxT) * 100) + '%';
     m.title = effectKindLabel(fx);
     m.onclick = (ev) => { ev.stopPropagation(); selectEffect(fx); toggleDrawer('right'); };
-    layer.appendChild(m);
+    frag.appendChild(m);
   });
+  layer.appendChild(frag);
+  const count = document.getElementById('editor-tile-count');
+  if (count) count.textContent = recordedTiles.length + ' tiles';
 
-  updateEditorView();
+  updateEditorPlayhead();
   if (!document.getElementById('effects-menu').classList.contains('hidden')) {
     updateEffectPlayheadDisplays();
     renderEffectTracks();
   }
 }
 
-function updateEditorView() {
+// Cheap per-frame update: just the playhead + readouts.
+function updateEditorPlayhead() {
   const slider = document.getElementById('timeline-slider');
-  const maxT = parseFloat(slider.max) || 60;
+  const maxT = parseFloat(slider.max) || 30;
+  const text = editorTimer.toFixed(2) + 's';
+  const timeEl = document.getElementById('editor-timeline-time');
+  const pill = document.getElementById('editor-timer-panel');
+  if (timeEl) timeEl.textContent = text;
+  if (pill) pill.textContent = text;
+  slider.value = editorTimer;
   const ph = document.getElementById('editor-playhead');
   if (ph) ph.style.left = Math.min(100, (editorTimer / maxT) * 100) + '%';
 }
 
-function scrubTimeline(value) {
-  editorTimer = parseFloat(value) || 0;
-  if (bgAudio.src) bgAudio.currentTime = editorTimer;
-  refreshEditorTimeline();
+function setEditorTime(t) {
+  editorTimer = Math.max(0, t);
+  if (bgAudio.src && !editorPlaying) { try { bgAudio.currentTime = editorTimer; } catch (e) {} }
+  updateEditorPlayhead();
+  if (!document.getElementById('effects-menu').classList.contains('hidden')) updateEffectPlayheadDisplays();
 }
 
-function nudgeEditorTime(delta) {
-  editorTimer = Math.max(0, editorTimer + delta);
-  if (bgAudio.src) bgAudio.currentTime = editorTimer;
-  refreshEditorTimeline();
+function scrubTimeline(value) {
+  const wasPlaying = editorPlaying;
+  setEditorTime(parseFloat(value) || 0);
+  if (wasPlaying && bgAudio.src) { try { bgAudio.currentTime = editorTimer; } catch (e) {} }
 }
+function nudgeEditorTime(delta) { setEditorTime(editorTimer + delta); }
 
 function jumpEditorEnd() {
   let maxT = 0;
   recordedTiles.forEach(t => maxT = Math.max(maxT, t.time + (t.holdDuration || 0)));
   recordedEffects.forEach(e => maxT = Math.max(maxT, e.time + (e.duration || 0)));
-  if (bgAudio.duration) maxT = Math.max(maxT, bgAudio.duration);
-  editorTimer = maxT;
-  refreshEditorTimeline();
+  setEditorTime(maxT);
+}
+
+// Called every frame by the game loop while the editor is showing.
+let editorUiAccum = 0;
+function editorTick(dtSec) {
+  if (!editorPlaying) return;
+  const audioPlaying = bgAudio.src && !bgAudio.paused && !bgAudio.ended;
+  if (audioPlaying) editorTimer = bgAudio.currentTime;   // the song is the master clock when there is one
+  else editorTimer += dtSec;
+  editorUiAccum += dtSec;
+  if (editorUiAccum >= 0.05) { editorUiAccum = 0; updateEditorPlayhead(); }
 }
 
 function toggleEditorTransport() {
@@ -214,13 +273,8 @@ function toggleEditorTransport() {
   const btn = document.getElementById('editor-transport-btn');
   if (btn) btn.innerText = editorPlaying ? '⏸' : '▶';
   if (editorPlaying) {
-    if (bgAudio.src) { bgAudio.currentTime = editorTimer; bgAudio.play().catch(() => {}); }
-    editorInterval = setInterval(() => {
-      editorTimer += 0.05;
-      refreshEditorTimeline();
-    }, 50);
+    if (bgAudio.src) { try { bgAudio.currentTime = editorTimer; } catch (e) {} bgAudio.play().catch(() => {}); }
   } else {
-    clearInterval(editorInterval);
     bgAudio.pause();
     if (isRecording) {
       isRecording = false;
@@ -228,17 +282,25 @@ function toggleEditorTransport() {
     }
   }
 }
+function stopEditorTransport() {
+  if (!editorPlaying) return;
+  editorPlaying = false;
+  const btn = document.getElementById('editor-transport-btn');
+  if (btn) btn.innerText = '▶';
+  if (isRecording) { isRecording = false; document.getElementById('btn-create-tiles')?.classList.remove('active'); }
+}
 
 function toggleTimelineDock() {
   document.getElementById('timeline-dock').classList.toggle('collapsed');
+  setTimeout(layoutCanvas, 20);
+  setTimeout(layoutCanvas, 300);
 }
 
 // ---------------------------------------------------------------------------
 // Effects studio
 // ---------------------------------------------------------------------------
-
 function effectKindLabel(fx) {
-  return { pulse: 'PULSE', tile_style: 'TILE STYLE', speed: 'SPEED', image: 'IMAGE', extra_image: 'EXTRA IMAGE', sfx: 'SFX' }[fx.type] || fx.type.toUpperCase();
+  return { pulse: 'PULSE', tile_style: 'TILE STYLE', speed: 'SPEED', image: 'IMAGE', extra_image: 'EXTRA IMAGE', sfx: 'SFX' }[fx.type] || String(fx.type).toUpperCase();
 }
 
 function switchEffectCategory(cat) {
@@ -247,135 +309,106 @@ function switchEffectCategory(cat) {
     const el = document.getElementById('effect-library-' + c);
     if (el) el.classList.toggle('hidden', c !== cat);
   });
-  document.querySelectorAll('.effect-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('onclick') === `switchEffectCategory('${cat}')`);
-  });
+  document.querySelectorAll('.effect-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.cat === cat));
 }
 
 function openEffectsMenu() {
-  document.getElementById('effects-menu').classList.remove('hidden');
+  toggleMenu('effects-menu');
   switchEffectCategory(currentEffectCategory);
   renderEffectTimeRuler();
   renderEffectTracks();
   updateEffectPlayheadDisplays();
 }
-function closeEffectsMenu() {
-  document.getElementById('effects-menu').classList.add('hidden');
-}
+function closeEffectsMenu() { toggleMenu(null); }
 
-function addPulseEffect() {
-  const fx = { type: 'pulse', time: editorTimer, layer: 0, color: '#0055ff', duration: 0.6, inTrans: 0.1, outTrans: 0.3 };
+function pushEffect(fx) {
   recordedEffects.push(fx); recordedEffects.sort((a, b) => a.time - b.time);
+  levelVerified = false;
   selectEffect(fx);
 }
-function addTileStyleEffect() {
-  const fx = { type: 'tile_style', time: editorTimer, c1: '#00f0ff', c2: '#0055ff', alpha: 1 };
-  recordedEffects.push(fx); recordedEffects.sort((a, b) => a.time - b.time);
-  selectEffect(fx);
-}
+function addPulseEffect() { pushEffect({ type: 'pulse', time: editorTimer, layer: 0, color: '#0055ff', duration: 0.6, inTrans: 0.1, outTrans: 0.3 }); }
+function addTileStyleEffect() { pushEffect({ type: 'tile_style', time: editorTimer, c1: '#00f0ff', c2: '#0055ff', alpha: 1 }); }
 function setSpeedPreset(mult) {
   const presetTargets = { 0.5: 10, 1: 18, 1.5: 26, 2: 34 };
-  const target = presetTargets[mult] || Math.round(EDITOR_BASE_SPEED * mult);
-  const fx = { type: 'speed', time: editorTimer, target, transDuration: 0.5 };
-  recordedEffects.push(fx); recordedEffects.sort((a, b) => a.time - b.time);
-  selectEffect(fx);
+  pushEffect({ type: 'speed', time: editorTimer, target: presetTargets[mult] || Math.round(EDITOR_BASE_SPEED * mult), transDuration: 0.5 });
 }
 function addSpeedEffect() {
-  const target = parseFloat(document.getElementById('fx-speed-target').value) || 25;
-  const trans = parseFloat(document.getElementById('fx-speed-trans').value) || 0.5;
-  const fx = { type: 'speed', time: editorTimer, target, transDuration: trans };
-  recordedEffects.push(fx); recordedEffects.sort((a, b) => a.time - b.time);
-  selectEffect(fx);
+  pushEffect({
+    type: 'speed', time: editorTimer,
+    target: parseFloat(document.getElementById('fx-speed-target').value) || 25,
+    transDuration: parseFloat(document.getElementById('fx-speed-trans').value) || 0.5
+  });
 }
 function addImageEffect() {
-  if (!loadedImageDataUrl) { alert('Choose an image file first.'); return; }
-  const fx = {
+  if (!loadedImageDataUrl) { toast('Choose an image file first.'); return; }
+  pushEffect({
     type: 'image', time: editorTimer, layer: 0, src: loadedImageDataUrl,
     alpha: parseFloat(document.getElementById('fx-img-alpha').value) || 0.5,
     duration: parseFloat(document.getElementById('fx-img-dur').value) || 2,
     inTrans: parseFloat(document.getElementById('fx-img-in').value) || 0.3,
     outTrans: parseFloat(document.getElementById('fx-img-out').value) || 0.3
-  };
-  recordedEffects.push(fx); recordedEffects.sort((a, b) => a.time - b.time);
-  selectEffect(fx);
+  });
 }
 function setExtraImagePosition(pos) {
-  if (pos === 'center') { pendingExtraX = canvas.width / 2; pendingExtraY = canvas.height / 2; }
-  if (pos === 'top') { pendingExtraX = canvas.width / 2; pendingExtraY = 110; }
-  if (pos === 'bottom') { pendingExtraX = canvas.width / 2; pendingExtraY = canvas.height - 100; }
+  if (pos === 'center') { pendingExtraX = GW / 2; pendingExtraY = GH / 2; }
+  if (pos === 'top') { pendingExtraX = GW / 2; pendingExtraY = 110; }
+  if (pos === 'bottom') { pendingExtraX = GW / 2; pendingExtraY = GH - 100; }
+  toast('Extra image position: ' + pos);
 }
 function addExtraImageEffect() {
-  if (!loadedExtraImageDataUrl) { alert('Choose an image file first.'); return; }
-  const fx = {
+  if (!loadedExtraImageDataUrl) { toast('Choose an image file first.'); return; }
+  pushEffect({
     type: 'extra_image', time: editorTimer, layer: 0, src: loadedExtraImageDataUrl,
     x: pendingExtraX, y: pendingExtraY,
     w: parseFloat(document.getElementById('fx-extra-w').value) || 150,
     h: parseFloat(document.getElementById('fx-extra-h').value) || 150,
     alpha: parseFloat(document.getElementById('fx-extra-alpha').value) || 1,
     duration: parseFloat(document.getElementById('fx-extra-dur').value) || 2
-  };
-  recordedEffects.push(fx); recordedEffects.sort((a, b) => a.time - b.time);
-  selectEffect(fx);
+  });
 }
 function addSfxEffect() {
-  if (!loadedSfxDataUrl) { alert('Choose an audio file first.'); return; }
-  const fx = { type: 'sfx', time: editorTimer, src: loadedSfxDataUrl };
-  recordedEffects.push(fx); recordedEffects.sort((a, b) => a.time - b.time);
-  selectEffect(fx);
+  if (!loadedSfxDataUrl) { toast('Choose an audio file first.'); return; }
+  pushEffect({ type: 'sfx', time: editorTimer, src: loadedSfxDataUrl });
 }
 
-document.getElementById('fx-img-upload').addEventListener('change', function (e) {
-  if (!e.target.files[0]) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => loadedImageDataUrl = ev.target.result;
-  reader.readAsDataURL(e.target.files[0]);
-});
-document.getElementById('fx-extra-upload').addEventListener('change', function (e) {
-  if (!e.target.files[0]) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => loadedExtraImageDataUrl = ev.target.result;
-  reader.readAsDataURL(e.target.files[0]);
-});
-document.getElementById('fx-sfx-upload').addEventListener('change', function (e) {
-  if (!e.target.files[0]) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => loadedSfxDataUrl = ev.target.result;
-  reader.readAsDataURL(e.target.files[0]);
-});
+function bindFileToVar(inputId, setter, maxMb) {
+  document.getElementById(inputId).addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > maxMb * 1024 * 1024) { toast('That file is too big (max ' + maxMb + 'MB).'); e.target.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => setter(ev.target.result);
+    reader.readAsDataURL(file);
+  });
+}
+bindFileToVar('fx-img-upload', v => loadedImageDataUrl = v, 1.5);
+bindFileToVar('fx-extra-upload', v => loadedExtraImageDataUrl = v, 1.5);
+bindFileToVar('fx-sfx-upload', v => loadedSfxDataUrl = v, 1.5);
 
-// --- selection + shared inspector rendering (drives both the main-editor
-// quick drawer and the full effects-studio inspector from one place) ---
-
+// --- selection + shared inspector rendering ---
 function selectEffect(fx) {
   selectedEffect = fx;
   renderSelectedEffectPanels();
   renderEffectTracks();
   refreshEditorTimeline();
 }
-
 function setSelectedEffectToPlayhead() {
   if (!selectedEffect) return;
   selectedEffect.time = editorTimer;
   recordedEffects.sort((a, b) => a.time - b.time);
-  renderSelectedEffectPanels();
-  renderEffectTracks();
-  refreshEditorTimeline();
+  renderSelectedEffectPanels(); renderEffectTracks(); refreshEditorTimeline();
 }
 function deleteSelectedEffect() {
   if (!selectedEffect) return;
   recordedEffects = recordedEffects.filter(e => e !== selectedEffect);
   selectedEffect = null;
-  renderSelectedEffectPanels();
-  renderEffectTracks();
-  refreshEditorTimeline();
+  renderSelectedEffectPanels(); renderEffectTracks(); refreshEditorTimeline();
 }
 function nudgeSelectedEffect(delta) {
   if (!selectedEffect) return;
   selectedEffect.time = Math.max(0, selectedEffect.time + delta);
   recordedEffects.sort((a, b) => a.time - b.time);
-  renderSelectedEffectPanels();
-  renderEffectTracks();
-  refreshEditorTimeline();
+  renderSelectedEffectPanels(); renderEffectTracks(); refreshEditorTimeline();
 }
 
 function describeEffectFields(fx) {
@@ -417,17 +450,14 @@ function describeEffectFields(fx) {
   return fields;
 }
 
-function onEffectFieldChanged() {
-  renderEffectTracks();
-  refreshEditorTimeline();
-}
+function onEffectFieldChanged() { levelVerified = false; renderEffectTracks(); refreshEditorTimeline(); }
 
 function buildFieldsInto(container, fx) {
   container.innerHTML = '';
   const fields = describeEffectFields(fx);
   if (fields.length === 0) {
     const p = document.createElement('div');
-    p.style.cssText = 'font-size:11px;color:var(--text-low);';
+    p.className = 'muted-note';
     p.textContent = fx.type === 'sfx' ? 'Plays once when the playhead reaches it.' : 'No extra properties.';
     container.appendChild(p);
     return;
@@ -493,7 +523,6 @@ function renderStudioInspector() {
     return;
   }
   subtitle.textContent = effectKindLabel(selectedEffect) + ' · ' + selectedEffect.time.toFixed(2) + 's';
-
   const timeRow = document.createElement('div');
   timeRow.className = 'inspector-field';
   const timeLabel = document.createElement('label'); timeLabel.textContent = 'Time (s)';
@@ -507,7 +536,6 @@ function renderStudioInspector() {
   };
   timeRow.appendChild(timeLabel); timeRow.appendChild(timeInput);
   content.appendChild(timeRow);
-
   const fieldsWrap = document.createElement('div');
   content.appendChild(fieldsWrap);
   buildFieldsInto(fieldsWrap, selectedEffect);
@@ -526,7 +554,7 @@ function getEffectTimelineDuration() {
   let maxT = 20;
   recordedTiles.forEach(t => maxT = Math.max(maxT, t.time + (t.holdDuration || 0) + 3));
   recordedEffects.forEach(e => maxT = Math.max(maxT, e.time + (e.duration || 0.5) + 3));
-  if (bgAudio.duration) maxT = Math.max(maxT, bgAudio.duration);
+  if (bgAudio.duration && isFinite(bgAudio.duration)) maxT = Math.max(maxT, bgAudio.duration);
   return maxT;
 }
 
@@ -539,7 +567,7 @@ function renderEffectTimeRuler() {
   ruler.innerHTML = '';
   for (let s = 0; s <= duration; s++) {
     const tick = document.createElement('div');
-    tick.style.cssText = `position:absolute; left:${s * EFFECT_STUDIO_PPS}px; top:0; bottom:0; width:1px; background:var(--border-soft);`;
+    tick.style.cssText = `position:absolute; left:${s * EFFECT_STUDIO_PPS}px; top:0; bottom:0; width:1px; background:var(--line);`;
     ruler.appendChild(tick);
     if (s % 5 === 0) {
       const label = document.createElement('span');
@@ -559,48 +587,48 @@ function trackRowForEffect(fx) {
   return 3;
 }
 
+// Block drag/resize use pointer events so they work with touch as well as mouse.
 function attachBlockDrag(block, fx) {
-  block.addEventListener('mousedown', (e) => {
+  block.addEventListener('pointerdown', (e) => {
+    if (e.target.classList.contains('resize-handle')) return;
     e.stopPropagation();
     selectEffect(fx);
-    const startX = e.clientX; const startTime = fx.time;
+    const startX = e.clientX, startTime = fx.time;
     function onMove(ev) {
-      const dx = ev.clientX - startX;
-      let newTime = startTime + dx / EFFECT_STUDIO_PPS;
-      if (!ev.shiftKey) newTime = Math.round(newTime / getEditorGridStep()) * getEditorGridStep();
+      let newTime = startTime + (ev.clientX - startX) / EFFECT_STUDIO_PPS;
+      if (!ev.shiftKey && editorSnapEnabled) newTime = Math.round((newTime - editorGridOffset) / getEditorGridStep()) * getEditorGridStep() + editorGridOffset;
       fx.time = Math.max(0, newTime);
       block.style.left = (fx.time * EFFECT_STUDIO_PPS) + 'px';
       updateEffectPlayheadDisplays();
     }
     function onUp() {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
       recordedEffects.sort((a, b) => a.time - b.time);
+      levelVerified = false;
       renderSelectedEffectPanels();
       refreshEditorTimeline();
     }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
   });
 }
 function attachBlockResize(handle, fx, block) {
-  handle.addEventListener('mousedown', (e) => {
+  handle.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
     selectEffect(fx);
-    const startX = e.clientX; const startDur = fx.duration || 0.4;
+    const startX = e.clientX, startDur = fx.duration || 0.4;
     function onMove(ev) {
-      const dx = ev.clientX - startX;
-      let newDur = Math.max(0.1, startDur + dx / EFFECT_STUDIO_PPS);
-      fx.duration = newDur;
-      block.style.width = Math.max(18, newDur * EFFECT_STUDIO_PPS) + 'px';
+      fx.duration = Math.max(0.1, startDur + (ev.clientX - startX) / EFFECT_STUDIO_PPS);
+      block.style.width = Math.max(18, fx.duration * EFFECT_STUDIO_PPS) + 'px';
     }
     function onUp() {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
       renderSelectedEffectPanels();
     }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
   });
 }
 
@@ -609,7 +637,6 @@ function renderEffectTracks() {
   if (!tracksEl) return;
   tracksEl.innerHTML = '';
   const rows = TRACK_ROWS.map(() => { const r = document.createElement('div'); r.className = 'effect-track-row'; tracksEl.appendChild(r); return r; });
-
   recordedEffects.forEach(fx => {
     const row = rows[trackRowForEffect(fx)];
     const block = document.createElement('div');
@@ -627,22 +654,20 @@ function renderEffectTracks() {
     }
     row.appendChild(block);
   });
-
   const wrap = document.getElementById('effect-timeline-wrap');
   if (wrap && !wrap._clickBound) {
     wrap._clickBound = true;
-    wrap.addEventListener('mousedown', (e) => {
+    wrap.addEventListener('pointerdown', (e) => {
       if (e.target.closest('.effect-block')) return;
-      const rect = tracksEl.getBoundingClientRect();
-      const x = e.clientX - rect.left + wrap.scrollLeft;
-      editorTimer = Math.max(0, x / EFFECT_STUDIO_PPS);
-      updateEffectPlayheadDisplays();
-      refreshEditorTimeline();
+      const rect = document.getElementById('effect-tracks').getBoundingClientRect();
+      setEditorTime(Math.max(0, (e.clientX - rect.left) / EFFECT_STUDIO_PPS));
     });
   }
 }
 
-
+// ---------------------------------------------------------------------------
+// Level appearance
+// ---------------------------------------------------------------------------
 function updateEditorBackgroundBrightness(value) {
   currentLevelBrightness = Math.max(70, Math.min(140, Number(value) || 100));
   const output = document.getElementById('edit-bg-brightness-value');
@@ -652,27 +677,19 @@ function updateEditorBackgroundBrightness(value) {
 function renderLevelIconPreview() {
   const preview = document.getElementById('edit-level-icon-preview');
   if (!preview) return;
-  preview.innerHTML = currentLevelIcon
-    ? '<img src="' + escapeHtml(currentLevelIcon) + '" alt="Level icon">'
-    : '<span>No level icon selected</span>';
+  preview.innerHTML = currentLevelIcon ? '<img src="' + escapeHtml(currentLevelIcon) + '" alt="Level icon">' : '<span>No icon</span>';
 }
 
 const levelIconUpload = document.getElementById('edit-level-icon-upload');
 if (levelIconUpload) {
-  levelIconUpload.addEventListener('change', (event) => {
+  levelIconUpload.addEventListener('change', async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 1024 * 1024) {
-      alert('Level icon must be 1MB or smaller.');
-      event.target.value = '';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      currentLevelIcon = e.target.result;
+    if (!file.type.startsWith('image/')) { toast('Please choose an image.'); return; }
+    try {
+      currentLevelIcon = await downscaleImage(file, 256);
       renderLevelIconPreview();
-    };
-    reader.readAsDataURL(file);
+    } catch (e) { toast(e.message || 'Could not read that image.'); }
+    event.target.value = '';
   });
 }
