@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Extreme Tiles: Hyper Edition</title>
-<link rel="stylesheet" href="style.css?v=20261003-5">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#2a1070">
+<title>06 Tiles</title>
+<link rel="stylesheet" href="style.css?v=20261004-1">
 </head>
 <body>
 
-<!-- ============================== BACKGROUND / FX LAYERS ============================== -->
+<!-- ============ BACKGROUND / FX LAYERS ============ -->
 <div id="red-flash"></div>
 <div id="bg-flash"></div>
 <div id="bg-image-container"></div>
@@ -17,501 +18,305 @@
 <div id="fg-image-container"></div>
 <div id="extra-images-fg"></div>
 
-<!-- ============================== GAME HUD / CANVAS ============================== -->
+<!-- ============ GAME HUD / CANVAS ============ -->
 <div id="game-hud" class="hidden">
   <div id="fps-display">60 FPS</div>
   <div id="progress-display">0%</div>
 </div>
+<button id="pause-btn" class="hidden" onclick="pauseGame()" aria-label="Pause">❚❚</button>
 
 <div id="battle-race-hud" class="hidden">
-  <div class="race-player-row">
-    <span class="race-name" id="race-name-me">You</span>
-    <div class="race-bar-track"><div class="race-bar-fill me" id="race-bar-me" style="width:0%"></div></div>
-  </div>
-  <div class="race-vs">VS</div>
-  <div class="race-player-row">
-    <span class="race-name" id="race-name-opp">Opponent</span>
-    <div class="race-bar-track"><div class="race-bar-fill opp" id="race-bar-opp" style="width:0%"></div></div>
-  </div>
+  <div class="race-player-row"><span class="race-name" id="race-name-me">You</span><div class="race-bar-track"><div class="race-bar-fill me" id="race-bar-me" style="width:0%"></div></div></div>
+  <div class="race-player-row"><span class="race-name" id="race-name-opp">Opponent</span><div class="race-bar-track"><div class="race-bar-fill opp" id="race-bar-opp" style="width:0%"></div></div></div>
 </div>
 
 <audio id="bg-audio"></audio>
 <input type="file" id="audio-upload" accept="audio/*" style="display:none" onchange="loadAudioFile(event)">
 
 <div id="lives-display" class="hidden">❤️ <span id="lives-count">3</span></div>
-<button id="stop-playtest-btn" class="hidden" onclick="stopPlaytest()">🛑 STOP PLAYTESTING</button>
-
-<div id="score-container" class="hidden">
-  <div id="score">0</div>
-  <div id="rest-msg">BREATHE</div>
-</div>
+<button id="stop-playtest-btn" class="hidden" onclick="stopPlaytest()">STOP PLAYTESTING</button>
+<div id="score-container" class="hidden"><div id="score">0</div><div id="rest-msg">BREATHE</div></div>
+<div id="countdown" class="hidden"></div>
 
 <canvas id="gameCanvas" width="360" height="640"></canvas>
 
-<!-- ============================== MAIN MENU ============================== -->
+<!-- ============ MAIN MENU ============ -->
 <div id="main-menu" class="overlay">
-  <h1>EXTREME TILES</h1>
-  <div class="menu-content">
-    <button class="nav-btn" style="background: linear-gradient(135deg, var(--play-blue), #0055ff); color: #fff;" onclick="toggleMenu('levels-menu')">▶ MAIN LEVELS</button>
-    <button class="nav-btn" onclick="openBrowseLevels('levels')">Browse</button>
-    <button class="nav-btn" style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-purple-deep)); color: #fff;" onclick="openMyLevels()">📁 MY LEVELS</button>
-    <button class="nav-btn" style="background: linear-gradient(135deg, var(--accent-pink), #b3195f); color: #fff;" onclick="openBattleMenu()">⚔ BATTLE</button>
-    <button class="nav-btn pink-btn" onclick="startEditor()">🛠 CREATE LEVEL</button>
-    <button class="nav-btn secondary-btn" onclick="toggleMenu('settings-menu')">⚙ SETTINGS</button>
-    <button class="nav-btn secondary-btn" onclick="openStatsModal()">📊 STATS</button>
-    <button class="nav-btn secondary-btn" id="profile-btn" onclick="openProfileModal()">👤 Guest</button>
-<button class="nav-btn secondary-btn hidden" id="admin-btn" onclick="loadAdminPanel()">🛠 ADMIN</button>
+  <div id="menu-bg-tiles"></div>
+  <div class="menu-top">
+    <button class="profile-chip" onclick="openProfileModal()"><span class="avatar" id="profile-chip-avatar">G</span><span id="profile-name-label">Guest</span></button>
+    <button class="icon-btn" onclick="toggleMenu('settings-menu')" aria-label="Settings">⚙</button>
   </div>
-</div>
-
-<!-- ============================== ONLINE ACCOUNT ============================== -->
-<div id="profile-modal" class="overlay hidden">
-  <h2>ACCOUNT</h2>
-  <div class="menu-content">
-    <div class="profile-note">Create an account to save your 06-Tiles profile online. Your password is securely hashed on the server.</div>
-    <div class="profile-create-row" style="display:flex; flex-direction:column; gap:8px;">
-      <input type="text" id="account-username" placeholder="Username" maxlength="20" autocomplete="username">
-      <input type="email" id="account-email" placeholder="Email" maxlength="254" autocomplete="email">
-      <input type="password" id="account-password" placeholder="Password (8+ characters)" maxlength="128" autocomplete="current-password">
-      <button class="play-btn" onclick="loginAccount()">LOG IN</button>
-      <button class="nav-btn" onclick="registerAccount()">CREATE ACCOUNT</button>
-      <div id="account-status" class="profile-note" style="min-height:18px;"></div>
+  <div class="screen-body home-body">
+    <div class="home-col">
+      <div class="logo"><span class="logo-06">06</span><span class="logo-tiles">TILES</span></div>
+      <div class="logo-sub">TAP THE BLACK TILES</div>
+      <button class="btn btn-play huge" onclick="toggleMenu('levels-menu')">▶ PLAY</button>
+      <div class="home-grid">
+        <button class="home-card" onclick="openBrowseLevels('levels')"><span>🌐</span>Browse</button>
+        <button class="home-card" onclick="openMyLevels()"><span>📁</span>My Levels</button>
+        <button class="home-card pink" onclick="openBattleMenu()"><span>⚔</span>Battle</button>
+        <button class="home-card" onclick="startEditor()"><span>🛠</span>Create</button>
+        <button class="home-card" onclick="openStatsModal()"><span>📊</span>Stats</button>
+        <button class="home-card" onclick="openBrowseLevels('leaderboards')"><span>🏆</span>Ranks</button>
+      </div>
+      <button class="btn btn-ghost hidden" id="admin-btn" onclick="loadAdminPanel()">🛡 ADMIN PANEL</button>
     </div>
-    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top:6px;">BACK TO MENU</button>
   </div>
 </div>
 
-<!-- ============================== PLAYER STATS ============================== -->
+<!-- screens rendered by JS -->
+<div id="profile-modal" class="overlay hidden"></div>
 <div id="stats-modal" class="overlay hidden"></div>
 <div id="admin-panel" class="overlay hidden"></div>
+<div id="my-levels-menu" class="overlay hidden"></div>
+<div id="browse-levels-menu" class="overlay hidden"></div>
+<div id="level-detail-menu" class="overlay hidden"></div>
 
-<!-- ============================== SETTINGS ============================== -->
+<!-- ============ SETTINGS ============ -->
 <div id="settings-menu" class="overlay hidden">
-  <h2>GAME SETTINGS</h2>
-  <div class="menu-content">
-    <div class="settings-row">
-      <span>Primary Theme Color</span>
-      <input type="color" id="primary-color-picker" value="#3c096c" onchange="updatePrimaryColor(this.value)">
-    </div>
-    <div class="settings-row">
-      <span>Game Brightness</span>
-      <input type="range" id="game-brightness" min="70" max="140" value="100" step="1" oninput="updateGameBrightness(this.value)">
-      <b id="game-brightness-value">100%</b>
-    </div>
-    <div class="settings-row">
-      <span>Enable CBF (Sub-frame Clicks)</span>
-      <input type="checkbox" id="setting-cbf" checked>
-    </div>
-    <button class="nav-btn secondary-btn" onclick="toggleExtraSettings()">EXTRA SETTINGS <kbd>O</kbd></button>
-    <div id="extra-settings-panel" class="extra-settings-panel hidden">
-      <div class="settings-row"><span>Show Hitboxes</span><input type="checkbox" id="setting-show-hitboxes"></div>
-      <div class="settings-row"><span>Show Lane Text On Tiles</span><input type="checkbox" id="setting-show-lane-text"></div>
-      <div class="settings-row"><span>Hide Death Screen</span><input type="checkbox" id="setting-hide-death"></div>
-      <div class="settings-row"><span>Auto Retry After 2 Seconds</span><input type="checkbox" id="setting-auto-retry"></div>
-      <div class="keybind-settings">
-        <div class="editor-settings-title">KEYBINDS</div>
-        <div class="keybind-grid">
-          <label>Lane 1 <input id="keybind-0" maxlength="1" value="r"></label>
-          <label>Lane 2 <input id="keybind-1" maxlength="1" value="t"></label>
-          <label>Lane 3 <input id="keybind-2" maxlength="1" value="y"></label>
-          <label>Lane 4 <input id="keybind-3" maxlength="1" value="u"></label>
-        </div>
-        <button class="nav-btn" onclick="applyKeybindSettings()">APPLY KEYBINDS</button>
+  <div class="screen-header"><button class="back-btn" onclick="toggleMenu('main-menu')">‹</button><h2>SETTINGS</h2><div class="header-right"></div></div>
+  <div class="screen-body"><div class="screen-col">
+    <div class="settings-row"><span>Theme color</span><input type="color" id="primary-color-picker" value="#2d9cf0" onchange="updatePrimaryColor(this.value)"></div>
+    <div class="settings-row"><span>Brightness</span><input type="range" id="game-brightness" min="70" max="140" value="100" oninput="updateGameBrightness(this.value)"><b id="game-brightness-value">100%</b></div>
+    <div class="settings-row"><span>Sub-frame clicks (CBF)</span><input type="checkbox" id="setting-cbf" checked></div>
+    <button class="btn btn-ghost" onclick="toggleExtraSettings()">Extra settings <kbd>O</kbd></button>
+    <div id="extra-settings-panel" class="panel hidden">
+      <div class="settings-row"><span>Show hitboxes</span><input type="checkbox" id="setting-show-hitboxes"></div>
+      <div class="settings-row"><span>Lane letters on tiles</span><input type="checkbox" id="setting-show-lane-text"></div>
+      <div class="settings-row"><span>Hide death screen</span><input type="checkbox" id="setting-hide-death"></div>
+      <div class="settings-row"><span>Auto retry after 2s</span><input type="checkbox" id="setting-auto-retry"></div>
+      <div class="section-title">KEYBINDS</div>
+      <div class="keybind-grid">
+        <label>Lane 1 <input id="keybind-0" maxlength="1" value="r"></label><label>Lane 2 <input id="keybind-1" maxlength="1" value="t"></label>
+        <label>Lane 3 <input id="keybind-2" maxlength="1" value="y"></label><label>Lane 4 <input id="keybind-3" maxlength="1" value="u"></label>
       </div>
+      <button class="btn" onclick="applyKeybindSettings()">Apply keybinds</button>
     </div>
-    <button class="nav-btn" onclick="toggleMenu('main-menu')">SAVE &amp; BACK</button>
-  </div>
+    <div class="note center">On phones/tablets just tap the lanes. Esc pauses.</div>
+  </div></div>
 </div>
 
-<!-- ============================== BUILT-IN LEVELS ============================== -->
+<!-- ============ BUILT-IN LEVELS ============ -->
 <div id="levels-menu" class="overlay hidden">
-  <h2 style="margin-bottom: 5px;">MAIN LEVELS</h2>
-  <div class="menu-content" style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
-    <div class="grid-levels">
-      <div class="song-card" style="border-left: 5px solid #ff0000;">
-        <div class="song-main">
-          <div class="song-thumb" style="background: #2a0000; color: #ff3333;">🔃</div>
-          <div class="song-info">
-            <span class="song-title">Level Loader</span>
-            <span class="song-author">Load any JSON</span>
-          </div>
-          <input type="file" id="level-upload" accept=".json" style="display:none" onchange="loadCustomLevelFile(event)">
-          <button class="play-btn" style="background: linear-gradient(135deg, #ff0000, #aa0000);" onclick="document.getElementById('level-upload').click()">LOAD .JSON</button>
-        </div>
-        <div class="speed-control" style="justify-content: center; background: rgba(255,0,0,0.1);">
-          <span style="color: #ffaaaa; font-weight: bold; font-size: 11px;">Extracts Lives &amp; Effects</span>
-        </div>
-      </div>
-      <div class="song-card">
-        <div class="song-main">
-          <div class="song-thumb">🎹</div>
-          <div class="song-info">
-            <span class="song-title">The Scale</span>
-            <span class="song-author">By: System</span>
-          </div>
-          <button class="play-btn" onclick="startGame('scale')">PLAY</button>
-        </div>
-        <div class="speed-control">
-          <span>Spd:</span>
-          <input type="range" id="speed-scale" min="10" max="60" value="32">
-          <span id="val-scale">32</span>
-        </div>
-      </div>
-      <div class="song-card">
-        <div class="song-main">
-          <div class="song-thumb">🥁</div>
-          <div class="song-info">
-            <span class="song-title">Bam Bam</span>
-            <span class="song-author">By: System</span>
-          </div>
-          <button class="play-btn" onclick="startGame('bambam')">PLAY</button>
-        </div>
-        <div class="speed-control">
-          <span>Spd:</span>
-          <input type="range" id="speed-bambam" min="10" max="60" value="34">
-          <span id="val-bambam">34</span>
-        </div>
-      </div>
-    </div>
-    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
-  </div>
+  <div class="screen-header"><button class="back-btn" onclick="toggleMenu('main-menu')">‹</button><h2>PLAY</h2><div class="header-right"></div></div>
+  <div class="screen-body"><div class="screen-col"><div class="song-list">
+    <div class="song-row"><div class="song-art" style="background:linear-gradient(135deg,#7b2ff7,#2a1070)">🎹</div>
+      <div class="song-info"><div class="song-title">The Scale</div><div class="song-sub">System</div>
+        <div class="speed-control"><span>Speed</span><input type="range" id="speed-scale" min="10" max="60" value="32"><span id="val-scale">32</span></div></div>
+      <button class="play-btn" onclick="startGame('scale')">PLAY</button></div>
+    <div class="song-row"><div class="song-art" style="background:linear-gradient(135deg,#ff2e88,#3a1c8f)">🥁</div>
+      <div class="song-info"><div class="song-title">Bam Bam</div><div class="song-sub">System</div>
+        <div class="speed-control"><span>Speed</span><input type="range" id="speed-bambam" min="10" max="60" value="34"><span id="val-bambam">34</span></div></div>
+      <button class="play-btn" onclick="startGame('bambam')">PLAY</button></div>
+    <div class="song-row"><div class="song-art" style="background:linear-gradient(135deg,#ff3b3b,#5a0b0b)">📂</div>
+      <div class="song-info"><div class="song-title">Level Loader</div><div class="song-sub">Play any level .json</div></div>
+      <input type="file" id="level-upload" accept=".json" style="display:none" onchange="loadCustomLevelFile(event)">
+      <button class="play-btn" onclick="document.getElementById('level-upload').click()">LOAD</button></div>
+  </div></div></div>
 </div>
 
-<!-- ============================== MY LEVELS (GD-style cards) ============================== -->
-<div id="my-levels-menu" class="overlay hidden">
-  <h2 style="margin-bottom: 15px;">MY CREATIONS</h2>
-  <div class="menu-content" style="max-height: 75vh; overflow-y: auto; padding-right: 5px;">
-    <div class="grid-levels" id="custom-levels-container"></div>
-    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
-  </div>
-</div>
-
-<!-- ============================== BROWSE LEVELS (GD-style) ============================== -->
-<div id="browse-levels-menu" class="overlay hidden">
-  <h2 style="margin-bottom: 12px;">BROWSE</h2>
-  <div class="menu-content" style="max-height: 78vh;">
-    <div class="browse-info-banner">
-      Discover community levels, search players, and view global leaderboards.
-    </div>
-    <div class="browse-search-row">
-      <span class="search-icon">🔎</span>
-      <input type="text" id="browse-search-input" placeholder="Search levels or players..." oninput="renderBrowseContent()">
-    </div>
-    <div class="pill-tabs">
-      <button id="tab-recent" class="pill-tab" onclick="openBrowseLevels('recent')">Recent</button>
-      <button id="tab-trending" class="pill-tab" onclick="openBrowseLevels('trending')">Trending</button>
-      <button id="tab-rated" class="pill-tab" onclick="openBrowseLevels('rated')">Top Rated</button>
-      <button id="tab-featured" class="pill-tab" onclick="openBrowseLevels('featured')">Featured</button>
-    </div>
-    <div class="grid-levels" id="community-levels-container" style="max-height: 52vh; overflow-y:auto; padding-right:4px;"></div>
-    <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top: 15px;">BACK TO MENU</button>
-  </div>
-</div>
-
-<!-- ============================== LEVEL DETAIL SHEET (GD-style info popup) ============================== -->
-<div id="level-detail-menu" class="overlay hidden">
-  <h2 id="level-detail-title" style="margin-bottom: 12px;">LEVEL</h2>
-  <div class="menu-content">
-    <div class="level-detail-sheet" id="level-detail-body"></div>
-    <button class="nav-btn secondary-btn" onclick="closeLevelDetail()" style="margin-top: 6px;">CLOSE</button>
-  </div>
-</div>
-
-<!-- ============================== BATTLE MODE ============================== -->
+<!-- ============ BATTLE ============ -->
 <div id="battle-menu" class="overlay hidden">
-  <h2 style="margin-bottom: 12px;">⚔ BATTLE</h2>
-  <div class="menu-content">
-    <button class="quick-match-btn" onclick="startQuickMatch()">⚡ QUICK MATCH <kbd>Q</kbd></button>
-    <div class="battle-search-row">
-      <input type="text" id="battle-search-input" placeholder="Search a player by name..." oninput="renderOnlinePlayers()">
-    </div>
-    <div class="online-section-label">ONLINE NOW (this browser)</div>
-    <div id="battle-online-list"></div>
-    <button class="nav-btn secondary-btn" onclick="leaveBattleMenu()" style="margin-top: 6px;">BACK TO MENU</button>
-  </div>
+  <div class="screen-header"><button class="back-btn" onclick="leaveBattleMenu()">‹</button><h2>⚔ BATTLE</h2><div class="header-right"><span id="battle-conn" class="conn-pill offline">Offline</span></div></div>
+  <div class="screen-body"><div class="screen-col">
+    <button class="btn btn-pink huge" onclick="startQuickMatch()">⚡ QUICK MATCH <kbd>Q</kbd></button>
+    <div class="note center" id="battle-me"></div>
+    <div class="searchbar"><span>🔎</span><input type="text" id="battle-search-input" placeholder="Search players in the lobby…" oninput="renderOnlinePlayers()"></div>
+    <div class="section-title">IN THE LOBBY</div>
+    <div id="battle-online-list" class="song-list"></div>
+  </div></div>
 </div>
-
 <div id="battle-level-picker" class="overlay hidden">
-  <h2 style="margin-bottom: 12px;">PICK A LEVEL TO CHALLENGE WITH</h2>
-  <div class="menu-content" style="max-height:70vh; overflow-y:auto; padding-right:5px;">
-    <div class="grid-levels" id="battle-level-picker-list"></div>
-    <button class="nav-btn secondary-btn" onclick="cancelBattleFlow()" style="margin-top: 15px;">CANCEL</button>
-  </div>
+  <div class="screen-header"><button class="back-btn" onclick="cancelBattleFlow()">‹</button><h2>PICK A LEVEL</h2><div class="header-right"></div></div>
+  <div class="screen-body"><div class="screen-col"><div id="battle-level-picker-list" class="song-list"></div></div></div>
 </div>
-
 <div id="battle-waiting-menu" class="overlay hidden">
-  <div class="battle-waiting">
-    <div class="spinner"></div>
-    <h2 id="battle-waiting-title">Waiting for opponent...</h2>
-    <p id="battle-waiting-sub">Sit tight — this updates as soon as they respond.</p>
-    <span class="cancel-link" onclick="cancelBattleFlow()">Cancel</span>
-  </div>
+  <div class="center-panel"><div class="spinner"></div><h2 id="battle-waiting-title">Waiting…</h2><p id="battle-waiting-sub"></p>
+    <button class="btn btn-ghost" onclick="cancelBattleFlow()">Cancel</button></div>
 </div>
-
 <div id="battle-incoming-menu" class="overlay hidden">
-  <div class="menu-content">
-    <div class="battle-incoming">
-      <div class="profile-avatar" style="margin: 0 auto 10px; width:44px;height:44px;font-size:18px;" id="battle-incoming-avatar">?</div>
-      <b id="battle-incoming-name">Someone</b>
-      <p style="color:var(--text-mid); font-size:12px; margin:6px 0 0;" id="battle-incoming-level">wants to battle on a level</p>
-      <div class="battle-incoming-row">
-        <button class="nav-btn secondary-btn" onclick="declineChallenge()">DECLINE</button>
-        <button class="nav-btn" style="background:var(--accent-success); color:#fff;" onclick="acceptChallenge()">ACCEPT</button>
-      </div>
-    </div>
-  </div>
+  <div class="center-panel"><div class="avatar big" id="battle-incoming-avatar">?</div><h2 id="battle-incoming-name">Someone</h2><p id="battle-incoming-level">wants to battle</p>
+    <div class="row-btns"><button class="btn btn-ghost" onclick="declineChallenge()">DECLINE</button><button class="btn btn-play" onclick="acceptChallenge()">ACCEPT</button></div></div>
 </div>
-
 <div id="battle-result-menu" class="overlay hidden">
-  <div class="menu-content" style="text-align:center;">
-    <div class="battle-result-banner" id="battle-result-banner">RESULT</div>
-    <div class="battle-result-sub" id="battle-result-sub"></div>
-    <div class="battle-result-scores">
-      <div class="battle-result-score-col"><b id="battle-result-my-score">0</b><span>You</span></div>
-      <div class="battle-result-score-col"><b id="battle-result-opp-score">0</b><span id="battle-result-opp-label">Opponent</span></div>
-    </div>
-    <button class="nav-btn" style="background:var(--play-blue); color:#fff;" onclick="rematchBattle()">REMATCH</button>
-    <button class="nav-btn secondary-btn" onclick="leaveBattleMenu()" style="margin-top:8px;">BACK TO MENU</button>
+  <div class="center-panel">
+    <div class="battle-result-banner" id="battle-result-banner">RESULT</div><div class="note" id="battle-result-sub"></div>
+    <div class="battle-result-scores"><div><b id="battle-result-my-score">0</b><span>You</span></div><div><b id="battle-result-opp-score">0</b><span id="battle-result-opp-label">Opponent</span></div></div>
+    <button class="btn btn-play" onclick="rematchBattle()">REMATCH</button>
+    <button class="btn btn-ghost" onclick="leaveBattleFromResult()">BACK TO LOBBY</button>
   </div>
 </div>
 
-<!-- ============================== EDITOR ============================== -->
-<div id="editor-ui" class="hidden">
+<!-- ============ PAUSE / DEATH ============ -->
+<div id="pause-menu" class="overlay overlay-dim hidden">
+  <div class="center-panel"><h2>PAUSED</h2>
+    <button class="btn btn-play" onclick="resumeGame()">▶ RESUME</button>
+    <button class="btn btn-ghost" onclick="restartGame()">↻ Restart</button>
+    <button class="btn btn-ghost" id="pause-quit-btn" onclick="quitPlaytestOrGame()">Quit to menu</button>
+    <button class="btn btn-danger hidden" id="pause-stop-btn" onclick="stopPlaytestFromDeath()">Stop playtesting</button>
+  </div>
+</div>
+<div id="death-screen" class="overlay overlay-dim hidden">
+  <div class="center-panel"><h1 id="death-title">FAILED</h1><div id="death-stars" class="stars"></div><p id="final-score" class="final-score">Score: 0</p>
+    <button id="death-retry-btn" class="btn btn-play" onclick="restartGame()">RETRY <kbd>Space</kbd></button>
+    <button id="death-quit-btn" class="btn btn-ghost" onclick="quitPlaytestOrGame()">Quit to menu</button>
+    <button id="death-stop-playtest-btn" class="btn btn-danger hidden" onclick="stopPlaytestFromDeath()">Stop playtesting</button>
+  </div>
+</div>
 
+<!-- ============ EDITOR ============ -->
+<div id="editor-ui" class="hidden">
   <div class="editor-topbar">
     <div class="editor-topbar-group">
       <button class="icon-btn" onclick="openCreatorMenu()" title="Menu">☰</button>
       <button class="icon-btn" onclick="toggleDrawer('left')" title="Tools">🛠</button>
       <button class="icon-btn" onclick="openEffectsMenu()" title="Effects">✨</button>
-      <button class="icon-btn" onclick="openEditorSettingsMenu()" title="Level Settings">⚙</button>
+      <button class="icon-btn" onclick="openEditorSettingsMenu()" title="Level settings">⚙</button>
       <button id="btn-delete-mode" class="icon-btn" onclick="toggleDeleteMode()" title="Delete tiles">🗑️</button>
     </div>
-    <div class="editor-topbar-group">
-      <div class="editor-stat-pill" id="editor-timer-panel">0.00s</div>
-    </div>
+    <div class="editor-topbar-group"><div class="pill" id="editor-tile-count">0 tiles</div><div class="pill" id="editor-timer-panel">0.00s</div></div>
   </div>
 
-  <!-- LEFT DRAWER: song / recording / playtest tools (was a permanent floating panel; now tucked away) -->
   <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>
   <div class="drawer drawer-left" id="drawer-left">
     <div class="drawer-header"><b>TOOLS</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
-    <div class="tool-drawer-section">
-      <div class="tool-drawer-label">SONG</div>
-      <div class="tool-grid">
-        <button class="tool-btn" onclick="document.getElementById('audio-upload').click()"><span class="tool-icon">🎵</span>Load Song</button>
-        <button id="btn-song-test" class="tool-btn" onclick="toggleSongTester()"><span class="tool-icon">🎧</span>Tester</button>
-      </div>
-    </div>
-    <div class="tool-drawer-section">
-      <div class="tool-drawer-label">PLACEMENT</div>
-      <div class="editor-settings-subtitle" style="margin-top:0;">Tap a lane on the canvas any time to drop a tile at the playhead. Hit Record to have the song play and the playhead move while you tap r/t/y/u along with it.</div>
-      <div class="tool-grid">
-        <button id="btn-create-tiles" class="tool-btn" onclick="toggleRecording()"><span class="tool-icon">⏺</span>Record</button>
-        <button id="btn-delete-mode-2" class="tool-btn danger" onclick="toggleDeleteMode()"><span class="tool-icon">🗑️</span>Delete</button>
-      </div>
-    </div>
-    <div class="tool-drawer-section">
-      <div class="tool-drawer-label">PLAYTEST</div>
-      <div class="field-row">
-        <label>Starting Hearts</label>
-        <input type="number" id="edit-lives" value="3" min="1" max="10">
-      </div>
-      <div class="switch-container">
-        <label>NoClip</label><input type="checkbox" id="edit-noclip">
-      </div>
-      <button class="nav-btn" style="background: var(--play-blue); color:#fff; padding:11px;" onclick="startPlaytest()">🎮 Play Test</button>
-    </div>
+    <div class="tool-drawer-section"><div class="tool-drawer-label">SONG</div>
+      <div class="tool-grid"><button class="tool-btn" onclick="document.getElementById('audio-upload').click()"><span class="tool-icon">🎵</span>Load Song</button>
+      <button id="btn-song-test" class="tool-btn" onclick="toggleSongTester()"><span class="tool-icon">🎧</span>Tester</button></div></div>
+    <div class="tool-drawer-section"><div class="tool-drawer-label">PLACEMENT</div>
+      <div class="note">Tap the board where you want a tile — it snaps to the grid. Or hit Record and tap R/T/Y/U along with the song. Mouse wheel / ↑↓ move the playhead.</div>
+      <div class="tool-grid"><button id="btn-create-tiles" class="tool-btn" onclick="toggleRecording()"><span class="tool-icon">⏺</span>Record</button>
+      <button id="btn-delete-mode-2" class="tool-btn danger" onclick="toggleDeleteMode()"><span class="tool-icon">🗑️</span>Delete</button>
+      <button class="tool-btn" onclick="snapAllTiles()"><span class="tool-icon">🧲</span>Snap all</button>
+      <button class="tool-btn" onclick="jumpEditorEnd()"><span class="tool-icon">⏭</span>To end</button></div></div>
+    <div class="tool-drawer-section"><div class="tool-drawer-label">PLAYTEST</div>
+      <div class="field-row"><label>Starting hearts</label><input type="number" id="edit-lives" value="3" min="1" max="10"></div>
+      <div class="switch-container"><label>NoClip</label><input type="checkbox" id="edit-noclip"></div>
+      <button class="btn btn-play" onclick="startPlaytest()">🎮 Play test</button></div>
   </div>
-
-  <!-- RIGHT DRAWER: quick inspector for whichever effect is selected -->
   <div class="drawer drawer-right" id="drawer-right">
     <div class="drawer-header"><b>SELECTED</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
-    <div class="selected-empty" id="selected-effect-empty">
-      <span class="selected-icon">✦</span>
-      <div><b>No effect selected</b><br><small>Open Effects, add one at the playhead, or tap a marker on the timeline.</small></div>
-    </div>
+    <div class="selected-empty" id="selected-effect-empty"><span class="selected-icon">✦</span><div><b>No effect selected</b><br><small>Open Effects, add one, or tap a marker on the timeline.</small></div></div>
     <div id="selected-effect-editor" class="hidden">
-      <div class="selected-effect-title">
-        <div><span id="selected-effect-kind">EFFECT</span><b id="selected-effect-time">0.00s</b></div>
-      </div>
+      <div class="selected-effect-title"><div><span id="selected-effect-kind">EFFECT</span><b id="selected-effect-time">0.00s</b></div></div>
       <div id="selected-effect-fields"></div>
-      <div class="selected-effect-actions" style="margin-top:10px;">
-        <button class="mini-editor-btn" onclick="setSelectedEffectToPlayhead()">MOVE TO PLAYHEAD</button>
-        <button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button>
-      </div>
+      <div class="selected-effect-actions"><button class="btn small" onclick="setSelectedEffectToPlayhead()">Move to playhead</button><button class="btn small btn-danger" onclick="deleteSelectedEffect()">Delete</button></div>
     </div>
   </div>
 
-  <!-- DOCKED BOTTOM TIMELINE: fix for "timeline is in the way" — anchored to the true bottom
-       edge, collapsible, and never overlaps the canvas tap area. -->
   <div class="timeline-dock" id="timeline-dock">
     <div class="timeline-dock-handle" onclick="toggleTimelineDock()"><div class="grip"></div></div>
     <div class="timeline-toolbar">
-      <div class="timeline-toolbar-left">
-        <b id="editor-timeline-time">0.00s</b>
+      <div class="timeline-toolbar-left"><b id="editor-timeline-time">0.00s</b>
         <div class="timeline-transport">
-          <button class="mini-editor-btn" onclick="nudgeEditorTime(-0.10)">−0.10</button>
-          <button class="mini-editor-btn play-toggle-btn" onclick="toggleEditorTransport()" id="editor-transport-btn">▶</button>
-          <button class="mini-editor-btn" onclick="nudgeEditorTime(0.10)">+0.10</button>
-          <button class="mini-editor-btn" onclick="jumpEditorEnd()">END</button>
-        </div>
-      </div>
+          <button class="mini-btn" onclick="nudgeEditorTime(-0.10)">−.1</button>
+          <button class="mini-btn play-toggle-btn" onclick="toggleEditorTransport()" id="editor-transport-btn">▶</button>
+          <button class="mini-btn" onclick="nudgeEditorTime(0.10)">+.1</button>
+        </div></div>
       <div class="editor-grid-controls">
-        <button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
-        <button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
+        <button id="btn-snap" class="grid-btn active" onclick="toggleEditorSnap()">🧲 Snap ON</button>
+        <button class="grid-btn" data-grid="1" onclick="setEditorGrid(1)">1/1</button><button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
+        <button class="grid-btn" data-grid="3" onclick="setEditorGrid(3)">1/3</button><button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
         <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
-        <button class="grid-btn" data-grid="12" onclick="setEditorGrid(12)">1/12</button>
+        <span class="zoom-ctl"><button class="grid-btn" onclick="setEditorZoom(-0.1)">−</button><span id="zoom-readout">60%</span><button class="grid-btn" onclick="setEditorZoom(0.1)">＋</button></span>
       </div>
     </div>
-    <div class="timeline-track-wrap" id="editor-marker-track">
-      <div id="editor-playhead"></div>
-      <div id="editor-marker-layer"></div>
-    </div>
+    <div class="timeline-track-wrap" id="editor-marker-track"><div id="editor-playhead"></div><div id="editor-marker-layer"></div></div>
     <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.01" oninput="scrubTimeline(this.value)">
-    <div class="timeline-hint">Tap the grip to collapse the timeline. Shift+tap a lane bypasses snapping.</div>
   </div>
 </div>
 
 <div id="editor-level-settings" class="overlay hidden">
-  <h2>LEVEL SETTINGS</h2>
-  <div class="menu-content">
-    <div class="settings-row">
-      <span>Target FPS</span>
-      <input type="number" id="edit-fps" value="60" min="10" max="240" style="width:60px; text-align:center; border-radius:6px; border:1px solid var(--border-soft); background:var(--bg-panel-raised); color:var(--text-hi); padding:6px;">
-    </div>
-    <div class="settings-row">
-      <span>Audio Offset (ms)</span>
-      <input type="number" id="edit-audio-offset" value="0" style="width:70px; text-align:center; background:var(--bg-panel-raised); color:#fff; border:1px solid var(--border-soft); border-radius:6px; padding: 6px;">
-    </div>
-    <div class="settings-row">
-      <span>Disable Hold Tiles</span>
-      <input type="checkbox" id="edit-disable-holds">
-    </div>
-    <div class="settings-row">
-      <span>Difficulty Tag</span>
-      <select id="edit-difficulty" style="background:var(--bg-panel-raised); color:var(--text-hi); border:1px solid var(--border-soft); border-radius:6px; padding:6px;">
-        <option value="Easy">Easy</option>
-        <option value="Normal" selected>Normal</option>
-        <option value="Hard">Hard</option>
-        <option value="Insane">Insane</option>
-        <option value="Extreme">Extreme</option>
-      </select>
-    </div>
-    <div class="editor-settings-section">
-      <div class="editor-settings-title">LEVEL APPEARANCE</div>
-      <div class="editor-settings-subtitle">Choose how this creation looks when people play it.</div>
-      <div class="settings-row">
-        <span>Level Background</span>
-        <input type="color" id="edit-bg-color" value="#202738">
-      </div>
-      <div class="settings-row">
-        <span>Level Brightness</span>
-        <input type="range" id="edit-bg-brightness" min="70" max="140" value="100" step="1" oninput="updateEditorBackgroundBrightness(this.value)">
-        <b id="edit-bg-brightness-value">100%</b>
-      </div>
-      <div class="settings-row">
-        <span>Level Icon</span>
-        <input type="file" id="edit-level-icon-upload" accept="image/*">
-      </div>
-      <div id="edit-level-icon-preview" class="level-icon-preview"></div>
-    </div>
-    <div class="editor-settings-section">
-      <div class="editor-settings-title">TIMING GRID</div>
-      <div class="editor-settings-subtitle">Choose how tile placement snaps on the editor timeline.</div>
-      <div class="editor-grid-controls settings-grid-controls">
-        <span class="grid-label">SNAP</span>
-        <button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
-        <button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
-        <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
-        <button class="grid-btn" data-grid="12" onclick="setEditorGrid(12)">1/12</button>
-        <span id="grid-readout" class="grid-readout">0.250s</span>
-      </div>
-      <div class="editor-settings-subtitle">Hold Shift while placing a tile to bypass snapping.</div>
-    </div>
-    <button class="nav-btn secondary-btn" onclick="closeEditorSettingsMenu()">BACK TO EDITOR</button>
+  <div class="screen-header"><button class="back-btn" onclick="closeEditorSettingsMenu()">‹</button><h2>LEVEL SETTINGS</h2><div class="header-right"></div></div>
+  <div class="screen-body"><div class="screen-col">
+    <div class="section-title">TIMING &amp; SNAPPING</div>
+    <div class="settings-row"><span>BPM</span><input type="number" id="edit-bpm" value="120" min="30" max="300" step="0.5" oninput="onBpmChanged(this.value)" class="num-in"></div>
+    <div class="settings-row"><span>Grid offset (s)</span><input type="number" id="edit-grid-offset" value="0" step="0.01" oninput="onGridOffsetChanged(this.value)" class="num-in"></div>
+    <div class="note">Grid step: <b id="grid-readout">0.250s</b> · <b id="bpm-readout">120 BPM</b>. Set BPM + offset to match your song so tiles snap to the beat. Pick the subdivision (1/1 … 1/8) on the timeline.</div>
+    <div class="section-title">PLAY SETTINGS</div>
+    <div class="settings-row"><span>Target FPS</span><input type="number" id="edit-fps" value="60" min="10" max="240" class="num-in"></div>
+    <div class="settings-row"><span>Audio offset (ms)</span><input type="number" id="edit-audio-offset" value="0" class="num-in"></div>
+    <div class="settings-row"><span>Disable hold tiles</span><input type="checkbox" id="edit-disable-holds"></div>
+    <div class="settings-row"><span>Difficulty</span><select id="edit-difficulty" class="num-in"><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Insane</option><option>Extreme</option></select></div>
+    <div class="section-title">APPEARANCE</div>
+    <div class="settings-row"><span>Background</span><input type="color" id="edit-bg-color" value="#202738"></div>
+    <div class="settings-row"><span>Brightness</span><input type="range" id="edit-bg-brightness" min="70" max="140" value="100" oninput="updateEditorBackgroundBrightness(this.value)"><b id="edit-bg-brightness-value">100%</b></div>
+    <div class="settings-row"><span>Level icon</span><input type="file" id="edit-level-icon-upload" accept="image/*"></div>
+    <div id="edit-level-icon-preview" class="level-icon-preview"></div>
+    <button class="btn btn-play" onclick="closeEditorSettingsMenu()">DONE</button>
+  </div></div>
+</div>
+
+<div id="creator-menu" class="overlay overlay-dim hidden">
+  <div class="center-panel"><h2>EDITOR MENU</h2>
+    <button class="btn btn-ghost" onclick="closeCreatorMenu()">▶ Resume</button>
+    <button class="btn btn-play" onclick="publishLevel()">🚀 Verify &amp; publish</button>
+    <button class="btn btn-green" onclick="saveCustomLevel()">💾 Save to My Levels</button>
+    <button class="btn btn-ghost" onclick="downloadLevelData()">⬇ Download .json</button>
+    <button class="btn btn-danger" onclick="exitEditorWithoutSaving()">Quit editor</button>
   </div>
 </div>
 
-<div id="creator-menu" class="overlay hidden">
-  <h2>EDITOR MENU</h2>
-  <div class="menu-content">
-    <button class="nav-btn" onclick="closeCreatorMenu()">RESUME</button>
-    <button class="nav-btn" style="background: var(--accent-purple); color: white;" onclick="downloadLevelData()">⬇ DOWNLOAD LEVEL</button>
-    <button class="nav-btn" style="background: var(--play-blue); color: white;" onclick="publishLevel()">🚀 VERIFY &amp; PUBLISH</button>
-    <button class="nav-btn" style="background: var(--accent-success); color: white;" onclick="saveCustomLevel()">SAVE TO MY LEVELS</button>
-    <button class="nav-btn" style="background: var(--accent-danger); color: white;" onclick="exitEditorWithoutSaving()">QUIT</button>
-  </div>
-</div>
-
-<!-- ============================== EFFECTS STUDIO ============================== -->
+<!-- ============ EFFECTS STUDIO ============ -->
 <div id="effects-menu" class="overlay hidden">
   <div class="effects-studio">
     <div class="effects-studio-header">
-      <div class="effects-studio-title">
-        <span class="eyebrow">EXTREME TILES EDITOR</span>
-        <h2>Effect Editor</h2>
-        <p>Drag effects on the timeline. Drag the edges to change duration.</p>
-      </div>
-      <div class="effects-studio-header-actions">
-        <div class="effect-playhead-pill">PLAYHEAD <strong id="effect-time-display">0.00s</strong></div>
-        <button class="mini-editor-btn" onclick="closeEffectsMenu()">DONE</button>
-      </div>
+      <div><span class="eyebrow">EDITOR</span><h2>Effects</h2></div>
+      <div class="effects-studio-header-actions"><div class="pill">PLAYHEAD <strong id="effect-time-display">0.00s</strong></div><button class="btn small btn-play" onclick="closeEffectsMenu()">DONE</button></div>
     </div>
     <div class="effects-studio-body">
       <aside class="effect-library-panel">
-        <div class="effect-panel-heading"><span>ADD EFFECT</span><small>Placed at the playhead</small></div>
         <div class="effect-category-tabs">
-          <button class="effect-tab active" onclick="switchEffectCategory('visual')">VISUAL</button>
-          <button class="effect-tab" onclick="switchEffectCategory('speed')">SPEED</button>
-          <button class="effect-tab" onclick="switchEffectCategory('image')">IMAGE</button>
-          <button class="effect-tab" onclick="switchEffectCategory('audio')">AUDIO</button>
+          <button class="effect-tab active" data-cat="visual" onclick="switchEffectCategory('visual')">VISUAL</button><button class="effect-tab" data-cat="speed" onclick="switchEffectCategory('speed')">SPEED</button>
+          <button class="effect-tab" data-cat="image" onclick="switchEffectCategory('image')">IMAGE</button><button class="effect-tab" data-cat="audio" onclick="switchEffectCategory('audio')">AUDIO</button>
         </div>
         <div class="effect-library-list" id="effect-library-visual">
-          <button class="effect-library-card pulse-card" onclick="addPulseEffect()"><span class="effect-library-icon">✦</span><span><b>Pulse</b><small>Timed flash / color</small></span><strong>+</strong></button>
-          <button class="effect-library-card tile-card" onclick="addTileStyleEffect()"><span class="effect-library-icon">■</span><span><b>Tile Style</b><small>Change tile colors</small></span><strong>+</strong></button>
+          <button class="effect-library-card" onclick="addPulseEffect()"><span class="effect-library-icon">✦</span><span><b>Pulse</b><small>Timed flash / color</small></span><strong>+</strong></button>
+          <button class="effect-library-card" onclick="addTileStyleEffect()"><span class="effect-library-icon">■</span><span><b>Tile Style</b><small>Change tile colors</small></span><strong>+</strong></button>
         </div>
         <div class="effect-library-list hidden" id="effect-library-speed">
-          <button class="effect-library-card speed-card" onclick="setSpeedPreset(0.5)"><span class="effect-library-icon">½</span><span><b>0.5× Slow</b><small>Quick slowdown</small></span><strong>+</strong></button>
-          <button class="effect-library-card speed-card" onclick="setSpeedPreset(1)"><span class="effect-library-icon">1×</span><span><b>1× Normal</b><small>Return to normal</small></span><strong>+</strong></button>
-          <button class="effect-library-card speed-card" onclick="setSpeedPreset(1.5)"><span class="effect-library-icon">1.5×</span><span><b>1.5× Fast</b><small>Build pressure</small></span><strong>+</strong></button>
-          <button class="effect-library-card speed-card" onclick="setSpeedPreset(2)"><span class="effect-library-icon">2×</span><span><b>2× Extreme</b><small>High-speed section</small></span><strong>+</strong></button>
-          <div class="effect-library-form"><label>Target speed<input id="fx-speed-target" type="number" value="25" min="5" max="50" step="1"></label><label>Transition<input id="fx-speed-trans" type="number" value="0.50" min="0" step="0.05"></label><button class="primary-effect-btn" onclick="addSpeedEffect()">ADD SPEED</button></div>
+          <button class="effect-library-card" onclick="setSpeedPreset(0.5)"><span class="effect-library-icon">½</span><span><b>0.5× Slow</b></span><strong>+</strong></button>
+          <button class="effect-library-card" onclick="setSpeedPreset(1)"><span class="effect-library-icon">1×</span><span><b>1× Normal</b></span><strong>+</strong></button>
+          <button class="effect-library-card" onclick="setSpeedPreset(1.5)"><span class="effect-library-icon">1.5×</span><span><b>1.5× Fast</b></span><strong>+</strong></button>
+          <button class="effect-library-card" onclick="setSpeedPreset(2)"><span class="effect-library-icon">2×</span><span><b>2× Extreme</b></span><strong>+</strong></button>
+          <div class="effect-library-form"><label>Target speed<input id="fx-speed-target" type="number" value="25" min="5" max="50"></label><label>Transition<input id="fx-speed-trans" type="number" value="0.50" min="0" step="0.05"></label><button class="btn small btn-play" onclick="addSpeedEffect()">ADD SPEED</button></div>
         </div>
         <div class="effect-library-list hidden" id="effect-library-image">
-          <div class="effect-library-form"><div class="form-block-title">BACKGROUND IMAGE</div><input type="file" id="fx-img-upload" accept="image/*"><div class="two-col-effect"><label>Opacity<input type="number" id="fx-img-alpha" value="0.5" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-img-dur" value="2" min="0.1" step="0.1"></label><label>Fade in<input type="number" id="fx-img-in" value="0.3" min="0" step="0.05"></label><label>Fade out<input type="number" id="fx-img-out" value="0.3" min="0" step="0.05"></label></div><button class="primary-effect-btn" onclick="addImageEffect()">ADD IMAGE</button></div>
-          <div class="effect-library-form"><div class="form-block-title">EXTRA IMAGE</div><input type="file" id="fx-extra-upload" accept="image/*"><div class="two-col-effect"><label>Width<input type="number" id="fx-extra-w" value="150"></label><label>Height<input type="number" id="fx-extra-h" value="150"></label><label>Opacity<input type="number" id="fx-extra-alpha" value="1" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-extra-dur" value="2" min="0.1" step="0.1"></label></div><div class="quick-position-row"><button onclick="setExtraImagePosition('center')">CENTER</button><button onclick="setExtraImagePosition('top')">TOP</button><button onclick="setExtraImagePosition('bottom')">BOTTOM</button></div><button class="primary-effect-btn" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button></div>
+          <div class="effect-library-form"><div class="form-block-title">BACKGROUND IMAGE</div><input type="file" id="fx-img-upload" accept="image/*">
+            <div class="two-col-effect"><label>Opacity<input type="number" id="fx-img-alpha" value="0.5" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-img-dur" value="2" min="0.1" step="0.1"></label><label>Fade in<input type="number" id="fx-img-in" value="0.3" min="0" step="0.05"></label><label>Fade out<input type="number" id="fx-img-out" value="0.3" min="0" step="0.05"></label></div>
+            <button class="btn small btn-play" onclick="addImageEffect()">ADD IMAGE</button></div>
+          <div class="effect-library-form"><div class="form-block-title">EXTRA IMAGE</div><input type="file" id="fx-extra-upload" accept="image/*">
+            <div class="two-col-effect"><label>Width<input type="number" id="fx-extra-w" value="150"></label><label>Height<input type="number" id="fx-extra-h" value="150"></label><label>Opacity<input type="number" id="fx-extra-alpha" value="1" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-extra-dur" value="2" min="0.1" step="0.1"></label></div>
+            <div class="quick-position-row"><button onclick="setExtraImagePosition('center')">CENTER</button><button onclick="setExtraImagePosition('top')">TOP</button><button onclick="setExtraImagePosition('bottom')">BOTTOM</button></div>
+            <button class="btn small btn-play" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button></div>
         </div>
-        <div class="effect-library-list hidden" id="effect-library-audio"><div class="effect-library-form"><div class="form-block-title">EXTRA SFX</div><input type="file" id="fx-sfx-upload" accept="audio/*"><button class="primary-effect-btn" onclick="addSfxEffect()">ADD SFX</button></div></div>
+        <div class="effect-library-list hidden" id="effect-library-audio"><div class="effect-library-form"><div class="form-block-title">EXTRA SFX</div><input type="file" id="fx-sfx-upload" accept="audio/*"><button class="btn small btn-play" onclick="addSfxEffect()">ADD SFX</button></div></div>
       </aside>
       <main class="effect-editor-main">
-        <div class="effect-timeline-toolbar"><div><b>EVENT TIMELINE</b><span>Drag blocks to move them · drag handles to resize</span></div><div class="effect-toolbar-actions"><button class="mini-editor-btn" onclick="nudgeSelectedEffect(-0.10)">−0.10s</button><button class="mini-editor-btn" onclick="nudgeSelectedEffect(0.10)">+0.10s</button><button class="mini-editor-btn" onclick="setSelectedEffectToPlayhead()">ALIGN TO PLAYHEAD</button><button class="mini-editor-btn danger-mini" onclick="deleteSelectedEffect()">DELETE</button></div></div>
+        <div class="effect-timeline-toolbar"><b>EVENT TIMELINE</b><div class="effect-toolbar-actions"><button class="mini-btn" onclick="nudgeSelectedEffect(-0.10)">−0.1s</button><button class="mini-btn" onclick="nudgeSelectedEffect(0.10)">+0.1s</button><button class="mini-btn" onclick="setSelectedEffectToPlayhead()">To playhead</button><button class="mini-btn danger" onclick="deleteSelectedEffect()">Delete</button></div></div>
         <div class="effect-timeline-wrap" id="effect-timeline-wrap"><div class="effect-time-ruler" id="effect-time-ruler"></div><div class="effect-tracks" id="effect-tracks"></div><div class="effect-timeline-playhead" id="effect-timeline-playhead"></div></div>
-        <div class="effect-timeline-footer"><span id="effect-selection-summary">Nothing selected</span><span>Shift = free drag · click empty timeline to move playhead</span></div>
+        <div class="effect-timeline-footer"><span id="effect-selection-summary">Nothing selected</span><span>Shift = free drag · click timeline to move playhead</span></div>
       </main>
-      <aside class="effect-inspector"><div class="effect-panel-heading"><span>INSPECTOR</span><small id="effect-inspector-subtitle">Select an effect</small></div><div id="effect-inspector-content" class="effect-inspector-content"><div class="effect-inspector-empty"><div class="inspector-empty-icon">✦</div><b>Select an effect</b><span>Pick a block from the timeline to edit its timing, duration and properties.</span></div></div></aside>
+      <aside class="effect-inspector"><div class="effect-panel-heading"><span>INSPECTOR</span><small id="effect-inspector-subtitle">Select an effect</small></div><div id="effect-inspector-content"></div></aside>
     </div>
   </div>
 </div>
 
-<!-- ============================== DEATH SCREEN ============================== -->
-<div id="death-screen" class="overlay hidden">
-  <h1 id="death-title" style="color: #ff3333; font-size: 48px;">FAILED</h1>
-  <p id="final-score" style="font-size: 26px; margin-bottom: 20px;">Score: 0</p>
-  <button id="death-retry-btn" class="play-btn" style="padding: 15px 50px; font-size: 18px;" onclick="restartGame()">RETRY</button>
-  <button id="death-quit-btn" class="nav-btn" style="max-width: 200px; margin-top: 15px;" onclick="quitPlaytestOrGame()">QUIT TO MENU</button>
-  <button id="death-stop-playtest-btn" class="nav-btn hidden" style="max-width: 200px; margin-top: 15px; background: red; color: white;" onclick="stopPlaytestFromDeath()">STOP PLAYTESTING</button>
-</div>
+<!-- ============ DIALOG + TOASTS ============ -->
+<div id="dialog" class="hidden"><div class="dialog-box"><h3 id="dialog-title"></h3><p id="dialog-msg"></p><input type="text" id="dialog-input" class="hidden" maxlength="80">
+  <div class="row-btns"><button class="btn btn-ghost" id="dialog-cancel">Cancel</button><button class="btn btn-play" id="dialog-ok">OK</button></div></div></div>
+<div id="toast-host"></div>
 
-<!-- ============================== SCRIPTS (load order matters — plain globals, no bundler) ============================== -->
-<script src="js/config.js?v=20261003-5"></script>
-<script src="js/state.js?v=20261003-5"></script>
-<script src="js/storage.js?v=20261003-5"></script>
-<script src="js/auth.js?v=20261003-5"></script>
-<script src="js/game.js?v=20261003-5"></script>
-<script src="js/editor.js?v=20261003-5"></script>
-<script src="js/browse.js?v=20261003-5"></script>
-<script src="js/battle.js?v=20261003-5"></script>
-<script src="js/ui.js?v=20261003-5"></script>
-<script src="js/main.js?v=20261003-5"></script>
+<script src="js/config.js?v=20261004-1"></script>
+<script src="js/state.js?v=20261004-1"></script>
+<script src="js/ui.js?v=20261004-1"></script>
+<script src="js/storage.js?v=20261004-1"></script>
+<script src="js/auth.js?v=20261004-1"></script>
+<script src="js/game.js?v=20261004-1"></script>
+<script src="js/editor.js?v=20261004-1"></script>
+<script src="js/browse.js?v=20261004-1"></script>
+<script src="js/battle.js?v=20261004-1"></script>
+<script src="js/main.js?v=20261004-1"></script>
 </body>
 </html>
