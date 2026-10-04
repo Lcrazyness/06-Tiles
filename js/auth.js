@@ -1,17 +1,11 @@
+// ============================================================================
+// auth.js — online account, stats, profile icon, admin button.
+// ============================================================================
 const AUTH_TOKEN_KEY = 'et_authToken';
 const AUTH_USER_KEY = 'et_authUser';
 
-function getAuthToken() {
-  return localStorage.getItem(AUTH_TOKEN_KEY) || '';
-}
-
-function getAuthUser() {
-  try {
-    return JSON.parse(localStorage.getItem(AUTH_USER_KEY) || 'null');
-  } catch {
-    return null;
-  }
-}
+function getAuthToken() { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; }
+function getAuthUser() { try { return JSON.parse(localStorage.getItem(AUTH_USER_KEY) || 'null'); } catch { return null; } }
 
 function saveAuthSession(token, user) {
   localStorage.setItem(AUTH_TOKEN_KEY, token);
@@ -19,169 +13,85 @@ function saveAuthSession(token, user) {
   currentProfile = user.username;
   localStorage.setItem(CURRENT_PROFILE_KEY, currentProfile);
   refreshProfileButton();
-  updateAdminButton();
+  updateAdminButton(user);
 }
-
 function clearAuthSession() {
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
   currentProfile = 'Guest';
   localStorage.setItem(CURRENT_PROFILE_KEY, 'Guest');
   refreshProfileButton();
-  updateAdminButton();
+  updateAdminButton(null);
 }
 
-function setAccountStatus(message) {
+function setAccountStatus(message, bad) {
   const el = document.getElementById('account-status');
-  if (el) el.textContent = message || '';
+  if (el) { el.textContent = message || ''; el.classList.toggle('bad', !!bad); }
 }
 
 function renderAccountModal() {
   const modal = document.getElementById('profile-modal');
-  if (!modal) return;
   const user = getAuthUser();
-
-  modal.innerHTML = user ? `
-    <h2>ACCOUNT</h2>
-    <div class="menu-content">
-      <div class="profile-modal-list">
-        <div class="profile-row current">
-          <div class="profile-avatar profile-avatar-image">${user.profileIcon ? '<img src="' + escapeHtml(user.profileIcon) + '" alt="">' : escapeHtml(user.username.slice(0, 1).toUpperCase())}</div>
-          <div style="flex:1;">
-            <div class="profile-row-name">${escapeHtml(user.username)}</div>
-            <div class="profile-row-tag">Online account</div>
-          </div>
-        </div>
+  const st = (user && user.statistics) || {};
+  modal.innerHTML = user ? screenHtml('ACCOUNT', 'closeAccountModal()', `
+      <div class="panel profile-hero">
+        <div class="avatar big">${user.profileIcon ? '<img src="' + escapeHtml(user.profileIcon) + '" alt="">' : escapeHtml(user.username.slice(0, 1).toUpperCase())}</div>
+        <div><div class="hero-name">${escapeHtml(user.username)}</div><div class="hero-sub">Online account${user.isAdmin ? ' · Admin' : ''}</div></div>
       </div>
-      <div class="profile-icon-controls">
-        <label class="nav-btn secondary-btn" for="profile-icon-upload">CHANGE PROFILE ICON</label>
-        <input type="file" id="profile-icon-upload" accept="image/*" style="display:none" onchange="uploadProfileIcon(event)">
-      </div>
-      <div class="profile-note">Games played: ${(user.statistics || {}).gamesPlayed || 0} · Completed: ${(user.statistics || {}).gamesCompleted || 0} · Best score: ${(user.statistics || {}).bestScore || 0}</div>
-      <button class="nav-btn secondary-btn" onclick="logoutAccount()">LOG OUT</button>
-      <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top:6px;">BACK TO MENU</button>
-    </div>` : `
-    <h2>ACCOUNT</h2>
-    <div class="menu-content">
-      <div class="profile-note">Create an account to save your 06-Tiles profile online. Your password is securely hashed on the server.</div>
-      <div class="profile-create-row" style="display:flex; flex-direction:column; gap:8px;">
-        <input type="text" id="account-username" placeholder="Username" maxlength="20" autocomplete="username">
-        <input type="email" id="account-email" placeholder="Email" maxlength="254" autocomplete="email">
-        <input type="password" id="account-password" placeholder="Password (8+ characters)" maxlength="128" autocomplete="current-password">
-        <button class="play-btn" onclick="loginAccount()">LOG IN</button>
-        <button class="nav-btn" onclick="registerAccount()">CREATE ACCOUNT</button>
-        <div id="account-status" class="profile-note" style="min-height:18px;"></div>
-      </div>
-      <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')" style="margin-top:6px;">BACK TO MENU</button>
-    </div>`;
+      <label class="btn btn-ghost" for="profile-icon-upload">Change profile icon</label>
+      <input type="file" id="profile-icon-upload" accept="image/*" style="display:none" onchange="uploadProfileIcon(event)">
+      <div class="panel note">Games played ${st.gamesPlayed || 0} · Completed ${st.gamesCompleted || 0} · Best score ${st.bestScore || 0}</div>
+      <button class="btn btn-ghost" onclick="logoutAccount()">Log out</button>`)
+  : screenHtml('ACCOUNT', 'closeAccountModal()', `
+      <div class="panel note">Log in to publish levels, rate them, show up on leaderboards and battle under your own name.</div>
+      <input type="text" id="account-username" placeholder="Username or email" maxlength="254" autocomplete="username">
+      <input type="email" id="account-email" placeholder="Email (only needed to create an account)" maxlength="254" autocomplete="email">
+      <input type="password" id="account-password" placeholder="Password (8+ characters)" maxlength="128" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginAccount()">
+      <button class="btn btn-play" onclick="loginAccount()">LOG IN</button>
+      <button class="btn btn-ghost" onclick="registerAccount()">CREATE ACCOUNT</button>
+      <div id="account-status" class="status-line"></div>`);
 }
 
-function openProfileModal() {
-  renderAccountModal();
-  toggleMenu('profile-modal');
+function closeAccountModal() {
+  if (returnToEditorAfterAccount) { returnToEditorAfterAccount = false; toggleMenu(null); enterEditorView(); return; }
+  toggleMenu('main-menu');
 }
+function openProfileModal() { renderAccountModal(); toggleMenu('profile-modal'); }
 
-async function registerAccount() {
-  if (!API_BASE_URL) {
-    setAccountStatus('Backend URL is not configured yet.');
-    return;
-  }
-
+async function authSubmit(path, body, busy) {
+  setAccountStatus(busy);
+  try {
+    const data = await apiRequest(path, { method: 'POST', body });
+    saveAuthSession(data.token, data.user);
+    if (typeof disconnectBattle === 'function') disconnectBattle();
+    if (returnToEditorAfterAccount) { toast('Logged in - hit Publish again.', 'good'); closeAccountModal(); return; }
+    renderAccountModal();
+  } catch (e) { setAccountStatus(e.message, true); }
+}
+function registerAccount() {
   const username = (document.getElementById('account-username')?.value || '').trim();
   const email = (document.getElementById('account-email')?.value || '').trim();
   const password = document.getElementById('account-password')?.value || '';
-
-  if (!username || !email || !password) {
-    setAccountStatus('Enter a username, email, and password.');
-    return;
-  }
-
-  setAccountStatus('Creating account...');
-
-  try {
-    const response = await fetch(API_BASE_URL + '/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password })
-    });
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      setAccountStatus(data.message || 'Could not create account.');
-      return;
-    }
-
-    saveAuthSession(data.token, data.user);
-    renderAccountModal();
-  } catch (error) {
-    console.error(error);
-    setAccountStatus('Could not connect to the 06-Tiles server.');
-  }
+  if (!username || !email || !password) { setAccountStatus('Enter a username, email, and password.', true); return; }
+  authSubmit('/api/auth/register', { username, email, password }, 'Creating account…');
 }
-
-async function loginAccount() {
-  if (!API_BASE_URL) {
-    setAccountStatus('Backend URL is not configured yet.');
-    return;
-  }
-
+function loginAccount() {
   const usernameOrEmail = (document.getElementById('account-username')?.value || '').trim();
   const password = document.getElementById('account-password')?.value || '';
-
-  if (!usernameOrEmail || !password) {
-    setAccountStatus('Enter your username/email and password.');
-    return;
-  }
-
-  setAccountStatus('Logging in...');
-
-  try {
-    const response = await fetch(API_BASE_URL + '/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usernameOrEmail, password })
-    });
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      setAccountStatus(data.message || 'Could not log in.');
-      return;
-    }
-
-    saveAuthSession(data.token, data.user);
-    renderAccountModal();
-  } catch (error) {
-    console.error(error);
-    setAccountStatus('Could not connect to the 06-Tiles server.');
-  }
+  if (!usernameOrEmail || !password) { setAccountStatus('Enter your username/email and password.', true); return; }
+  authSubmit('/api/auth/login', { usernameOrEmail, password }, 'Logging in… (the server may need a moment to wake up)');
 }
-
-function logoutAccount() {
-  clearAuthSession();
-  renderAccountModal();
-}
+function logoutAccount() { clearAuthSession(); if (typeof disconnectBattle === 'function') disconnectBattle(); renderAccountModal(); }
 
 async function restoreAuthSession() {
   const token = getAuthToken();
-  if (!token || !API_BASE_URL) {
-    refreshProfileButton();
-    return;
-  }
-
+  if (!token || !API_BASE_URL) { refreshProfileButton(); return; }
   try {
-    const response = await fetch(API_BASE_URL + '/api/auth/me', {
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    if (!response.ok) {
-      clearAuthSession();
-      return;
-    }
-    const data = await response.json();
+    const data = await apiRequest('/api/auth/me', { auth: true });
     if (data.success && data.user) saveAuthSession(token, data.user);
-    else clearAuthSession();
-  } catch (error) {
-    console.warn('Could not restore online account session.', error);
-    refreshProfileButton();
+  } catch (e) {
+    if (e.status === 401 || e.status === 404) clearAuthSession();   // only drop the session if the server actually rejected it
+    else { refreshProfileButton(); updateAdminButton(getAuthUser()); }
   }
 }
 
@@ -191,169 +101,66 @@ function authFetch(url, options = {}) {
   if (token) headers.Authorization = 'Bearer ' + token;
   return fetch(url, { ...options, headers });
 }
-async function beginStatsGame() {
-  if (!getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode) return;
-  statsGameFinalized = false;
-}
 
+function beginStatsGame() { statsGameFinalized = false; }
 async function finishStatsGame(completed) {
   if (statsGameFinalized || !getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode) return;
   statsGameFinalized = true;
   try {
-    const response = await authFetch(API_BASE_URL + '/api/stats/game', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        started: true,
-        completed: !!completed,
-        score: Math.floor(score),
-        notesHit: notesHitThisGame
-      })
-    });
-    const data = await response.json();
-    if (response.ok && data.success && data.user) {
-      saveAuthSession(getAuthToken(), data.user);
-    }
-  } catch (error) {
-    console.warn('Could not save game statistics.', error);
-  }
+    const data = await apiRequest('/api/stats/game', { method: 'POST', auth: true, body: { started: true, completed: !!completed, score: Math.floor(score), notesHit: notesHitThisGame } });
+    if (data.user) saveAuthSession(getAuthToken(), data.user);
+  } catch (e) { console.warn('Could not save game statistics.', e); }
 }
 
-async function refreshOnlineStats() {
-  if (!getAuthToken() || !API_BASE_URL) return null;
-  try {
-    const response = await authFetch(API_BASE_URL + '/api/auth/me');
-    const data = await response.json();
-    if (response.ok && data.success && data.user) {
-      saveAuthSession(getAuthToken(), data.user);
-      return data.user;
-    }
-  } catch (error) {
-    console.warn('Could not refresh online statistics.', error);
-  }
-  return null;
+function formatBattleWinRate(s) {
+  const w = Number(s.battleWins || 0), l = Number(s.battleLosses || 0);
+  return w + l ? Math.round((w / (w + l)) * 100) + '%' : '—';
 }
 
-function formatBattleWinRate(statistics) {
-  const wins = Number(statistics.battleWins || 0);
-  const losses = Number(statistics.battleLosses || 0);
-  const total = wins + losses;
-  return total ? Math.round((wins / total) * 100) + '%' : '—';
+function statsGridHtml(st) {
+  const n = v => Number(v || 0).toLocaleString();
+  return `<div class="stats-grid">
+    <div class="stat-card"><span>GAMES PLAYED</span><b>${n(st.gamesPlayed)}</b></div>
+    <div class="stat-card"><span>COMPLETED</span><b>${n(st.gamesCompleted)}</b></div>
+    <div class="stat-card"><span>BEST SCORE</span><b>${n(st.bestScore)}</b></div>
+    <div class="stat-card"><span>TOTAL SCORE</span><b>${n(st.totalScore)}</b></div>
+    <div class="stat-card"><span>NOTES HIT</span><b>${n(st.totalNotesHit)}</b></div>
+    <div class="stat-card"><span>BATTLE WIN RATE</span><b>${formatBattleWinRate(st)}</b></div></div>`;
 }
 
 async function openStatsModal() {
   const modal = document.getElementById('stats-modal');
-  if (!modal) return;
   const user = getAuthUser();
   if (!user) {
-    modal.innerHTML = `
-      <h2>PLAYER STATS</h2>
-      <div class="menu-content">
-        <div class="stats-login-card">Log in to view your online player statistics.</div>
-        <button class="nav-btn" onclick="openProfileModal()">ACCOUNT</button>
-        <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button>
-      </div>`;
+    modal.innerHTML = screenHtml('PLAYER STATS', null, '<div class="panel note">Log in to track your online statistics.</div><button class="btn btn-play" onclick="openProfileModal()">LOG IN / CREATE ACCOUNT</button>');
     toggleMenu('stats-modal');
     return;
   }
-
-  modal.innerHTML = `
-    <h2>PLAYER STATS</h2>
-    <div class="menu-content">
-      <div class="stats-profile">
-        <div class="stats-avatar">${escapeHtml(user.username.slice(0, 1).toUpperCase())}</div>
-        <div>
-          <div class="stats-username">${escapeHtml(user.username)}</div>
-          <div class="stats-online">ONLINE ACCOUNT</div>
-        </div>
-      </div>
-      <div class="stats-grid">
-        <div class="stat-card"><span>GAMES PLAYED</span><b id="stat-games-played">${(user.statistics || {}).gamesPlayed || 0}</b></div>
-        <div class="stat-card"><span>COMPLETED</span><b id="stat-games-completed">${(user.statistics || {}).gamesCompleted || 0}</b></div>
-        <div class="stat-card"><span>BEST SCORE</span><b id="stat-best-score">${(user.statistics || {}).bestScore || 0}</b></div>
-        <div class="stat-card"><span>TOTAL SCORE</span><b id="stat-total-score">${(user.statistics || {}).totalScore || 0}</b></div>
-        <div class="stat-card"><span>NOTES HIT</span><b id="stat-notes-hit">${(user.statistics || {}).totalNotesHit || 0}</b></div>
-        <div class="stat-card"><span>WIN RATE</span><b id="stat-win-rate">${formatBattleWinRate(user.statistics || {})}</b></div>
-      </div>
-      <button class="nav-btn secondary-btn" onclick="toggleMenu('main-menu')">BACK TO MENU</button>
-    </div>`;
+  const draw = u => screenHtml('PLAYER STATS', null, `<div class="panel profile-hero"><div class="avatar big">${u.profileIcon ? '<img src="' + escapeHtml(u.profileIcon) + '" alt="">' : escapeHtml(u.username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(u.username)}</div><div class="hero-sub">Online account</div></div></div>` + statsGridHtml(u.statistics || {}));
+  modal.innerHTML = draw(user);
   toggleMenu('stats-modal');
-
-  const freshUser = await refreshOnlineStats();
-  if (freshUser) {
-    const st = freshUser.statistics || {};
-    const values = {
-      'stat-games-played': st.gamesPlayed || 0,
-      'stat-games-completed': st.gamesCompleted || 0,
-      'stat-best-score': st.bestScore || 0,
-      'stat-total-score': st.totalScore || 0,
-      'stat-notes-hit': st.totalNotesHit || 0,
-      'stat-win-rate': formatBattleWinRate(st)
-    };
-    Object.entries(values).forEach(([id, value]) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = value;
-    });
-  }
+  try {
+    const data = await apiRequest('/api/auth/me', { auth: true });
+    if (data.user) { saveAuthSession(getAuthToken(), data.user); if (!modal.classList.contains('hidden')) modal.innerHTML = draw(data.user); }
+  } catch (e) {}
 }
-
 
 async function uploadProfileIcon(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    alert('Please choose an image.');
-    return;
-  }
-  if (file.size > 1024 * 1024) {
-    alert('Profile icon must be 1MB or smaller.');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const icon = e.target.result;
-    if (!getAuthToken() || !API_BASE_URL) {
-      const local = loadProfiles();
-      if (!local[currentProfile]) local[currentProfile] = { customLevels: [] };
-      local[currentProfile].profileIcon = icon;
-      saveProfilesObject(local);
-      profiles = local;
-      renderAccountModal();
-      return;
-    }
-    try {
-      const response = await authFetch(API_BASE_URL + '/api/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileIcon: icon })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        alert(data.message || 'Could not update profile icon.');
-        return;
-      }
-      saveAuthSession(getAuthToken(), data.user);
-      renderAccountModal();
-    } catch (error) {
-      alert('Could not connect to the 06-Tiles server.');
-    }
-  };
-  reader.readAsDataURL(file);
+  if (!file.type.startsWith('image/')) { toast('Please choose an image.'); return; }
+  try {
+    const icon = await downscaleImage(file, 192);
+    const data = await apiRequest('/api/profile', { method: 'PATCH', auth: true, body: { profileIcon: icon } });
+    saveAuthSession(getAuthToken(), data.user);
+    renderAccountModal();
+    toast('Profile icon updated.', 'good');
+  } catch (e) { toast(e.message || 'Could not update the icon.', 'bad'); }
 }
 
-
-async function updateAdminButton() {
+// The admin button is driven by what the SERVER says, not by a hard-coded name in the browser.
+async function updateAdminButton(user) {
   const button = document.getElementById('admin-btn');
   if (!button) return;
-  const user = getAuthUser();
-  const localAdmin = !!user && String(user.username || '').toLowerCase() === 'wcrazyness';
-  button.classList.toggle('hidden', !localAdmin);
-  if (!localAdmin || !getAuthToken() || !API_BASE_URL) return;
-  try {
-    const response = await authFetch(API_BASE_URL + '/api/admin/check');
-    const data = await response.json();
-    if (!response.ok || !data.isAdmin) console.warn('Admin check did not confirm the account; keeping the local admin button visible.');
-  } catch (error) {
-    console.warn('Admin check failed; keeping the local admin button visible.', error);
-  }
+  button.classList.toggle('hidden', !(user && user.isAdmin));
 }
