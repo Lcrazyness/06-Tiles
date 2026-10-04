@@ -1,121 +1,100 @@
 // ============================================================================
-// storage.js — everything backed by localStorage: profiles, "My Levels",
-// and the local community library.
+// storage.js — "My Levels" (stored on this device), the API helper every
+// online feature uses, and level save / publish / download / load.
 //
-// Honesty note (this replaced the old system on purpose): the previous
-// version had a LOGIN / SIGN UP flow that stored usernames and *plaintext
-// passwords* in localStorage — there's no server here, so that password was
-// never actually protecting anything, just giving a false sense of security.
-// This version uses named local profiles instead: no password, because
-// there's nothing a password could meaningfully guard on a static site.
-// Same goes for "PUBLISH TO CLOUD" — there is no cloud. It's relabelled
-// "library" and the Browse screen says so up front.
+// Changes: My Levels now live in one device-wide list (they used to be tied to
+// whichever name you were using, so logging in made them "disappear"); the
+// fake "local community library" is gone — Browse is the real server or an
+// honest error; publishing needs an account; saving over a level you're
+// editing updates it instead of duplicating it; prompt()/alert() are replaced
+// by in-game dialogs.
 // ============================================================================
 
-const PROFILES_KEY = 'et_profiles';
+const PROFILES_KEY = 'et_profiles';        // legacy (pre-account) storage, only read once for migration
 const CURRENT_PROFILE_KEY = 'et_currentProfile';
-const COMMUNITY_KEY = 'et_communityLevels';
+const MY_LEVELS_KEY = 'et_myLevels';
 
-function loadProfiles() {
-  let profiles;
-  try { profiles = JSON.parse(localStorage.getItem(PROFILES_KEY)) || {}; }
-  catch (e) { profiles = {}; }
-  if (!profiles['Guest']) profiles['Guest'] = { customLevels: [] };
-  return profiles;
-}
-function saveProfilesObject(profiles) {
-  localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
-}
-
-let profiles = loadProfiles();
 let currentProfile = localStorage.getItem(CURRENT_PROFILE_KEY) || 'Guest';
-if (!profiles[currentProfile]) currentProfile = 'Guest';
+let currentEditingId = null;
 
-function getCustomLevels() {
-  if (!profiles[currentProfile]) profiles[currentProfile] = { customLevels: [] };
-  if (!Array.isArray(profiles[currentProfile].customLevels)) profiles[currentProfile].customLevels = [];
-  return profiles[currentProfile].customLevels;
+function loadMyLevels() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MY_LEVELS_KEY));
+    if (Array.isArray(stored)) return stored;
+  } catch (e) {}
+  // one-time migration from the old per-profile storage
+  const merged = [], seen = new Set();
+  try {
+    const old = JSON.parse(localStorage.getItem(PROFILES_KEY)) || {};
+    Object.values(old).forEach(p => (p.customLevels || []).forEach(l => { if (l && !seen.has(l.id)) { seen.add(l.id); merged.push(l); } }));
+  } catch (e) {}
+  try { localStorage.setItem(MY_LEVELS_KEY, JSON.stringify(merged)); } catch (e) {}
+  return merged;
 }
-function persistProfiles() { saveProfilesObject(profiles); }
+let myLevels = loadMyLevels();
 
-function ensureCurrentProfileRecord() {
-  if (!profiles[currentProfile]) profiles[currentProfile] = { customLevels: [] };
-  if (!Array.isArray(profiles[currentProfile].customLevels)) profiles[currentProfile].customLevels = [];
-  if (!('profileIcon' in profiles[currentProfile])) profiles[currentProfile].profileIcon = null;
-  persistProfiles();
+function getCustomLevels() { return myLevels; }
+function persistMyLevels() {
+  try { localStorage.setItem(MY_LEVELS_KEY, JSON.stringify(myLevels)); return true; }
+  catch (e) { toast('Your browser storage is full - delete some levels or download them first.', 'bad'); return false; }
 }
-
-function switchProfile(name) {
-  if (!profiles[name]) return;
-  currentProfile = name;
-  localStorage.setItem(CURRENT_PROFILE_KEY, name);
-  refreshProfileButton();
-  if (typeof onProfileSwitched === 'function') onProfileSwitched();
-}
-
-function createProfile() {
-  const input = document.getElementById('new-profile-name');
-  const name = (input.value || '').trim().slice(0, 16);
-  if (!name) return;
-  if (profiles[name]) { alert('That name is already taken in this browser.'); return; }
-  profiles[name] = { customLevels: [] };
-  persistProfiles();
-  input.value = '';
-  switchProfile(name);
-  renderProfileModal();
-}
+function persistProfiles() { return persistMyLevels(); } // kept for older call sites
 
 function refreshProfileButton() {
-  const btn = document.getElementById('profile-btn');
-  if (btn) btn.innerText = '👤 ' + currentProfile;
+  const label = document.getElementById('profile-name-label');
+  if (label) label.textContent = currentProfile;
+  const avatar = document.getElementById('profile-chip-avatar');
+  if (avatar) {
+    const user = typeof getAuthUser === 'function' ? getAuthUser() : null;
+    const icon = user ? user.profileIcon : localStorage.getItem('et_guestIcon');
+    avatar.innerHTML = icon ? '<img src="' + escapeHtml(icon) + '" alt="">' : escapeHtml(currentProfile.slice(0, 1).toUpperCase());
+    avatar.style.background = icon ? '' : artGradient(currentProfile);
+  }
 }
 
-function renderProfileModal() {
-  const list = document.getElementById('profile-modal-list');
-  list.innerHTML = '';
-  Object.keys(profiles).forEach(name => {
-    const row = document.createElement('div');
-    row.className = 'profile-row' + (name === currentProfile ? ' current' : '');
-    row.onclick = () => { switchProfile(name); renderProfileModal(); };
-    const levelCount = (profiles[name].customLevels || []).length;
-    row.innerHTML = `
-      <div class="profile-avatar">${name.slice(0, 1).toUpperCase()}</div>
-      <div style="flex:1;">
-        <div class="profile-row-name">${escapeHtml(name)}</div>
-        <div class="profile-row-tag">${levelCount} level${levelCount === 1 ? '' : 's'}${name === currentProfile ? ' · active' : ''}</div>
-      </div>`;
-    list.appendChild(row);
-  });
-}
-
-function openProfileModal() {
-  renderProfileModal();
-  toggleMenu('profile-modal');
-}
-
-// --- community library: real backend when API_BASE_URL is set, otherwise
-// the same localStorage-backed fallback as before. Every function here is
-// async now so callers work identically either way. ---
-
-function getLocalCommunityLevels() {
-  try { return JSON.parse(localStorage.getItem(COMMUNITY_KEY)) || []; }
-  catch (e) { return []; }
-}
-function setLocalCommunityLevels(levels) {
-  localStorage.setItem(COMMUNITY_KEY, JSON.stringify(levels));
+// ---------------------------------------------------------------------------
+// Server access. One helper so every screen reports problems the same way.
+// ---------------------------------------------------------------------------
+async function apiRequest(path, { method = 'GET', body, auth = false, timeout = 45000 } = {}) {
+  if (!API_BASE_URL) throw new Error('The online server is not configured.');
+  const headers = {};
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (auth) { const token = getAuthToken(); if (token) headers.Authorization = 'Bearer ' + token; }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  let res;
+  try {
+    res = await fetch(API_BASE_URL + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctrl.signal, cache: 'no-store' });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError'
+      ? 'The server took too long to answer. It may be waking up - try again in a moment.'
+      : 'Could not reach the 06-Tiles server.');
+  } finally { clearTimeout(timer); }
+  let data = null;
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) { const err = new Error((data && data.message) || ('Server error (' + res.status + ')')); err.status = res.status; throw err; }
+  return data;
 }
 
 async function getCommunityLevels(search = '', tab = 'recent') {
-  if (API_BASE_URL) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/levels?search=${encodeURIComponent(search)}&tab=${encodeURIComponent(tab)}`);
-      if (!res.ok) throw new Error('bad response: ' + res.status);
-      return await res.json();
-    } catch (e) {
-      console.warn('Backend unreachable, showing the local-only library instead.', e);
-    }
+  const data = await apiRequest('/api/levels?search=' + encodeURIComponent(search) + '&tab=' + encodeURIComponent(tab));
+  return Array.isArray(data) ? data : [];
+}
+async function getCommunityLevel(id) { return apiRequest('/api/levels/' + encodeURIComponent(id)); }
+async function getMyPublishedLevels() { return apiRequest('/api/my/levels', { auth: true }); }
+
+async function rateLevel(levelId, stars) {
+  if (!getAuthToken()) throw new Error('Log in to rate levels.');
+  return apiRequest('/api/levels/' + encodeURIComponent(levelId) + '/rate', { method: 'POST', body: { stars }, auth: true });
+}
+
+function registerPlay(levelId, fromCommunity) {
+  if (fromCommunity) {
+    if (API_BASE_URL) apiRequest('/api/levels/' + encodeURIComponent(levelId) + '/play', { method: 'POST', body: {} }).catch(() => {});
+    return;
   }
-  return getLocalCommunityLevels();
+  const lvl = myLevels.find(l => l.id === levelId);
+  if (lvl) { lvl.plays = (lvl.plays || 0) + 1; persistMyLevels(); }
 }
 
 function getAvgRating(level) {
@@ -123,40 +102,11 @@ function getAvgRating(level) {
   return level.ratings.reduce((a, b) => a + b, 0) / level.ratings.length;
 }
 
-async function rateLevel(levelId, stars, fromCommunity) {
-  if (fromCommunity && API_BASE_URL) {
-    try {
-      await fetch(`${API_BASE_URL}/api/levels/${levelId}/rate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stars })
-      });
-      return;
-    } catch (e) { console.warn('Could not reach backend to rate this level.', e); return; }
-  }
-  const levels = fromCommunity ? getLocalCommunityLevels() : getCustomLevels();
-  const lvl = levels.find(l => l.id === levelId);
-  if (!lvl) return;
-  lvl.ratings = lvl.ratings || [];
-  lvl.ratings.push(stars);
-  if (fromCommunity) setLocalCommunityLevels(levels); else persistProfiles();
-}
-
-async function registerPlay(levelId, fromCommunity) {
-  if (fromCommunity && API_BASE_URL) {
-    try { await fetch(`${API_BASE_URL}/api/levels/${levelId}/play`, { method: 'POST' }); return; }
-    catch (e) { console.warn('Could not reach backend to register this play.', e); return; }
-  }
-  const levels = fromCommunity ? getLocalCommunityLevels() : getCustomLevels();
-  const lvl = levels.find(l => l.id === levelId);
-  if (!lvl) return;
-  lvl.plays = (lvl.plays || 0) + 1;
-  if (fromCommunity) setLocalCommunityLevels(levels); else persistProfiles();
-}
-
 function estimateDifficulty(level) {
   if (level.difficulty) return level.difficulty;
-  const tileCount = (level.data || []).length;
+  const tileCount = level.tileCount || (level.data || []).length;
   const duration = Math.max(1, (level.data || []).reduce((m, t) => Math.max(m, t.time), 1));
-  const density = tileCount / duration; // tiles/sec, rough proxy for how demanding it is
+  const density = tileCount / duration;
   if (density < 1.2) return 'Easy';
   if (density < 2) return 'Normal';
   if (density < 3) return 'Hard';
@@ -165,20 +115,15 @@ function estimateDifficulty(level) {
 }
 
 function difficultyBadgeClass(diff) {
-  return {
-    Easy: 'diff-badge--easy', Normal: 'diff-badge--normal', Hard: 'diff-badge--hard',
-    Insane: 'diff-badge--insane', Extreme: 'diff-badge--extreme'
-  }[diff] || 'diff-badge--normal';
+  return { Easy: 'diff-badge--easy', Normal: 'diff-badge--normal', Hard: 'diff-badge--hard', Insane: 'diff-badge--insane', Extreme: 'diff-badge--extreme' }[diff] || 'diff-badge--normal';
 }
 
-function makeLevelId() {
-  return 'lvl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-}
+function makeLevelId() { return 'lvl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
 
 function buildLevelObject(name) {
   return {
-    id: makeLevelId(),
-    name: name,
+    id: currentEditingId || makeLevelId(),
+    name,
     author: currentProfile,
     icon: currentLevelIcon || null,
     data: JSON.parse(JSON.stringify(recordedTiles)),
@@ -190,27 +135,29 @@ function buildLevelObject(name) {
     difficulty: document.getElementById('edit-difficulty').value || 'Normal',
     backgroundColor: document.getElementById('edit-bg-color')?.value || '#202738',
     backgroundBrightness: Number(document.getElementById('edit-bg-brightness')?.value || 100),
-    ratings: [],
+    bpm: Math.round(editorBpm),
+    gridOffset: editorGridOffset,
     plays: 0,
     createdAt: Date.now()
   };
 }
 
-function saveCustomLevel() {
-  if (recordedTiles.length === 0) { alert('Place some tiles first!'); return; }
-  const name = prompt('Save as:', currentEditingName || 'My Level');
-  if (!name) return;
-  currentEditingName = name;
-  const level = buildLevelObject(name);
-  getCustomLevels().push(level);
-  persistProfiles();
-  closeCreatorMenu();
-  alert('Saved to My Levels.');
+async function saveCustomLevel() {
+  if (recordedTiles.length === 0) { toast('Place some tiles first!'); return; }
+  const name = await uiPrompt('Save level as:', currentEditingName || 'My Level');
+  if (!name || !name.trim()) return;
+  currentEditingName = name.trim().slice(0, 80);
+  const level = buildLevelObject(currentEditingName);
+  const idx = myLevels.findIndex(l => l.id === level.id);
+  if (idx !== -1) { level.plays = myLevels[idx].plays || 0; level.createdAt = myLevels[idx].createdAt || level.createdAt; myLevels[idx] = level; }
+  else myLevels.push(level);
+  currentEditingId = level.id;
+  if (persistMyLevels()) { closeCreatorMenu(); toast(idx !== -1 ? 'Level updated.' : 'Saved to My Levels.', 'good'); }
 }
 
 function startLevelVerification() {
   if (recordedTiles.length === 0) {
-    alert('Place some tiles first!');
+    toast('Place some tiles first!');
     pendingPublishAfterVerification = false;
     return;
   }
@@ -221,7 +168,18 @@ function startLevelVerification() {
 }
 
 async function publishLevel() {
-  if (recordedTiles.length === 0) { alert('Place some tiles first!'); return; }
+  if (recordedTiles.length === 0) { toast('Place some tiles first!'); return; }
+  if (!getAuthToken()) {
+    closeCreatorMenu();
+    if (await uiConfirm('You need an account to publish levels (so they have an author and you can remove them later). Log in now? Your level stays in the editor.', 'Log in')) {
+      stopEditorTransport();
+      document.getElementById('editor-ui').classList.add('hidden');
+      inEditor = false; stopLoop();
+      returnToEditorAfterAccount = true;
+      openProfileModal();
+    }
+    return;
+  }
   if (!levelVerified) {
     pendingPublishAfterVerification = true;
     startLevelVerification();
@@ -229,56 +187,39 @@ async function publishLevel() {
   }
   await publishVerifiedLevel();
 }
+let returnToEditorAfterAccount = false;
 
 async function publishVerifiedLevel() {
-  const name = prompt('Publish as:', currentEditingName || 'My Level');
-  if (!name) return;
-  currentEditingName = name;
-  const level = buildLevelObject(name);
+  const name = await uiPrompt('Publish as:', currentEditingName || 'My Level', 'Publish');
+  if (!name || !name.trim()) return;
+  currentEditingName = name.trim().slice(0, 80);
+  const level = buildLevelObject(currentEditingName);
   closeCreatorMenu();
-
-  if (API_BASE_URL) {
-    try {
-      const res = await authFetch(`${API_BASE_URL}/api/levels`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(level)
-      });
-      if (!res.ok) throw new Error('bad response: ' + res.status);
-      alert('Published! Anyone with the game can now find "' + name + '" in Browse Levels.');
-      return;
-    } catch (e) {
-      console.warn('Backend publish failed, saving to the local library instead.', e);
-      alert("Couldn't reach the backend, so this was saved to your local library instead (only visible in this browser). Check the server is deployed and API_BASE_URL in js/config.js is correct.");
-    }
-  } else {
-    alert('Published to the local library. This is stored only in this browser — set API_BASE_URL in js/config.js once your backend is deployed to make this real.');
+  try {
+    toast('Publishing…');
+    const data = await apiRequest('/api/levels', { method: 'POST', body: level, auth: true });
+    // remember it locally too, so My Levels shows it as published
+    level.published = true; level.onlineId = data.level && data.level.id;
+    const idx = myLevels.findIndex(l => l.id === level.id);
+    if (idx !== -1) myLevels[idx] = level; else myLevels.push(level);
+    currentEditingId = level.id;
+    persistMyLevels();
+    await uiAlert('"' + currentEditingName + '" is live! Anyone can find it in Browse.', 'Published');
+  } catch (e) {
+    await uiAlert(e.message || 'Could not publish the level.', 'Publish failed');
   }
-  const community = getLocalCommunityLevels();
-  community.unshift(level);
-  setLocalCommunityLevels(community);
 }
 
 function downloadLevelData() {
   const name = currentEditingName || "My_Level";
-  const lvlData = {
-    name: name,
-    icon: currentLevelIcon || null,
-    data: [...recordedTiles],
-    effects: [...recordedEffects],
-    lives: parseInt(document.getElementById('edit-lives').value) || 3,
-    fps: parseInt(document.getElementById('edit-fps').value) || 60,
-    audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
-    disableHolds: document.getElementById('edit-disable-holds').checked,
-    difficulty: document.getElementById('edit-difficulty').value || 'Normal',
-    backgroundColor: document.getElementById('edit-bg-color')?.value || '#202738',
-    backgroundBrightness: Number(document.getElementById('edit-bg-brightness')?.value || 100)
-  };
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(lvlData, null, 2));
+  const lvlData = { ...buildLevelObject(name) };
+  delete lvlData.id; delete lvlData.plays; delete lvlData.createdAt;
+  const blob = new Blob([JSON.stringify(lvlData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.setAttribute("href", dataStr);
-  a.setAttribute("download", name + ".json");
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  a.href = url; a.download = name.replace(/[^\w\- ]+/g, '_') + ".json";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function loadCustomLevelFile(event) {
@@ -288,66 +229,52 @@ function loadCustomLevelFile(event) {
   reader.onload = function (e) {
     try {
       const levelData = JSON.parse(e.target.result);
+      if (!levelData || !Array.isArray(levelData.data) || levelData.data.length === 0) throw new Error('no tiles');
+      const clean = levelData.data.filter(t => t && Number.isInteger(t.lane) && t.lane >= 0 && t.lane <= 3 && Number.isFinite(Number(t.time)));
+      if (!clean.length) throw new Error('no valid tiles');
+      levelData.data = clean;
       tempLoadedLevel = levelData;
       startGame(levelData.name || 'Loaded Level', true, -1, levelData.data, levelData.effects || [], false, levelData);
-      event.target.value = "";
     } catch (err) {
-      alert("Error parsing level file. Make sure it's a valid JSON format.");
+      toast("That doesn't look like a valid level file.", 'bad');
     }
+    event.target.value = "";
   };
   reader.readAsText(file);
 }
 
+let currentAudioUrl = null;
 function loadAudioFile(event) {
   const file = event.target.files[0];
   if (!file) return;
-  const maxSize = 10 * 1024 * 1024;
-  if (file.size > maxSize) {
-    alert("File is too large! Please select a song under 10MB.");
+  if (file.size > 10 * 1024 * 1024) {
+    toast("That song is too large - pick one under 10MB.", 'bad');
     event.target.value = "";
     return;
   }
-  const url = URL.createObjectURL(file);
-  bgAudio.src = url; bgAudio.load();
-  bgAudio.onloadedmetadata = () => {
-    const slider = document.getElementById('timeline-slider');
-    if (slider) slider.max = bgAudio.duration;
-    if (typeof refreshEditorTimeline === 'function') refreshEditorTimeline();
-  };
+  if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+  currentAudioUrl = URL.createObjectURL(file);
+  bgAudio.src = currentAudioUrl; bgAudio.load();
+  bgAudio.onloadedmetadata = () => { if (typeof refreshEditorTimeline === 'function') refreshEditorTimeline(); };
+  toast('Song loaded: ' + file.name, 'good');
+  event.target.value = "";
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function updatePrimaryColor(val) {
-  document.documentElement.style.setProperty('--primary-theme', val);
-  document.documentElement.style.setProperty('--play-blue', val);
+  document.documentElement.style.setProperty('--blue', val);
+  localStorage.setItem('et_primaryColor', val);
 }
 
-
 async function deleteCustomLevel(levelId) {
-  const levels = getCustomLevels();
-  const idx = levels.findIndex(level => level.id === levelId);
+  const idx = myLevels.findIndex(level => level.id === levelId);
   if (idx === -1) return false;
-  const level = levels[idx];
-  if (!confirm('Delete "' + level.name + '"? This cannot be undone.')) return false;
-
-  if (API_BASE_URL && getAuthToken() && level.published) {
-    try {
-      const response = await authFetch(API_BASE_URL + '/api/levels/' + encodeURIComponent(level.id), { method: 'DELETE' });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        alert(data.message || 'Could not delete the online level.');
-        return false;
-      }
-    } catch (error) {
-      alert('Could not connect to the 06-Tiles server.');
-      return false;
-    }
-  }
-
-  levels.splice(idx, 1);
-  persistProfiles();
+  const level = myLevels[idx];
+  if (!(await uiConfirm('Delete "' + level.name + '" from this device? This cannot be undone.' + (level.published ? ' (The published copy stays online; remove it from My Published.)' : ''), 'Delete', true))) return false;
+  myLevels.splice(idx, 1);
+  persistMyLevels();
   return true;
 }
