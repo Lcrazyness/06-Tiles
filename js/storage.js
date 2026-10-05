@@ -16,6 +16,7 @@ const MY_LEVELS_KEY = 'et_myLevels';
 
 let currentProfile = localStorage.getItem(CURRENT_PROFILE_KEY) || 'Guest';
 let currentEditingId = null;
+let currentEditingOnlineId = null;   // set while editing a level that is already published, so Publish UPDATES it
 
 function loadMyLevels() {
   try {
@@ -72,7 +73,12 @@ async function apiRequest(path, { method = 'GET', body, auth = false, timeout = 
   } finally { clearTimeout(timer); }
   let data = null;
   try { data = await res.json(); } catch (e) {}
-  if (!res.ok) { const err = new Error((data && data.message) || ('Server error (' + res.status + ')')); err.status = res.status; throw err; }
+  if (!res.ok) {
+    if (data && data.banned && auth && typeof handleBanned === 'function') handleBanned(data);
+    const err = new Error((data && data.message) || ('Server error (' + res.status + ')'));
+    err.status = res.status; err.banned = !!(data && data.banned);
+    throw err;
+  }
   return data;
 }
 
@@ -149,6 +155,7 @@ async function saveCustomLevel() {
   currentEditingName = name.trim().slice(0, 80);
   const level = buildLevelObject(currentEditingName);
   const idx = myLevels.findIndex(l => l.id === level.id);
+  if (currentEditingOnlineId) { level.onlineId = currentEditingOnlineId; level.published = true; }
   if (idx !== -1) { level.plays = myLevels[idx].plays || 0; level.createdAt = myLevels[idx].createdAt || level.createdAt; myLevels[idx] = level; }
   else myLevels.push(level);
   currentEditingId = level.id;
@@ -190,25 +197,40 @@ async function publishLevel() {
 let returnToEditorAfterAccount = false;
 
 async function publishVerifiedLevel() {
-  const name = await uiPrompt('Publish as:', currentEditingName || 'My Level', 'Publish');
+  const updating = !!currentEditingOnlineId;
+  updating_note = false;
+  const name = await uiPrompt(updating ? 'Update your published level as:' : 'Publish as:', currentEditingName || 'My Level', updating ? 'Update' : 'Publish');
   if (!name || !name.trim()) return;
   currentEditingName = name.trim().slice(0, 80);
   const level = buildLevelObject(currentEditingName);
   closeCreatorMenu();
   try {
-    toast('Publishing…');
-    const data = await apiRequest('/api/levels', { method: 'POST', body: level, auth: true });
-    // remember it locally too, so My Levels shows it as published
+    toast(updating ? 'Updating…' : 'Publishing…');
+    let data;
+    if (updating) {
+      try { data = await apiRequest('/api/levels/' + encodeURIComponent(currentEditingOnlineId), { method: 'PUT', body: level, auth: true }); }
+      catch (e) {
+        if (e.status !== 404) throw e;
+        currentEditingOnlineId = null;   // it was removed online - publish it as a new level instead
+        data = await apiRequest('/api/levels', { method: 'POST', body: level, auth: true });
+        updating_note = true;
+      }
+    } else {
+      data = await apiRequest('/api/levels', { method: 'POST', body: level, auth: true });
+    }
     level.published = true; level.onlineId = data.level && data.level.id;
+    currentEditingOnlineId = level.onlineId;
+    // remember it locally too, so My Levels shows it as published
     const idx = myLevels.findIndex(l => l.id === level.id);
-    if (idx !== -1) myLevels[idx] = level; else myLevels.push(level);
+    if (idx !== -1) { level.plays = myLevels[idx].plays || 0; level.createdAt = myLevels[idx].createdAt || level.createdAt; myLevels[idx] = level; } else myLevels.push(level);
     currentEditingId = level.id;
     persistMyLevels();
-    await uiAlert('"' + currentEditingName + '" is live! Anyone can find it in Browse.', 'Published');
+    await uiAlert(updating && !updating_note ? '"' + currentEditingName + '" was updated for everyone.' : '"' + currentEditingName + '" is live! Anyone can find it in Browse.', updating ? 'Updated' : 'Published');
   } catch (e) {
     await uiAlert(e.message || 'Could not publish the level.', 'Publish failed');
   }
 }
+let updating_note = false;
 
 function downloadLevelData() {
   const name = currentEditingName || "My_Level";
