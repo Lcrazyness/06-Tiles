@@ -103,7 +103,7 @@ function showGameHud(show, battle) {
 
 function editorLevelConfig() {
   return {
-    lives: parseInt(document.getElementById('edit-lives').value) || 3,
+    lives: Math.max(1, Math.min(10, parseInt(document.getElementById('edit-lives').value) || 3)),
     fps: parseInt(document.getElementById('edit-fps').value) || 60,
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
     disableHolds: document.getElementById('edit-disable-holds').checked
@@ -130,6 +130,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
 
   gameActive = true;
   resetState();
+  releaseAllKeys();
   if (!isPlaytesting && !isVerifying && !isBattleMode) beginStatsGame();
   toggleMenu(null);
   document.getElementById('editor-ui').classList.add('hidden');
@@ -163,7 +164,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     const cfg = sourceLevel
       ? { lives: sourceLevel.lives !== undefined ? sourceLevel.lives : 3, fps: sourceLevel.fps || 60, audioOffset: sourceLevel.audioOffset || 0, disableHolds: !!sourceLevel.disableHolds }
       : editorLevelConfig();
-    if (sourceLevel) maxLives = Math.max(1, Math.min(10, Number(cfg.lives) || 3));
+    maxLives = Math.max(1, Math.min(10, Math.floor(Number(cfg.lives)) || 3));   // was only applied for saved levels, so editor changes were ignored when verifying
     currentLives = maxLives;
     windowLevelFPS = cfg.fps >= 10 ? cfg.fps : 60;
     levelDisableHolds = cfg.disableHolds;
@@ -309,23 +310,38 @@ function showCompletionScreen() {
 // ---------------------------------------------------------------------------
 // Input: keyboard + touch/mouse share one hit routine
 // ---------------------------------------------------------------------------
+// Releases every key/pointer. Without this a key whose keyup was swallowed (alt-tab, a menu, a dialog) stayed
+// "held" forever, so later taps in that lane silently did nothing.
+function releaseAllKeys() {
+  Object.keys(keys).forEach(k => { keys[k] = false; });
+  keyMap.forEach(k => { keys[k] = false; });
+  activePointers.clear();
+}
+window.addEventListener('blur', releaseAllKeys);
+
 function pressLane(laneIndex) {
   if (!gameActive || isDead || inEditor || isPaused) return;
-  const activeTiles = tiles.filter(t => !t.interacted);
-  if (activeTiles.length === 0) return;
-  const target = activeTiles.find(t => t.lane === laneIndex);
+  // closest tile to the hit line that hasn't been played yet
+  let nearest = null;
+  for (const t of tiles) if (!t.interacted && (!nearest || t.y > nearest.y)) nearest = t;
+  if (!nearest) return;
+  // the nearest unplayed tile IN THIS LANE (don't rely on array order)
+  let target = null;
+  for (const t of tiles) if (!t.interacted && t.lane === laneIndex && (!target || t.y > target.y)) target = t;
   let targetY = target ? target.y : 0;
-  let firstTileY = activeTiles[0] ? activeTiles[0].y : 0;
+  let nearestY = nearest.y;
   const cbfToggle = document.getElementById('setting-cbf');
   if (cbfToggle && cbfToggle.checked) {
-    const subFrameDt = Math.min(2, (performance.now() - lastTime) / 16.666);
+    // click-before-frame: the press happened a little after the last drawn frame, so catch the tiles up
+    const subFrameDt = Math.max(0, Math.min(2, (performance.now() - lastTime) / 16.666));
     if (target) targetY += speed * subFrameDt;
-    if (activeTiles[0]) firstTileY += speed * subFrameDt;
+    nearestY += speed * subFrameDt;
   }
-  if (target && (target === activeTiles[0] || targetY > firstTileY - TILE_H)) {
+  // Valid when it is the nearest tile, or part of the same row (chords / tiles a hair apart).
+  if (target && (target === nearest || targetY >= nearestY - TILE_H * 0.85)) {
     target.interacted = true; score += 10; notesHitThisGame++;
     for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
-  } else if (firstTileY + TILE_H > 0) {
+  } else if (nearestY - TILE_H < GH && nearestY + TILE_H > 0) {
     if (!handleHit()) die("WRONG ORDER!");
   }
 }
@@ -525,7 +541,7 @@ function gameLoop(ts) {
 
     if (t.isHold && t.interacted && !t.failed) {
       if (tailTop < lineY - holdLength) {
-        if (keys[keyMap[t.lane]] === false) {
+        if (!keys[keyMap[t.lane]]) {
           t.failed = true;
           if (!handleHit()) { die("RELEASED EARLY!"); return; }
         } else {
@@ -688,6 +704,8 @@ function startEditor(existingLevel) {
   recordedTiles = existingLevel ? JSON.parse(JSON.stringify(existingLevel.data || [])) : [];
   recordedEffects = existingLevel ? JSON.parse(JSON.stringify(existingLevel.effects || [])) : [];
   currentEditingName = existingLevel ? existingLevel.name : "";
+  if (!existingLevel) { currentEditingId = null; currentEditingOnlineId = null; }
+  else currentEditingOnlineId = existingLevel.onlineId || null;
   currentLevelIcon = existingLevel ? (existingLevel.icon || null) : null;
   editorTimer = 0; isRecording = false; deleteMode = false; selectedEffect = null; editorPlaying = false; levelVerified = false;
   editorBpm = existingLevel && existingLevel.bpm ? existingLevel.bpm : 120;
@@ -759,7 +777,7 @@ function closeEditorSettingsMenu() { toggleMenu(null); }
 
 function startPlaytest() {
   if (recordedTiles.length === 0) { toast("Place some tiles first!"); return; }
-  maxLives = parseInt(document.getElementById('edit-lives').value) || 1;
+  maxLives = Math.max(1, Math.min(10, parseInt(document.getElementById('edit-lives').value) || 3));
   isPlaytesting = true; inEditor = false; deleteMode = false;
   canvas.classList.remove('delete-cursor');
   ['btn-delete-mode', 'btn-delete-mode-2'].forEach(id => document.getElementById(id)?.classList.remove('active'));
