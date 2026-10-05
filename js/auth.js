@@ -14,6 +14,7 @@ function saveAuthSession(token, user) {
   localStorage.setItem(CURRENT_PROFILE_KEY, currentProfile);
   refreshProfileButton();
   updateAdminButton(user);
+  if (user && user.warning && !warningShown && !warningAckPending) showWarning(user.warning);
 }
 function clearAuthSession() {
   localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -40,7 +41,7 @@ function renderAccountModal() {
       </div>
       <label class="btn btn-ghost" for="profile-icon-upload">Change profile icon</label>
       <input type="file" id="profile-icon-upload" accept="image/*" style="display:none" onchange="uploadProfileIcon(event)">
-      <div class="panel note">Games played ${st.gamesPlayed || 0} · Completed ${st.gamesCompleted || 0} · Best score ${st.bestScore || 0}</div>
+      <div class="panel note">★ ${user.stars || 0} stars · ${user.creatorPoints || 0} creator points · Games ${st.gamesPlayed || 0} · Completed ${st.gamesCompleted || 0} · Best score ${st.bestScore || 0}</div>
       <button class="btn btn-ghost" onclick="logoutAccount()">Log out</button>`)
   : screenHtml('ACCOUNT', 'closeAccountModal()', `
       <div class="panel note">Log in to publish levels, rate them, show up on leaderboards and battle under your own name.</div>
@@ -105,10 +106,20 @@ function authFetch(url, options = {}) {
 function beginStatsGame() { statsGameFinalized = false; }
 async function finishStatsGame(completed) {
   if (statsGameFinalized || !getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode) return;
+  // Only levels played from Browse > Levels count - not the endless modes, loaded files or your own levels
+  // (the server also refuses your own published levels).
+  const a = lastStartArgs;
+  const lvl = a && a[5] ? a[6] : null;
+  if (!lvl || !lvl.id) return;
   statsGameFinalized = true;
+  const before = getAuthUser();
   try {
-    const data = await apiRequest('/api/stats/game', { method: 'POST', auth: true, body: { started: true, completed: !!completed, score: Math.floor(score), notesHit: notesHitThisGame } });
-    if (data.user) saveAuthSession(getAuthToken(), data.user);
+    const data = await apiRequest('/api/stats/game', { method: 'POST', auth: true, body: { levelId: lvl.id, started: true, completed: !!completed, score: Math.floor(score), notesHit: notesHitThisGame } });
+    if (data.user) {
+      saveAuthSession(getAuthToken(), data.user);
+      const gained = Number(data.user.stars || 0) - Number((before && before.stars) || 0);
+      if (completed && gained > 0) toast('+' + gained + ' ★ star' + (gained === 1 ? '' : 's') + ' earned!', 'good');
+    }
   } catch (e) { console.warn('Could not save game statistics.', e); }
 }
 
@@ -117,15 +128,28 @@ function formatBattleWinRate(s) {
   return w + l ? Math.round((w / (w + l)) * 100) + '%' : '—';
 }
 
-function statsGridHtml(st) {
+function difficultyBeatenHtml(u) {
+  const counts = (u && u.difficultyCounts) || {};
+  return '<div class="panel"><div class="section-title">DIFFICULTY BEATEN</div><div class="diff-chips">' +
+    ['Easy', 'Normal', 'Hard', 'Insane', 'Extreme'].map(d => '<div class="diff-chip ' + (counts[d] ? 'on' : '') + '"><span class="diff-badge ' + difficultyBadgeClass(d) + '">' + d + '</span><b>' + Number(counts[d] || 0) + '</b></div>').join('') +
+    '</div><div class="note center">Beat rated levels to earn stars and climb the difficulty ladder.</div></div>';
+}
+
+function statsGridHtml(st, u) {
+  st = st || {}; u = u || {};
   const n = v => Number(v || 0).toLocaleString();
+  const hardest = u.hardestDifficulty ? '<span class="diff-badge ' + difficultyBadgeClass(u.hardestDifficulty) + '">' + u.hardestDifficulty + '</span>' : '—';
   return `<div class="stats-grid">
+    <div class="stat-card gold"><span>STARS</span><b>★ ${n(u.stars)}</b></div>
+    <div class="stat-card"><span>CREATOR POINTS</span><b>${n(u.creatorPoints)}</b></div>
+    <div class="stat-card"><span>HARDEST BEATEN</span><b>${hardest}</b></div>
     <div class="stat-card"><span>GAMES PLAYED</span><b>${n(st.gamesPlayed)}</b></div>
     <div class="stat-card"><span>COMPLETED</span><b>${n(st.gamesCompleted)}</b></div>
     <div class="stat-card"><span>BEST SCORE</span><b>${n(st.bestScore)}</b></div>
     <div class="stat-card"><span>TOTAL SCORE</span><b>${n(st.totalScore)}</b></div>
     <div class="stat-card"><span>NOTES HIT</span><b>${n(st.totalNotesHit)}</b></div>
-    <div class="stat-card"><span>BATTLE WIN RATE</span><b>${formatBattleWinRate(st)}</b></div></div>`;
+    <div class="stat-card"><span>BATTLE WIN RATE</span><b>${formatBattleWinRate(st)}</b></div></div>` + difficultyBeatenHtml(u) +
+    '<div class="note center">Games, score and notes only count levels played from Browse (not your own levels).</div>';
 }
 
 async function openStatsModal() {
@@ -136,7 +160,7 @@ async function openStatsModal() {
     toggleMenu('stats-modal');
     return;
   }
-  const draw = u => screenHtml('PLAYER STATS', null, `<div class="panel profile-hero"><div class="avatar big">${u.profileIcon ? '<img src="' + escapeHtml(u.profileIcon) + '" alt="">' : escapeHtml(u.username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(u.username)}</div><div class="hero-sub">Online account</div></div></div>` + statsGridHtml(u.statistics || {}));
+  const draw = u => screenHtml('PLAYER STATS', null, `<div class="panel profile-hero"><div class="avatar big">${u.profileIcon ? '<img src="' + escapeHtml(u.profileIcon) + '" alt="">' : escapeHtml(u.username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(u.username)}</div><div class="hero-sub">Online account</div></div></div>` + statsGridHtml(u.statistics || {}, u));
   modal.innerHTML = draw(user);
   toggleMenu('stats-modal');
   try {
@@ -159,8 +183,63 @@ async function uploadProfileIcon(event) {
 }
 
 // The admin button is driven by what the SERVER says, not by a hard-coded name in the browser.
+// For admins it also shows how many new alerts (e.g. 5-star ratings) are waiting.
 async function updateAdminButton(user) {
   const button = document.getElementById('admin-btn');
   if (!button) return;
-  button.classList.toggle('hidden', !(user && user.isAdmin));
+  const isAdmin = !!(user && user.isAdmin);
+  button.classList.toggle('hidden', !isAdmin);
+  if (!isAdmin || !getAuthToken() || !API_BASE_URL) { button.textContent = '🛡 ADMIN PANEL'; button.classList.remove('alert'); return; }
+  try {
+    const o = await apiRequest('/api/admin/overview', { auth: true });
+    button.textContent = '🛡 ADMIN PANEL' + (o.unreadNotifications ? ' (' + o.unreadNotifications + ' new)' : '');
+    button.classList.toggle('alert', !!o.unreadNotifications);
+  } catch (e) {}
 }
+
+// ---------------------------------------------------------------------------
+// Warnings + bans (sent by an admin)
+// ---------------------------------------------------------------------------
+let warningShown = false, warningAckPending = false, banShown = false;
+
+function showWarning(text) {
+  const el = document.getElementById('warning-screen');
+  if (!el || !text) return;
+  if (gameActive && !isBattleMode && !isDead && typeof pauseGame === 'function') { try { pauseGame(); } catch (e) {} }
+  warningShown = true;
+  el.innerHTML = '<div class="warning-card"><div class="warning-icon">⚠</div><h2>WARNING</h2><p id="warning-text"></p><button class="btn btn-play" id="warning-ok">I UNDERSTAND</button></div>';
+  el.querySelector('#warning-text').textContent = text;
+  el.classList.remove('hidden');
+  el.querySelector('#warning-ok').onclick = async () => {
+    el.classList.add('hidden');
+    warningAckPending = true;
+    try {
+      await apiRequest('/api/auth/warning/ack', { method: 'POST', auth: true, body: {} });
+      const u = getAuthUser();
+      if (u) { u.warning = null; localStorage.setItem(AUTH_USER_KEY, JSON.stringify(u)); }
+    } catch (e) {}
+    warningAckPending = false; warningShown = false;
+  };
+}
+
+function handleBanned(data) {
+  if (banShown) return;
+  banShown = true;
+  clearAuthSession();
+  if (typeof disconnectBattle === 'function') disconnectBattle();
+  if (gameActive || inEditor) { try { quitPlaytestOrGame(); } catch (e) {} }
+  const el = document.getElementById('warning-screen');
+  if (!el) { banShown = false; return; }
+  el.innerHTML = '<div class="warning-card ban"><div class="warning-icon">🚫</div><h2>YOU\'RE BANNED</h2><p id="warning-text"></p><button class="btn btn-ghost" id="warning-ok">OK</button></div>';
+  el.querySelector('#warning-text').textContent = (data && data.message ? data.message : 'Your account has been banned.') + (data && data.reason ? '\n\nReason: ' + data.reason : '');
+  el.classList.remove('hidden');
+  el.querySelector('#warning-ok').onclick = () => { el.classList.add('hidden'); banShown = false; toggleMenu('main-menu'); };
+}
+
+// Pick up new warnings / bans / star changes while the game is open.
+setInterval(() => {
+  if (document.hidden || !getAuthToken() || !API_BASE_URL) return;
+  apiRequest('/api/auth/me', { auth: true })
+    .then(d => { if (d && d.user) saveAuthSession(getAuthToken(), d.user); })
+    .catch(e => { if (e && e.status === 401) clearAuthSession(); });
+}, 30000);
