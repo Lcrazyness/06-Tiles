@@ -368,12 +368,19 @@ async function adminPlayerMenu(id) {
     fields: [{ id: 'action', label: 'What do you want to do?', type: 'select', value: 'warn', options: [
       { value: 'warn', label: '⚠ Send a warning' }, { value: 'ban', label: '🚫 Ban for a while' },
       ...(p.banned ? [{ value: 'unban', label: '✔ Lift the ban' }] : []),
+      ...(p.owner ? [] : p.isAdmin ? [{ value: 'demote', label: '🛡 Remove admin (owners only)' }] : [{ value: 'promote', label: '🛡 Make admin' }]),
       { value: 'reset', label: '🗑 Remove all their stats' }] }], okText: 'Next'
   });
   if (!r) return;
   try {
     if (r.action === 'warn') await adminWarn(p);
     else if (r.action === 'ban') await adminBan(p);
+    else if (r.action === 'promote' || r.action === 'demote') {
+      const make = r.action === 'promote';
+      if (!(await uiConfirm(make ? 'Make ' + p.username + ' an admin? They will be able to rate and delete levels, ban players and give admin to others.' : 'Remove ' + p.username + '\'s admin access?', make ? 'Make admin' : 'Remove admin', !make))) return;
+      await apiRequest('/api/admin/players/' + id + '/admin', { method: 'POST', auth: true, body: { admin: make } });
+      toast(p.username + (make ? ' is now an admin.' : ' is no longer an admin.'), 'good'); loadAdminPanel('players');
+    }
     else if (r.action === 'unban') { await apiRequest('/api/admin/players/' + id + '/unban', { method: 'POST', auth: true, body: {} }); toast('Ban lifted.', 'good'); loadAdminPanel('players'); }
     else if (r.action === 'reset') {
       if (!(await uiConfirm('Remove ALL of ' + p.username + '\'s stats (games, scores, notes, battles, stars, difficulty beaten, extreme points)? This can\'t be undone.', 'Remove stats', true))) return;
@@ -395,13 +402,23 @@ async function adminWarn(p) {
 }
 async function adminBan(p) {
   const r = await openFormDialog({
-    title: 'Ban ' + p.username, fields: [
-      { id: 'dur', label: 'For how long?', type: 'select', value: '1440', options: [
-        { value: '60', label: '1 hour' }, { value: '1440', label: '1 day' }, { value: '4320', label: '3 days' }, { value: '10080', label: '1 week' },
-        { value: '43200', label: '30 days' }, { value: 'perm', label: 'Permanent' }] },
+    title: 'Ban ' + p.username, message: 'Pick any length you like.', fields: [
+      { id: 'amount', label: 'Length', type: 'number', value: '1', maxlength: 6 },
+      { id: 'unit', label: 'Unit', type: 'select', value: 'days', options: [
+        { value: 'minutes', label: 'Minutes' }, { value: 'hours', label: 'Hours' }, { value: 'days', label: 'Days' },
+        { value: 'weeks', label: 'Weeks' }, { value: 'months', label: 'Months (30 days)' }, { value: 'perm', label: 'Permanent (ignores length)' }] },
       { id: 'reason', label: 'Reason (shown to them)', type: 'text', value: '', maxlength: 200 }], okText: 'Ban', danger: true
   });
   if (!r) return;
-  await apiRequest('/api/admin/players/' + p.id + '/ban', { method: 'POST', auth: true, body: r.dur === 'perm' ? { permanent: true, reason: r.reason } : { minutes: Number(r.dur), reason: r.reason } });
+  const per = { minutes: 1, hours: 60, days: 1440, weeks: 10080, months: 43200 };
+  let body;
+  if (r.unit === 'perm') body = { permanent: true, reason: r.reason };
+  else {
+    const minutes = Math.round(Number(r.amount) * per[r.unit]);
+    if (!(minutes >= 1)) { toast('Enter a ban length of at least 1 minute.', 'bad'); return; }
+    if (minutes > 5256000) { toast('That is over 10 years - use Permanent instead.', 'bad'); return; }
+    body = { minutes, reason: r.reason };
+  }
+  await apiRequest('/api/admin/players/' + p.id + '/ban', { method: 'POST', auth: true, body });
   toast(p.username + ' banned.', 'good'); loadAdminPanel('players');
 }
