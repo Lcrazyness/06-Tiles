@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#2a1070">
 <title>06 Tiles</title>
-<link rel="stylesheet" href="style.css?v=20261004-1">
+<link rel="stylesheet" href="style.css?v=20261005-3">
 </head>
 <body>
 
@@ -26,6 +26,7 @@
 <button id="pause-btn" class="hidden" onclick="pauseGame()" aria-label="Pause">❚❚</button>
 
 <div id="battle-race-hud" class="hidden">
+  <div id="race-score">ROUND 1 · 0 – 0</div>
   <div class="race-player-row"><span class="race-name" id="race-name-me">You</span><div class="race-bar-track"><div class="race-bar-fill me" id="race-bar-me" style="width:0%"></div></div></div>
   <div class="race-player-row"><span class="race-name" id="race-name-opp">Opponent</span><div class="race-bar-track"><div class="race-bar-fill opp" id="race-bar-opp" style="width:0%"></div></div></div>
 </div>
@@ -51,7 +52,7 @@
     <div class="home-col">
       <div class="logo"><span class="logo-06">06</span><span class="logo-tiles">TILES</span></div>
       <div class="logo-sub">TAP THE BLACK TILES</div>
-      <button class="btn btn-play huge" onclick="toggleMenu('levels-menu')">▶ PLAY</button>
+      <button class="btn btn-play huge" onclick="openPlay()">▶ PLAY</button>
       <div class="home-grid">
         <button class="home-card" onclick="openBrowseLevels('levels')"><span>🌐</span>Browse</button>
         <button class="home-card" onclick="openMyLevels()"><span>📁</span>My Levels</button>
@@ -98,23 +99,7 @@
 </div>
 
 <!-- ============ BUILT-IN LEVELS ============ -->
-<div id="levels-menu" class="overlay hidden">
-  <div class="screen-header"><button class="back-btn" onclick="toggleMenu('main-menu')">‹</button><h2>PLAY</h2><div class="header-right"></div></div>
-  <div class="screen-body"><div class="screen-col"><div class="song-list">
-    <div class="song-row"><div class="song-art" style="background:linear-gradient(135deg,#7b2ff7,#2a1070)">🎹</div>
-      <div class="song-info"><div class="song-title">The Scale</div><div class="song-sub">System</div>
-        <div class="speed-control"><span>Speed</span><input type="range" id="speed-scale" min="10" max="60" value="32"><span id="val-scale">32</span></div></div>
-      <button class="play-btn" onclick="startGame('scale')">PLAY</button></div>
-    <div class="song-row"><div class="song-art" style="background:linear-gradient(135deg,#ff2e88,#3a1c8f)">🥁</div>
-      <div class="song-info"><div class="song-title">Bam Bam</div><div class="song-sub">System</div>
-        <div class="speed-control"><span>Speed</span><input type="range" id="speed-bambam" min="10" max="60" value="34"><span id="val-bambam">34</span></div></div>
-      <button class="play-btn" onclick="startGame('bambam')">PLAY</button></div>
-    <div class="song-row"><div class="song-art" style="background:linear-gradient(135deg,#ff3b3b,#5a0b0b)">📂</div>
-      <div class="song-info"><div class="song-title">Level Loader</div><div class="song-sub">Play any level .json</div></div>
-      <input type="file" id="level-upload" accept=".json" style="display:none" onchange="loadCustomLevelFile(event)">
-      <button class="play-btn" onclick="document.getElementById('level-upload').click()">LOAD</button></div>
-  </div></div></div>
-</div>
+<input type="file" id="level-upload" accept=".json" style="display:none" onchange="loadCustomLevelFile(event)">
 
 <!-- ============ BATTLE ============ -->
 <div id="battle-menu" class="overlay hidden">
@@ -307,16 +292,17 @@
 <div id="dialog" class="hidden"><div class="dialog-box"><h3 id="dialog-title"></h3><p id="dialog-msg"></p><input type="text" id="dialog-input" class="hidden" maxlength="80">
   <div class="row-btns"><button class="btn btn-ghost" id="dialog-cancel">Cancel</button><button class="btn btn-play" id="dialog-ok">OK</button></div></div></div>
 <div id="toast-host"></div>
+<div id="warning-screen" class="hidden"></div>
 
-<script src="js/config.js?v=20261004-1"></script>
-<script src="js/state.js?v=20261004-1"></script>
-<script src="js/ui.js?v=20261004-1"></script>
-<script src="js/storage.js?v=20261004-1"></script>
-<script src="js/auth.js?v=20261004-1"></script>
-<script src="js/game.js?v=20261004-1"></script>
-<script src="js/editor.js?v=20261004-1"></script>
-<script src="js/browse.js?v=20261004-1"></script>
-<script src="js/battle.js?v=20261004-1"></script>
-<script src="js/main.js?v=20261004-1"></script>
+<script src="js/config.js?v=20261005-3"></script>
+<script src="js/state.js?v=20261005-3"></script>
+<script src="js/ui.js?v=20261005-3"></script>
+<script src="js/storage.js?v=20261005-3"></script>
+<script src="js/auth.js?v=20261005-3"></script>
+<script src="js/game.js?v=20261005-3"></script>
+<script src="js/editor.js?v=20261005-3"></script>
+<script src="js/browse.js?v=20261005-3"></script>
+<script src="js/battle.js?v=20261005-3"></script>
+<script src="js/main.js?v=20261005-3"></script>
 </body>
 </html>
