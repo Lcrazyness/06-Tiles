@@ -51,7 +51,12 @@ async function connectBattle() {
   const s = battleSocket;
 
   s.on('connect', () => setBattleConn('online', 'Online'));
-  s.on('connect_error', () => setBattleConn('error', 'Server unreachable - tap to retry'));
+  s.on('connect_error', err => {
+    if (err && err.message === 'banned') { setBattleConn('error', 'Account banned'); toast('Your account is banned.', 'bad'); return; }
+    setBattleConn('error', 'Server unreachable - tap to retry');
+  });
+  s.on('banned', d => { if (typeof handleBanned === 'function') handleBanned(d); });
+  s.on('warning', d => { if (typeof showWarning === 'function') showWarning(d.message); });
   s.on('disconnect', () => {
     setBattleConn('offline', 'Disconnected');
     onlinePlayers = []; renderOnlinePlayers();
@@ -71,21 +76,28 @@ async function connectBattle() {
     incomingChallengeId = d.challengeId;
     document.getElementById('battle-incoming-avatar').textContent = d.from.name.slice(0, 1).toUpperCase();
     document.getElementById('battle-incoming-name').textContent = d.from.name;
-    document.getElementById('battle-incoming-level').textContent = 'wants to battle on "' + d.level.name + '" (' + d.level.tileCount + ' tiles, ' + d.level.difficulty + ')';
+    document.getElementById('battle-incoming-level').textContent = 'wants to race you on "' + d.level.name + '" (★ ' + (d.level.ratedStars || 0) + ' · ' + d.level.difficulty + ') - first to ' + (d.target || 3) + ' rounds wins';
     toggleMenu('battle-incoming-menu');
   });
 
   s.on('match_found', d => {
     pendingChallengeId = null; incomingChallengeId = null;
-    activeMatch = { matchId: d.matchId, opponent: d.opponent.name, level: d.level };
+    activeMatch = { matchId: d.matchId, opponent: d.opponent.name, level: d.level, target: d.target || 3 };
     myBattleResult = null;
-    setWaiting('Match found vs ' + d.opponent.name, 'Loading the level…');
+    battleScore = { you: 0, opp: 0, target: activeMatch.target, round: 1 };
+    setWaiting('Match found vs ' + d.opponent.name, 'Rated level: ' + d.level.name + ' · first to ' + activeMatch.target + ' round wins');
     s.emit('match_ready', { matchId: d.matchId });
   });
-  s.on('match_go', d => { if (activeMatch && d.matchId === activeMatch.matchId) beginMatch(d.countdown || 3); });
+  s.on('match_go', d => {
+    if (!activeMatch || d.matchId !== activeMatch.matchId) return;
+    battleScore = { you: d.you || 0, opp: d.opp || 0, target: d.target || activeMatch.target || 3, round: d.round || 1 };
+    myBattleResult = null;
+    beginMatch(d.countdown || 3);
+  });
+  s.on('round_end', d => { if (activeMatch && d.matchId === activeMatch.matchId) showRoundResult(d); });
   s.on('match_cancelled', d => { toast(d.message || 'Match cancelled.', 'bad'); abortMatchLocally(); });
   s.on('opp_progress', d => updateOpponentBar(d.pct));
-  s.on('opp_finish', d => { updateOpponentBar(d.finished ? 100 : undefined); });
+  s.on('opp_finish', d => { if (d.finished) updateOpponentBar(100); else toast(activeMatch ? activeMatch.opponent + ' got knocked out!' : 'Opponent knocked out!'); });
   s.on('opp_left', d => toast(d.name + ' left the match.'));
   s.on('match_result', d => showBattleResult(d));
   s.on('rematch_requested', d => toast(d.name + ' wants a rematch!'));
@@ -132,29 +144,25 @@ function renderOnlinePlayers() {
 function startQuickMatch() {
   if (battleConnState !== 'online') { toast('Not connected to the battle server yet.'); connectBattle(); return; }
   emitBattle('queue_join');
-  setWaiting('Finding an opponent…', 'You\'ll be paired with the next player who hits Quick Match, on a random published level.');
+  setWaiting('Finding an opponent…', 'You\'ll be paired with the next player who hits Quick Match, on a random RATED level. First to 3 round wins.');
 }
 
 async function openBattleLevelPicker() {
   const list = document.getElementById('battle-level-picker-list');
-  list.innerHTML = '<div class="empty">Loading…</div>';
+  list.innerHTML = '<div class="empty">Loading rated levels…</div>';
   toggleMenu('battle-level-picker');
-  const local = getCustomLevels();
-  let community = [];
-  try { community = await getCommunityLevels('', 'trending'); } catch (e) {}
-  list.innerHTML = '';
-  const all = [...local.map(l => [l, 'local']), ...community.map(l => [l, 'community'])];
-  if (!all.length) { list.innerHTML = '<div class="empty">You need a saved or published level to challenge someone. Make one in the editor first.</div>'; return; }
-  all.forEach(([level, source]) => {
-    const card = renderLevelCard(level, source);
-    card.onclick = null;
+  let rated = [];
+  try { rated = await getCommunityLevels('', 'featured'); }
+  catch (e) { list.innerHTML = errorBox(e.message, 'openBattleLevelPicker()'); return; }
+  list.innerHTML = '<div class="note center">Pick a rated level. You race it - the last one standing wins the round, first to 3 rounds wins the battle.</div>';
+  if (!rated.length) { list.innerHTML += '<div class="empty">No rated levels yet. An admin needs to rate some first.</div>'; return; }
+  rated.forEach(level => {
+    const card = renderLevelCard(level, 'community');
     const btn = card.querySelector('.play-btn'); btn.textContent = 'PICK';
-    btn.onclick = card.onclick = async (e) => {
+    card.onclick = null;
+    btn.onclick = card.onclick = e => {
       if (e) e.stopPropagation();
-      try {
-        const full = level.data ? level : await getCommunityLevel(level.id);
-        emitBattle('challenge_send', { toId: battlePickTarget.id, level: full });
-      } catch (err) { toast(err.message, 'bad'); }
+      emitBattle('challenge_send', { toId: battlePickTarget.id, levelId: level.id });
     };
     list.appendChild(card);
   });
@@ -177,6 +185,7 @@ function beginMatch(countdown) {
   document.getElementById('race-name-opp').textContent = activeMatch.opponent;
   document.getElementById('race-bar-me').style.width = '0%';
   document.getElementById('race-bar-opp').style.width = '0%';
+  updateRaceScore();
   toggleMenu(null);
   document.getElementById('countdown').classList.remove('hidden');
   runCountdown(countdown, () => {
@@ -186,6 +195,21 @@ function beginMatch(countdown) {
     startGame(level.name, true, -1, level.data, level.effects || [], false, level);
     document.getElementById('battle-race-hud').classList.remove('hidden');
   });
+}
+
+function updateRaceScore() {
+  const el = document.getElementById('race-score');
+  if (el) el.textContent = 'ROUND ' + battleScore.round + '   ·   ' + battleScore.you + ' – ' + battleScore.opp + '   ·   FIRST TO ' + battleScore.target;
+}
+
+// A round ended (somebody was knocked out, or both finished). Stop playing and show the score until the next round.
+function showRoundResult(d) {
+  stopLoop(); gameActive = false; isDead = true; isBattleMode = false; releaseAllKeys();
+  bgAudio.pause(); showGameHud(false);
+  document.getElementById('countdown').classList.add('hidden');
+  battleScore = { you: d.you, opp: d.opp, target: d.target, round: d.round + 1 };
+  const title = d.outcome === 'win' ? 'ROUND ' + d.round + ' WON!' : d.outcome === 'lose' ? 'ROUND ' + d.round + ' LOST' : 'ROUND ' + d.round + ' - DRAW (replay)';
+  setWaiting(title + '  ' + d.you + ' – ' + d.opp, 'First to ' + d.target + '. Next round starts in a moment…');
 }
 
 function updateOpponentBar(pct) {
@@ -207,25 +231,26 @@ function handleBattleFinish(finished, reason) {
   myBattleResult = { finished, score: Math.floor(score), reason };
   showGameHud(false);
   emitBattle('match_finish', { matchId: activeMatch.matchId, finished, score: myBattleResult.score, reason });
-  setWaiting(finished ? 'Finished! Waiting for your opponent…' : 'Knocked out (' + (reason || 'FAILED') + ') - waiting on your opponent…', 'The result appears as soon as they finish.');
+  setWaiting(finished ? 'Finished! Waiting for your opponent…' : 'Knocked out (' + (reason || 'FAILED') + ')', finished ? 'If they get knocked out you win the round; if they finish too, the higher score wins.' : 'Your opponent wins this round.');
 }
 
 function showBattleResult(d) {
-  isBattleMode = false; gameActive = false;
+  isBattleMode = false; gameActive = false; stopLoop(); releaseAllKeys(); bgAudio.pause();
   showGameHud(false);
+  document.getElementById('countdown').classList.add('hidden');
   const banner = document.getElementById('battle-result-banner');
   banner.className = 'battle-result-banner ' + d.outcome;
   banner.textContent = d.outcome === 'win' ? 'VICTORY' : d.outcome === 'lose' ? 'DEFEAT' : 'DRAW';
-  document.getElementById('battle-result-sub').textContent = 'vs ' + d.opp.name + (d.forfeit ? ' (they left)' : '');
-  document.getElementById('battle-result-my-score').textContent = d.you.score;
-  document.getElementById('battle-result-opp-score').textContent = d.opp.score;
+  document.getElementById('battle-result-sub').textContent = 'First to ' + (d.target || 3) + ' · vs ' + d.opp.name + (d.forfeit ? ' (they left)' : '');
+  document.getElementById('battle-result-my-score').textContent = d.you.rounds;
+  document.getElementById('battle-result-opp-score').textContent = d.opp.rounds;
   document.getElementById('battle-result-opp-label').textContent = d.opp.name;
   toggleMenu('battle-result-menu');
 }
 
 function rematchBattle() {
   if (!activeMatch) { toggleMenu('battle-menu'); return; }
-  myBattleResult = null;
+  myBattleResult = null; battleScore = { you: 0, opp: 0, target: 3, round: 1 };
   emitBattle('rematch_request', { matchId: activeMatch.matchId });
   setWaiting('Waiting for a rematch…', 'Your opponent needs to accept too.');
 }
