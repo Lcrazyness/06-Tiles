@@ -201,3 +201,23 @@ input:focus{border-color:var(--blue)}
 
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:4px}
 @media(max-width:420px){.song-art{width:74px;height:74px;flex-basis:74px}.song-row{min-height:74px;gap:10px}.play-btn{min-width:78px;height:42px;font-size:14px}}
+
+
+/* ===== v3 additions ===== */
+#race-score{text-align:center;font-size:11px;font-weight:800;letter-spacing:.08em;background:rgba(0,0,0,.45);border-radius:20px;padding:4px 10px;margin-bottom:2px}
+#warning-screen{position:fixed;inset:0;z-index:200;background:rgba(10,4,30,.94);display:flex;align-items:center;justify-content:center;padding:24px}
+.warning-card{width:min(420px,100%);background:linear-gradient(180deg,#5a1a1a,#2d0c1f);border:2px solid var(--gold);border-radius:18px;padding:26px 22px;text-align:center;display:flex;flex-direction:column;gap:14px;box-shadow:0 0 60px rgba(255,201,60,.25)}
+.warning-card.ban{border-color:var(--red);box-shadow:0 0 60px rgba(255,68,85,.3)}
+.warning-icon{font-size:54px;line-height:1}.warning-card h2{margin:0;font-size:26px;font-weight:900;letter-spacing:.06em}
+.warning-card p{margin:0;font-size:16px;line-height:1.5;white-space:pre-wrap;color:#fff;max-height:50vh;overflow:auto}
+.form-label{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-mid);margin-bottom:-6px}
+.form-input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.35);color:#fff;font-size:14px;font-family:inherit;resize:vertical}
+#form-dialog{position:fixed;inset:0;z-index:96;background:rgba(5,2,20,.7);display:flex;align-items:center;justify-content:center;padding:20px}
+.tabs.wrap{flex-wrap:wrap}.tabs.small .tab{padding:8px 12px;font-size:12px;flex:0 0 auto}
+.feat.list{color:var(--cyan)}.feat.bad{color:var(--red)}
+.stat-card.gold b{color:var(--gold)}
+.diff-chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0}
+.diff-chip{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 2px;border-radius:10px;background:rgba(255,255,255,.05);opacity:.45}
+.diff-chip.on{opacity:1;background:rgba(255,255,255,.12)}.diff-chip b{font-size:16px}
+.admin-row.unread{box-shadow:inset 3px 0 0 var(--gold)}.admin-row.read{opacity:.6}
+#admin-btn.alert{border-color:var(--gold);color:var(--gold)}
