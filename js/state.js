@@ -14,11 +14,14 @@ const bgAudio = document.getElementById("bg-audio");
 // (admin-panel used to be missing from this list, which is why it could get
 // stuck on screen after you left it.)
 const overlays = [
-  'main-menu', 'levels-menu', 'settings-menu', 'death-screen', 'pause-menu', 'my-levels-menu',
+  'main-menu', 'settings-menu', 'death-screen', 'pause-menu', 'my-levels-menu',
   'creator-menu', 'effects-menu', 'browse-levels-menu', 'editor-level-settings',
   'profile-modal', 'stats-modal', 'admin-panel', 'level-detail-menu', 'battle-menu', 'battle-level-picker',
   'battle-waiting-menu', 'battle-incoming-menu', 'battle-result-menu'
 ];
+
+// Battle match state (first to 3 round wins)
+let battleScore = { you: 0, opp: 0, target: 3, round: 1 };
 
 // --- gameplay constants ---
 // The game is laid out on a fixed LOGICAL 360x640 board. The <canvas> backing
@@ -34,10 +37,7 @@ const GAP = 35;
 const EDITOR_BASE_SPEED = 18;
 let renderScale = 1;
 
-const patterns = {
-  scale: [3, 2, 1, 0],
-  bambam: [[0, 2], 1, [0, 2], 1, [0, 2], 1, 0, [1, 3], 2, [1, 3], 2, [1, 3], 2, 3]
-};
+const patterns = {};   // (the built-in Scale / Bam Bam endless modes were removed)
 
 // --- core game state ---
 let score = 0, speed = EDITOR_BASE_SPEED, lastTime = 0, nextFrameAt = 0, rafId = null;
