@@ -85,7 +85,7 @@ function toast(message, kind) {
 }
 
 let dialogResolve = null;
-function dialogOpen() { const d = document.getElementById('dialog'); return !!d && !d.classList.contains('hidden'); }
+function dialogOpen() { const d = document.getElementById('dialog'); return (!!d && !d.classList.contains('hidden')) || !!document.getElementById('form-dialog'); }
 
 function openDialog({ title = '', message = '', input = false, defaultValue = '', okText = 'OK', cancelText = null, danger = false }) {
   return new Promise(resolve => {
@@ -123,6 +123,36 @@ function openDialog({ title = '', message = '', input = false, defaultValue = ''
 const uiAlert = (message, title = '') => openDialog({ title, message, okText: 'OK' });
 const uiConfirm = (message, okText = 'Yes', danger = false) => openDialog({ message, okText, cancelText: 'Cancel', danger });
 const uiPrompt = (message, defaultValue = '', okText = 'Save') => openDialog({ message, input: true, defaultValue, okText, cancelText: 'Cancel' });
+
+// A dialog with real form fields (select / textarea / text). Resolves to {fieldId: value} or null.
+function openFormDialog({ title = '', message = '', fields = [], okText = 'OK', danger = false }) {
+  return new Promise(resolve => {
+    const host = document.createElement('div');
+    host.id = 'form-dialog';
+    const fieldHtml = fields.map(f => {
+      const label = '<label class="form-label" for="ff-' + f.id + '">' + escapeHtml(f.label || '') + '</label>';
+      if (f.type === 'select') return label + '<select id="ff-' + f.id + '" class="form-input">' + f.options.map(o => '<option value="' + escapeHtml(String(o.value)) + '"' + (String(o.value) === String(f.value) ? ' selected' : '') + '>' + escapeHtml(o.label) + '</option>').join('') + '</select>';
+      if (f.type === 'textarea') return label + '<textarea id="ff-' + f.id + '" class="form-input" rows="' + (f.rows || 4) + '" maxlength="' + (f.maxlength || 600) + '">' + escapeHtml(f.value || '') + '</textarea>';
+      return label + '<input id="ff-' + f.id + '" class="form-input" type="' + (f.type || 'text') + '" maxlength="' + (f.maxlength || 120) + '" value="' + escapeHtml(f.value || '') + '">';
+    }).join('');
+    host.innerHTML = '<div class="dialog-box"><h3>' + escapeHtml(title) + '</h3>' + (message ? '<p>' + escapeHtml(message) + '</p>' : '') + fieldHtml +
+      '<div class="row-btns"><button class="btn btn-ghost" id="ff-cancel">Cancel</button><button class="btn ' + (danger ? 'btn-danger' : 'btn-play') + '" id="ff-ok">' + escapeHtml(okText) + '</button></div></div>';
+    document.body.appendChild(host);
+    const close = value => { host.remove(); resolve(value); };
+    host.querySelector('#ff-cancel').onclick = () => close(null);
+    host.querySelector('#ff-ok').onclick = () => { const out = {}; fields.forEach(f => { out[f.id] = host.querySelector('#ff-' + f.id).value; }); close(out); };
+    host.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); close(null); } });
+    setTimeout(() => { const first = host.querySelector('.form-input'); if (first) first.focus(); }, 30);
+  });
+}
+
+function timeAgo(iso) {
+  const s = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
