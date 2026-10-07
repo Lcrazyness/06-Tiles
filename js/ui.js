@@ -218,3 +218,8 @@ function screenHtml(title, backTarget, bodyHtml, rightHtml = '') {
   return '<div class="screen-header"><button class="back-btn" onclick="' + (backTarget || "toggleMenu('main-menu')") + '">‹</button><h2>' + title + '</h2><div class="header-right">' + rightHtml + '</div></div>' +
     '<div class="screen-body"><div class="screen-col">' + bodyHtml + '</div></div>';
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const g = document.getElementById('setting-globe');
+  if (g) { g.checked = globeOn; g.addEventListener('change', () => { globeOn = g.checked; localStorage.setItem('et_globe', String(globeOn)); if (!globeOn) globeGhosts.clear(); if (typeof globeSync === 'function') globeSync(); }); }
+});
