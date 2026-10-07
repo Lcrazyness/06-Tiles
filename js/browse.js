@@ -23,7 +23,7 @@ async function renderMyLevels() {
   menu.innerHTML = screenHtml('MY LEVELS', null, `
     <div class="tabs"><button class="tab ${currentMyTab === 'device' ? 'active' : ''}" onclick="currentMyTab='device';renderMyLevels()">On this device</button>
     <button class="tab ${currentMyTab === 'online' ? 'active' : ''}" onclick="currentMyTab='online';renderMyLevels()">Published</button></div>
-    <div id="my-levels-list" class="song-list"></div>`, '<button class="btn small" onclick="document.getElementById(\'level-upload\').click()">📂</button> <button class="btn small" onclick="startEditor()">＋ New</button>');
+    <div id="my-levels-list" class="song-list"></div>`, '<button class="btn small" onclick="document.getElementById(\'level-upload\').click()">📂</button> <button class="btn small" onclick="openShared()">👥</button> <button class="btn small" onclick="startEditor()">＋ New</button>');
   const list = document.getElementById('my-levels-list');
   if (currentMyTab === 'device') {
     const levels = getCustomLevels();
@@ -49,7 +49,7 @@ function openBrowseLevels(tab = 'levels') {
 }
 
 function renderBrowseContent() {
-  if (currentBrowseTab === 'levels') renderBrowseLevels();
+  if (currentBrowseTab === 'levels') { renderDailyBanner(); renderBrowseLevels(); }
   else if (currentBrowseTab === 'players') renderPlayers();
 }
 
@@ -59,6 +59,7 @@ function renderBrowseSection() {
   menu.innerHTML = screenHtml('BROWSE', null, `
     <div class="tabs">${tabBtn('levels', 'Levels')}${tabBtn('list', 'List')}${tabBtn('leaderboards', 'Ranks')}${tabBtn('players', 'Players')}</div>
     ${currentBrowseTab === 'leaderboards' || currentBrowseTab === 'list' ? '' : `<div class="searchbar"><span>🔎</span><input type="text" id="browse-search-input" placeholder="${currentBrowseTab === 'players' ? 'Search players…' : 'Search levels or authors…'}" onkeydown="if(event.key==='Enter')renderBrowseContent()"><button class="btn small" onclick="renderBrowseContent()">Search</button></div>`}
+    <div id="daily-banner"></div>
     <div id="browse-sub-tabs"></div>
     <div id="browse-content" class="song-list"></div>`);
   if (currentBrowseTab === 'levels') renderBrowseLevels();
@@ -77,7 +78,8 @@ async function renderBrowseLevels() {
   const reqId = ++browseRequestId;
   const search = document.getElementById('browse-search-input')?.value || '';
   try {
-    const levels = await getCommunityLevels(search, currentLevelSort);
+    if (!sub.querySelector('.level-filters')) sub.insertAdjacentHTML('beforeend', levelFilterHtml());
+    const levels = await getFilteredLevels(search, currentLevelSort);
     if (reqId !== browseRequestId) return;
     container.innerHTML = '';
     if (!levels.length) { container.innerHTML = '<div class="empty">No levels found.</div>'; return; }
@@ -101,7 +103,7 @@ function playerRow(player, rankText, subText, valueText) {
   const username = String(player.username || 'Unknown');
   const row = document.createElement('div');
   row.className = 'song-row player-row';
-  row.innerHTML = `<div class="song-art" style="${player.profileIcon ? '' : 'background:' + artGradient(username)}">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(username.slice(0, 1).toUpperCase())}</div>
+  row.innerHTML = `<div class="song-art ${frameClass(player)}" style="${player.profileIcon ? '' : 'background:' + artGradient(username)}">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(username.slice(0, 1).toUpperCase())}</div>
     <div class="song-info"><div class="song-title">${rankText}${escapeHtml(username)}</div><div class="song-sub">${subText}</div></div><div class="player-value">${valueText}</div>`;
   row.onclick = () => openPlayerProfile(player);
   return row;
@@ -120,13 +122,25 @@ async function renderPlayers() {
   } catch (e) { container.innerHTML = errorBox(e.message, 'renderPlayers()'); }
 }
 
-function openPlayerProfile(player) {
+async function openPlayerProfile(player) {
   const username = String(player.username || 'Unknown');
-  document.getElementById('stats-modal').innerHTML = screenHtml('PLAYER', "toggleMenu('browse-levels-menu')", `<div class="panel profile-hero"><div class="avatar big">${player.profileIcon ? '<img src="' + escapeHtml(player.profileIcon) + '" alt="">' : escapeHtml(username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(username)}</div><div class="hero-sub">Online player</div></div></div>` + statsGridHtml(player.statistics || {}, player));
-  toggleMenu('stats-modal');
+  const draw = (p, levels) => {
+    const own = getAuthUser();
+    document.getElementById('stats-modal').innerHTML = screenHtml('PLAYER', "toggleMenu('browse-levels-menu')",
+      `<div class="panel profile-hero"><div class="avatar big ${frameClass(p)}">${p.profileIcon ? '<img src="' + escapeHtml(p.profileIcon) + '" alt="">' : escapeHtml(username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(username)}</div><div class="hero-sub">${escapeHtml(p.title || 'Online player')} · ${p.creatorPoints || 0} creator points</div></div></div>` +
+      (own && own.username.toLowerCase() !== username.toLowerCase() ? '<div class="row-btns"><button class="btn small" id="pf-friend">＋ Friend</button><button class="btn small btn-ghost" id="pf-report">⚑ Report</button></div>' : '') +
+      statsGridHtml(p.statistics || {}, p) + (levels ? '<div class="section-title">LEVELS BY ' + escapeHtml(username).toUpperCase() + '</div><div class="song-list" id="creator-levels"></div>' : ''));
+    toggleMenu('stats-modal');
+    const f = document.getElementById('pf-friend'); if (f) f.onclick = () => sendFriendRequest(username);
+    const r = document.getElementById('pf-report'); if (r) r.onclick = () => reportDialog('player', { username });
+    const host = document.getElementById('creator-levels');
+    if (host) { if (!levels.length) host.innerHTML = '<div class="empty">No published levels.</div>'; levels.forEach(l => host.appendChild(renderLevelCard(l, 'community'))); }
+  };
+  draw(player, null);
+  try { const d = await apiRequest('/api/creators/' + encodeURIComponent(username)); draw(d.user, d.levels); } catch (e) {}
 }
 
-const LB_TABS = [['points', 'Extreme Pts'], ['stars', 'Stars'], ['difficulty', 'Difficulty Beaten'], ['creator', 'Creator'], ['bestScore', 'Best Score'], ['totalScore', 'Total Score'], ['notesHit', 'Notes'], ['battleWins', 'Battle Wins']];
+const LB_TABS = [['elo', 'Battle Rating'], ['points', 'Extreme Pts'], ['stars', 'Stars'], ['difficulty', 'Difficulty Beaten'], ['creator', 'Creator'], ['bestScore', 'Best Score'], ['totalScore', 'Total Score'], ['notesHit', 'Notes'], ['battleWins', 'Battle Wins']];
 
 async function renderLeaderboards() {
   document.getElementById('browse-sub-tabs').innerHTML = '<div class="tabs small wrap">' +
@@ -148,7 +162,8 @@ async function loadLeaderboard(sort) {
     players.forEach((p, i) => {
       const st = p.statistics || {};
       let value, sub;
-      if (sort === 'points') { value = n(p.extremePoints) + ' EP'; sub = (p.listBeaten || 0) + ' list levels beaten'; }
+      if (sort === 'elo') { value = n(p.elo); sub = n(st.battleWins) + ' W / ' + n(st.battleLosses) + ' L'; }
+      else if (sort === 'points') { value = n(p.extremePoints) + ' EP'; sub = (p.listBeaten || 0) + ' list levels beaten'; }
       else if (sort === 'stars') { value = '★ ' + n(p.stars); sub = 'Hardest: ' + (p.hardestDifficulty || '—'); }
       else if (sort === 'difficulty') { value = p.hardestDifficulty || '—'; sub = '★ ' + n(p.stars) + ' stars'; }
       else if (sort === 'creator') { value = n(p.creatorPoints) + ' CP'; sub = 'Rated levels made'; }
@@ -162,7 +177,7 @@ async function loadLeaderboard(sort) {
 }
 
 // ---------------- Level cards (Magic Tiles song rows) ----------------
-function renderLevelCard(level, source) {
+function renderLevelCardBase(level, source) {
   const diff = estimateDifficulty(level);
   const avg = Number(level.ratingAverage || getAvgRating(level) || 0);
   const row = document.createElement('div');
@@ -207,7 +222,10 @@ function openLevelDetail(level, source, fromAdmin = false) {
       <div><div class="hero-name">${escapeHtml(level.name)}</div><div class="hero-sub">by ${escapeHtml(level.author || 'You')}</div><div class="song-meta"><span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span>${level.featured ? '<span class="feat">★ ' + (level.ratedStars || 0) + ' stars</span>' : ''}${level.listPosition ? '<span class="feat list">#' + level.listPosition + ' · ' + level.listPoints + ' EP</span>' : ''}</div></div></div>
     <div class="stats-grid three"><div class="stat-card"><span>TILES</span><b>${tiles}</b></div><div class="stat-card"><span>RATING</span><b>${avg ? avg.toFixed(1) : '—'}</b></div><div class="stat-card"><span>PLAYS</span><b>${level.plays || 0}</b></div></div>
     ${source === 'community' ? '<div class="rate-row" id="rate-row">' + [1, 2, 3, 4, 5].map(i => '<span class="rate-star" data-v="' + i + '">★</span>').join('') + '</div><div class="note center">Tap a star to rate</div>' : ''}
+    <div class="note center" id="detail-best"></div>
     <button class="btn btn-play" id="detail-play">▶ PLAY</button>
+    ${online ? '<button class="btn btn-ghost" id="detail-practice">🎯 Practice (checkpoints)</button><button class="btn btn-ghost" id="detail-board">🏆 Level leaderboard</button><button class="btn btn-ghost" id="detail-comments">💬 Comments</button><button class="btn btn-ghost" id="detail-report">⚑ Report</button>' : ''}
+    ${source === 'mine-online' ? '<button class="btn btn-ghost" id="detail-versions">⏪ Versions / roll back</button>' : ''}
     ${source === 'local' ? '<button class="btn btn-ghost" id="detail-edit">✎ Edit</button><button class="btn btn-danger" id="detail-del">Delete from device</button>' : ''}
     ${source === 'mine-online' ? '<button class="btn btn-ghost" id="detail-edit-online">✎ Edit (updates it publicly)</button><button class="btn btn-danger" id="detail-unpub">Remove from Browse</button>' : ''}
     ${isAdminUser() && source !== 'local' ? '<div class="section-title">ADMIN</div><button class="btn btn-ghost" id="detail-admin-rate">★ Rate / edit rating</button><button class="btn btn-ghost" id="detail-admin-list">🏆 Set list position</button>' : ''}`;
@@ -215,6 +233,13 @@ function openLevelDetail(level, source, fromAdmin = false) {
   toggleMenu('level-detail-menu');
   document.getElementById('detail-play').onclick = () => playLevelEntry(level, source);
   const q = id => document.getElementById(id);
+  const pr = online && level.id && myProgress[level.id];
+  if (q('detail-best') && pr) q('detail-best').textContent = 'Your best: ' + (pr.completed ? 'completed ✔' : pr.bestPct + '%') + ' · score ' + Number(pr.bestScore).toLocaleString();
+  if (q('detail-practice')) q('detail-practice').onclick = () => practiceLevel(level);
+  if (q('detail-board')) q('detail-board').onclick = () => openLevelBoard(level);
+  if (q('detail-comments')) q('detail-comments').onclick = () => openComments(level);
+  if (q('detail-report')) q('detail-report').onclick = () => reportDialog('level', level);
+  if (q('detail-versions')) q('detail-versions').onclick = () => openVersions(level);
   if (q('detail-edit')) q('detail-edit').onclick = () => { currentEditingId = level.id; startEditor(level); };
   if (q('detail-edit-online')) q('detail-edit-online').onclick = async () => {
     try {
@@ -278,9 +303,9 @@ async function adminAlertsHtml() {
   const list = data.notifications || [];
   if (!list.length) return '<div class="empty">No alerts. 5-star ratings show up here.</div>';
   return '<div class="row-btns"><button class="btn small btn-ghost" onclick="adminReadAll()">Mark all read</button></div><div class="song-list">' + list.map(n => `
-    <div class="song-row admin-row ${n.read ? 'read' : 'unread'}"><div class="song-art" style="background:${artGradient(n.levelName || 'x')}">${n.type === 'five_star' ? '⭐' : '✎'}</div>
+    <div class="song-row admin-row ${n.read ? 'read' : 'unread'}"><div class="song-art" style="background:${artGradient(n.levelName || 'x')}">${ALERT_ICONS[n.type] || '•'}</div>
       <div class="song-info"><div class="song-title">${escapeHtml(n.message)}</div><div class="song-sub">${timeAgo(n.createdAt)}${n.levelRated ? ' · already rated' : ''}</div></div>
-      <div class="admin-actions">${n.levelId ? `<button class="btn small" onclick="adminViewLevel('${n.levelId}', ${n.id})">View level</button>` : ''}<button class="btn small btn-ghost" onclick="adminReadAlert(${n.id})">Dismiss</button></div></div>`).join('') + '</div>';
+      <div class="admin-actions">${n.levelId ? `<button class="btn small" onclick="adminViewLevel('${n.levelId}', ${n.id})">View level</button>` : ''}${n.targetUsername ? `<button class="btn small" onclick="adminOpenPlayer('${escapeHtml(n.targetUsername)}')">Player</button>` : ''}<button class="btn small btn-ghost" onclick="adminReadAlert(${n.id})">Dismiss</button></div></div>`).join('') + '</div>';
 }
 async function adminReadAll() { try { await apiRequest('/api/admin/notifications/read', { method: 'POST', auth: true, body: {} }); loadAdminPanel(); } catch (e) { toast(e.message, 'bad'); } }
 async function adminReadAlert(id) { try { await apiRequest('/api/admin/notifications/read', { method: 'POST', auth: true, body: { id } }); loadAdminPanel(); } catch (e) { toast(e.message, 'bad'); } }
@@ -366,14 +391,15 @@ async function adminPlayerMenu(id) {
   const r = await openFormDialog({
     title: p.username, message: p.email + ' · joined ' + new Date(p.createdAt).toLocaleDateString() + '\n★ ' + p.stars + ' stars · ' + p.extremePoints + ' EP · hardest: ' + (p.hardestDifficulty || '—'),
     fields: [{ id: 'action', label: 'What do you want to do?', type: 'select', value: 'warn', options: [
-      { value: 'warn', label: '⚠ Send a warning' }, { value: 'ban', label: '🚫 Ban for a while' },
+      { value: 'history', label: '📜 View history' }, { value: 'warn', label: '⚠ Send a warning' }, { value: 'ban', label: '🚫 Ban for a while' },
       ...(p.banned ? [{ value: 'unban', label: '✔ Lift the ban' }] : []),
       ...(p.owner ? [] : p.isAdmin ? [{ value: 'demote', label: '🛡 Remove admin (owners only)' }] : [{ value: 'promote', label: '🛡 Make admin' }]),
       { value: 'reset', label: '🗑 Remove all their stats' }] }], okText: 'Next'
   });
   if (!r) return;
   try {
-    if (r.action === 'warn') await adminWarn(p);
+    if (r.action === 'history') await adminShowHistory(p);
+    else if (r.action === 'warn') await adminWarn(p);
     else if (r.action === 'ban') await adminBan(p);
     else if (r.action === 'promote' || r.action === 'demote') {
       const make = r.action === 'promote';
@@ -421,4 +447,184 @@ async function adminBan(p) {
   }
   await apiRequest('/api/admin/players/' + p.id + '/ban', { method: 'POST', auth: true, body });
   toast(p.username + ' banned.', 'good'); loadAdminPanel('players');
+}
+
+
+// ---------------------------------------------------------------------------
+// v4 browse features: progress, daily level, filters, per-level leaderboard, comments, reports, versions, practice
+// ---------------------------------------------------------------------------
+let myProgress = {}, browseTag = '', browseDiff = '';
+async function loadMyProgress() {
+  if (!getAuthToken() || !API_BASE_URL) { myProgress = {}; return; }
+  try { const d = await apiRequest('/api/my/progress', { auth: true }); myProgress = {}; (d.progress || []).forEach(p => { myProgress[p.levelId] = p; }); } catch (e) {}
+}
+loadMyProgress();
+
+function renderLevelCard(level, source) {
+  const card = renderLevelCardBase(level, source);
+  const info = card.querySelector('.song-info');
+  const pr = level.id && myProgress[level.id];
+  if (info) {
+    const extra = [];
+    if (level.strictMode) extra.push('<span class="feat strict">STRICT</span>');
+    (level.tags || []).forEach(t => extra.push('<span class="tag">' + escapeHtml(t) + '</span>'));
+    if (pr) extra.push('<span class="best-pct' + (pr.completed ? ' done' : '') + '">' + (pr.completed ? '✔ 100%' : 'Best ' + pr.bestPct + '%') + '</span>');
+    if (extra.length) info.insertAdjacentHTML('beforeend', '<div class="song-meta">' + extra.join('') + '</div>');
+  }
+  return card;
+}
+
+function levelFilterHtml() {
+  const tags = ['speed', 'chords', 'holds', 'memory', 'tech', 'long', 'short', 'jumps', 'streams', 'strict', 'beginner'];
+  return '<div class="level-filters"><select onchange="browseDiff=this.value;renderBrowseLevels()"><option value="">All difficulties</option>' +
+    ['Easy', 'Normal', 'Hard', 'Insane', 'Extreme'].map(d => '<option' + (browseDiff === d ? ' selected' : '') + '>' + d + '</option>').join('') + '</select>' +
+    '<select onchange="browseTag=this.value;renderBrowseLevels()"><option value="">All tags</option>' + tags.map(t => '<option' + (browseTag === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>';
+}
+async function getFilteredLevels(search, tab) {
+  const qs = '?search=' + encodeURIComponent(search || '') + '&tab=' + encodeURIComponent(tab) + (browseTag ? '&tag=' + encodeURIComponent(browseTag) : '') + (browseDiff ? '&difficulty=' + encodeURIComponent(browseDiff) : '');
+  return apiRequest('/api/levels' + qs);
+}
+
+async function renderDailyBanner() {
+  const host = document.getElementById('daily-banner'); if (!host || !API_BASE_URL) return;
+  try {
+    const d = await apiRequest('/api/daily', { auth: !!getAuthToken() });
+    if (!d.level) { host.innerHTML = ''; return; }
+    host.innerHTML = `<div class="panel daily"><div><div class="section-title">DAILY LEVEL</div><div class="hero-name">${escapeHtml(d.level.name)}</div><div class="hero-sub">${d.claimed ? '✔ Bonus claimed today' : 'Beat it today for +' + d.bonusStars + ' ★ bonus stars'}</div></div><button class="btn btn-play" id="daily-play">PLAY</button></div>`;
+    document.getElementById('daily-play').onclick = () => openLevelDetail(d.level, 'community');
+  } catch (e) { host.innerHTML = ''; }
+}
+
+async function practiceLevel(level) {
+  try {
+    const full = level.data ? level : await getCommunityLevel(level.id);
+    const last = (full.data || []).reduce((m, n) => Math.max(m, n.time), 0);
+    const v = await uiPrompt('Start from what percent of the level? (0-95). Checkpoints are set every 10%, or press C. Practice runs don\'t count for stats.', '0', 'Start');
+    if (v === null) return;
+    const pct = Math.max(0, Math.min(95, Number(v) || 0));
+    practiceArmed = true; practiceStartSec = last * pct / 100; practiceCheckpoint = practiceStartSec;
+    levelDetailReturnTo = 'browse-levels-menu';
+    startGame(full.name, true, -1, full.data, full.effects || [], true, full);
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+async function openLevelBoard(level) {
+  const screen = body => { document.getElementById('level-detail-menu').innerHTML = screenHtml('LEADERBOARD', null, body); document.getElementById('level-detail-menu').querySelector('.back-btn').onclick = () => openLevelDetail(level, 'community', levelDetailReturnTo === 'admin-panel'); toggleMenu('level-detail-menu'); };
+  screen('<div class="empty">Loading…</div>');
+  try {
+    const d = await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/leaderboard');
+    screen('<div class="hero-name">' + escapeHtml(level.name) + '</div>' + (d.entries.length ? '<div class="song-list">' + d.entries.map((e, i) => `<div class="song-row player-row"><div class="song-art ${frameClass(e)}" style="${e.profileIcon ? '' : 'background:' + artGradient(e.username)}">${e.profileIcon ? '<img src="' + escapeHtml(e.profileIcon) + '" alt="">' : escapeHtml(e.username.slice(0, 1).toUpperCase())}</div><div class="song-info"><div class="song-title"><span class="rank">#${i + 1}</span> ${escapeHtml(e.username)}</div><div class="song-sub">Score ${Number(e.score).toLocaleString()}</div></div><div class="player-value">${e.completed ? '✔ 100%' : e.pct + '%'}</div></div>`).join('') + '</div>' : '<div class="empty">Nobody has played this yet.</div>'));
+  } catch (e) { screen(errorBox(e.message, 'void 0')); }
+}
+
+async function openComments(level) {
+  const render = async () => {
+    const me = getAuthUser();
+    const el = document.getElementById('level-detail-menu');
+    let list = [];
+    try { list = (await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/comments')).comments; } catch (e) {}
+    el.innerHTML = screenHtml('COMMENTS', null, `<div class="hero-name">${escapeHtml(level.name)}</div>
+      ${me ? '<div class="searchbar"><input id="comment-input" maxlength="300" placeholder="Write a comment…" onkeydown="if(event.key===\'Enter\')document.getElementById(\'comment-post\').click()"><button class="btn small btn-play" id="comment-post">Post</button></div>' : '<div class="note center">Log in to comment.</div>'}
+      <div class="comment-list">${list.length ? list.map(c => `<div class="comment"><div><b>${escapeHtml(c.username)}</b> <small>${timeAgo(c.createdAt)}</small></div><div>${escapeHtml(c.text)}</div>${me && (me.isAdmin || me.id === c.userId) ? '<button class="btn small btn-danger" data-del="' + c.id + '">Delete</button>' : ''}</div>`).join('') : '<div class="empty">No comments yet.</div>'}</div>`);
+    el.querySelector('.back-btn').onclick = () => openLevelDetail(level, 'community', levelDetailReturnTo === 'admin-panel');
+    const post = document.getElementById('comment-post');
+    if (post) post.onclick = async () => { const t = document.getElementById('comment-input').value.trim(); if (!t) return; try { await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/comments', { method: 'POST', auth: true, body: { text: t } }); render(); } catch (e) { toast(e.message, 'bad'); } };
+    el.querySelectorAll('[data-del]').forEach(b => { b.onclick = async () => { try { await apiRequest('/api/comments/' + b.dataset.del, { method: 'DELETE', auth: true }); render(); } catch (e) { toast(e.message, 'bad'); } }; });
+  };
+  toggleMenu('level-detail-menu'); render();
+}
+
+async function reportDialog(kind, target) {
+  if (!getAuthToken()) { toast('Log in to report.', 'bad'); return; }
+  const r = await openFormDialog({ title: kind === 'level' ? 'Report "' + target.name + '"' : 'Report ' + target.username, message: 'The admins will take a look.', fields: [{ id: 'reason', label: 'What\'s wrong?', type: 'textarea', rows: 3, maxlength: 300, value: '' }], okText: 'Send report', danger: true });
+  if (!r || !r.reason.trim()) return;
+  try { await apiRequest('/api/reports', { method: 'POST', auth: true, body: kind === 'level' ? { kind, levelId: target.id, reason: r.reason } : { kind, username: target.username, reason: r.reason } }); toast('Report sent. Thanks!', 'good'); }
+  catch (e) { toast(e.message, 'bad'); }
+}
+
+async function openVersions(level) {
+  try {
+    const d = await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/versions', { auth: true });
+    const el = document.getElementById('level-detail-menu');
+    el.innerHTML = screenHtml('VERSIONS', null, `<div class="hero-name">${escapeHtml(level.name)}</div><div class="note center">Every update keeps the previous version (last 10). Roll back to undo a bad update.</div>` +
+      (d.versions.length ? '<div class="song-list">' + d.versions.map(v => `<div class="song-row"><div class="song-info"><div class="song-title">${escapeHtml(v.name)}</div><div class="song-sub">${new Date(v.savedAt).toLocaleString()} · ${v.tiles} tiles</div></div><button class="btn small" data-v="${v.id}">Roll back</button></div>`).join('') + '</div>' : '<div class="empty">No older versions yet.</div>'));
+    el.querySelector('.back-btn').onclick = () => openLevelDetail(level, 'mine-online');
+    el.querySelectorAll('[data-v]').forEach(b => { b.onclick = async () => {
+      if (!(await uiConfirm('Roll the public level back to this version? The current one is kept as a version too.', 'Roll back', true))) return;
+      try { await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/rollback', { method: 'POST', auth: true, body: { versionId: Number(b.dataset.v) } }); toast('Rolled back.', 'good'); openVersions(level); } catch (e) { toast(e.message, 'bad'); } }; });
+    toggleMenu('level-detail-menu');
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+// ---------------------------------------------------------------------------
+// Friends
+// ---------------------------------------------------------------------------
+async function sendFriendRequest(username) {
+  try { const d = await apiRequest('/api/friends/request', { method: 'POST', auth: true, body: { username } }); toast(d.accepted ? 'You are now friends!' : 'Friend request sent.', 'good'); if (!document.getElementById('friends-menu').classList.contains('hidden')) openFriends(); }
+  catch (e) { toast(e.message, 'bad'); }
+}
+async function openFriends() {
+  if (!getAuthToken()) { toast('Log in to use friends.', 'bad'); return; }
+  const el = document.getElementById('friends-menu');
+  el.innerHTML = screenHtml('FRIENDS', "toggleMenu('main-menu')", '<div class="empty">Loading…</div>');
+  toggleMenu('friends-menu');
+  try {
+    const d = await apiRequest('/api/friends', { auth: true });
+    const incoming = d.friends.filter(f => f.state === 'incoming'), friends = d.friends.filter(f => f.state === 'friend').sort((a, b) => b.online - a.online), outgoing = d.friends.filter(f => f.state === 'outgoing');
+    const row = (f, actions) => `<div class="song-row"><div class="song-art ${frameClass(f)}" style="${f.profileIcon ? '' : 'background:' + artGradient(f.username)}">${f.profileIcon ? '<img src="' + escapeHtml(f.profileIcon) + '" alt="">' : escapeHtml(f.username.slice(0, 1).toUpperCase())}</div><div class="song-info"><div class="song-title">${escapeHtml(f.username)}</div><div class="song-sub">${f.state === 'friend' ? '<span class="presence-dot ' + (f.online ? (f.status === 'lobby' ? '' : 'busy') : 'off') + '"></span>' + (f.online ? (f.status === 'lobby' ? 'Online' : 'In a match') : 'Offline') : f.state === 'outgoing' ? 'Request sent' : 'Wants to be friends'}</div></div><div class="admin-actions">${actions}</div></div>`;
+    el.innerHTML = screenHtml('FRIENDS', "toggleMenu('main-menu')", `<div class="searchbar"><input id="friend-input" maxlength="20" placeholder="Add a friend by username…" onkeydown="if(event.key==='Enter')sendFriendRequest(this.value.trim())"><button class="btn small btn-play" onclick="sendFriendRequest(document.getElementById('friend-input').value.trim())">Add</button></div>` +
+      (incoming.length ? '<div class="section-title">REQUESTS</div><div class="song-list">' + incoming.map(f => row(f, `<button class="btn small" onclick="respondFriend('${f.userId}',true)">Accept</button><button class="btn small btn-ghost" onclick="respondFriend('${f.userId}',false)">Decline</button>`)).join('') + '</div>' : '') +
+      '<div class="section-title">FRIENDS</div><div class="song-list">' + (friends.length ? friends.map(f => row(f, (f.online && f.status === 'lobby' ? `<button class="btn small btn-play" onclick="challengeFriend('${f.socketId}','${escapeHtml(f.username)}')">Challenge</button>` : '') + `<button class="btn small btn-ghost" onclick="removeFriend('${f.userId}')">✕</button>`)).join('') : '<div class="empty">No friends yet. Add someone by username.</div>') + '</div>' +
+      (outgoing.length ? '<div class="section-title">SENT</div><div class="song-list">' + outgoing.map(f => row(f, `<button class="btn small btn-ghost" onclick="removeFriend('${f.userId}')">Cancel</button>`)).join('') + '</div>' : ''));
+  } catch (e) { el.innerHTML = screenHtml('FRIENDS', "toggleMenu('main-menu')", errorBox(e.message, 'openFriends()')); }
+}
+async function respondFriend(userId, accept) { try { await apiRequest('/api/friends/respond', { method: 'POST', auth: true, body: { userId, accept } }); openFriends(); } catch (e) { toast(e.message, 'bad'); } }
+async function removeFriend(userId) { try { await apiRequest('/api/friends/' + userId, { method: 'DELETE', auth: true }); openFriends(); } catch (e) { toast(e.message, 'bad'); } }
+async function challengeFriend(socketId, name) {
+  await connectBattle();
+  battlePickTarget = { id: socketId, name };
+  openBattleLevelPicker();
+}
+
+// ---------------------------------------------------------------------------
+// Shared levels (collab + verifier)
+// ---------------------------------------------------------------------------
+async function openShared() {
+  if (!getAuthToken()) { toast('Log in to use shared levels.', 'bad'); return; }
+  const el = document.getElementById('shared-menu');
+  el.innerHTML = screenHtml('SHARED LEVELS', "toggleMenu('my-levels-menu')", '<div class="empty">Loading…</div>');
+  toggleMenu('shared-menu');
+  try {
+    const d = await apiRequest('/api/drafts', { auth: true });
+    el.innerHTML = screenHtml('SHARED LEVELS', "openMyLevels()", '<div class="note center">Levels you share (from the editor menu: 👥 Collab) or that others shared with you. A set verifier has to beat the level before the owner can publish it.</div>' +
+      (d.drafts.length ? '<div class="song-list">' + d.drafts.map(x => `<div class="song-row"><div class="song-art" style="background:${artGradient(x.name)}">♪</div><div class="song-info"><div class="song-title">${escapeHtml(x.name)}</div><div class="song-sub">by ${escapeHtml(x.owner)} · you are ${x.role} · ${x.tileCount} tiles · v${x.rev}</div><div class="song-meta">${x.verifier ? '<span class="tag">verifier: ' + escapeHtml(x.verifier) + '</span>' : ''}${x.verified ? '<span class="feat">✔ VERIFIED' + (x.verifiedBy ? ' by ' + escapeHtml(x.verifiedBy) : '') + '</span>' : '<span class="tag">not verified</span>'}${x.published ? '<span class="tag">published</span>' : ''}</div></div><div class="admin-actions"><button class="btn small btn-play" onclick="openDraft('${x.id}')">${x.role === 'verifier' ? 'Verify' : 'Open'}</button>${x.role === 'owner' ? `<button class="btn small btn-danger" onclick="deleteDraft('${x.id}')">✕</button>` : ''}</div></div>`).join('') + '</div>' : '<div class="empty">Nothing shared yet.</div>'));
+  } catch (e) { el.innerHTML = screenHtml('SHARED LEVELS', "openMyLevels()", errorBox(e.message, 'openShared()')); }
+}
+async function openDraft(id) {
+  try {
+    toast('Opening…');
+    const d = await apiRequest('/api/drafts/' + id, { auth: true });
+    currentDraft = { id: d.draft.id, rev: d.draft.rev, role: d.draft.role, verifier: d.draft.verifier, verified: d.draft.verified };
+    currentEditingId = null; currentEditingOnlineId = null;
+    startEditor(Object.assign({}, d.level, { _draft: true }));
+    currentEditingName = d.draft.name;
+    if (d.draft.role === 'verifier') { toast('Play it through to verify it.'); setTimeout(() => startLevelVerification(), 150); }
+  } catch (e) { toast(e.message, 'bad'); }
+}
+async function deleteDraft(id) {
+  if (!(await uiConfirm('Delete this shared level for everyone on it?', 'Delete', true))) return;
+  try { await apiRequest('/api/drafts/' + id, { method: 'DELETE', auth: true }); openShared(); } catch (e) { toast(e.message, 'bad'); }
+}
+
+// ---------------------------------------------------------------------------
+// Admin extras: alert types, player history
+// ---------------------------------------------------------------------------
+const ALERT_ICONS = { five_star: '⭐', level_updated: '✎', report: '⚑', report_player: '⚑', suspicious: '🕵', auto_flag: '🚩' };
+function adminOpenPlayer(name) { adminPlayerSearch = name; loadAdminPanel('players'); }
+async function adminShowHistory(p) {
+  try {
+    const d = await apiRequest('/api/admin/players/' + p.id + '/history', { auth: true });
+    const lines = d.history.map(h => new Date(h.at).toLocaleString() + ' · ' + h.admin + ' · ' + h.action + (h.detail ? ' - ' + h.detail : ''));
+    await uiAlert(p.username + ': ' + d.reports + ' reports against them, ' + d.flags + ' suspicious-result flags.\n\n' + (lines.length ? lines.join('\n') : 'No moderation history.'), 'History');
+  } catch (e) { toast(e.message, 'bad'); }
 }
