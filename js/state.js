@@ -100,7 +100,9 @@ function getEditorPPS() { return EDITOR_BASE_SPEED * 60 * editorZoom; }
 
 // --- v4: strict mode, hitbox zones, effects, practice, globe, cosmetics ---
 let strictMode = false;
-let hitZone = { on: false, top: 420, h: 160 };      // input hitbox (board coords); off = classic "tap anywhere"
+const defaultHitZone = () => ({ on: false, lanes: [0, 1, 2, 3].map(() => ({ top: 400, h: 140 })) });
+let hitZone = defaultHitZone();                     // one input hitbox PER LANE (board coords); off = classic "tap anywhere"
+let lockCosmetics = false;                          // level setting: ignore the player's custom tile colours / effects
 let tileHb = { scale: 1, offset: 0 };               // tile hitbox scale / vertical offset (used with the input zone)
 let tileMoveFx = null, tileHideFx = null;
 let practiceMode = false, practiceArmed = false, practiceStartSec = 0, practiceCheckpoint = 0, practiceNextAuto = 0;
