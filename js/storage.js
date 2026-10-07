@@ -139,6 +139,7 @@ function buildLevelObject(name) {
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
     disableHolds: document.getElementById('edit-disable-holds').checked,
     strictMode: !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked),
+    lockCosmetics: !!(document.getElementById('edit-lock-cos') && document.getElementById('edit-lock-cos').checked),
     tags: String((document.getElementById('edit-tags') || {}).value || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean).slice(0, 5),
     difficulty: document.getElementById('edit-difficulty').value || 'Normal',
     backgroundColor: document.getElementById('edit-bg-color')?.value || '#202738',
