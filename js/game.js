@@ -107,6 +107,7 @@ function showGameHud(show, battle) {
 function editorLevelConfig() {
   return {
     strictMode: !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked),
+    lockCosmetics: !!(document.getElementById('edit-lock-cos') && document.getElementById('edit-lock-cos').checked),
     lives: Math.max(1, Math.min(10, parseInt(document.getElementById('edit-lives').value) || 3)),
     fps: parseInt(document.getElementById('edit-fps').value) || 60,
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
@@ -173,7 +174,8 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     windowLevelFPS = cfg.fps >= 10 ? cfg.fps : 60;
     levelDisableHolds = cfg.disableHolds;
     strictMode = sourceLevel ? !!sourceLevel.strictMode : !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked);
-    hitZone = { on: false, top: 420, h: 160 }; tileHb = { scale: 1, offset: 0 }; tileMoveFx = null; tileHideFx = null;
+    hitZone = defaultHitZone(); tileHb = { scale: 1, offset: 0 }; tileMoveFx = null; tileHideFx = null;
+    lockCosmetics = sourceLevel ? !!sourceLevel.lockCosmetics : !!(document.getElementById('edit-lock-cos') && document.getElementById('edit-lock-cos').checked);
     levelLastNoteTime = pendingTiles.length ? pendingTiles[pendingTiles.length - 1].time : 0;
     runStartedAt = performance.now();
     practiceMode = practiceArmed && !!loadedLevelObj; practiceArmed = false;
@@ -239,9 +241,15 @@ function fireExtraImage(fx) {
 function fireTileStyle(fx) { currentTileStyle.c1 = fx.c1; currentTileStyle.c2 = fx.c2; currentTileStyle.alpha = fx.alpha; }
 function fireSpeedChange(fx) { initialSpeed = speed; targetSpeed = fx.target; speedTransitionDuration = fx.transDuration; speedTransitionTime = 0; }
 function fireSFX(fx) { const audio = new Audio(fx.src); audio.play().catch(() => {}); }
+function hbVal(fx, lane, k, def) {
+  const v = fx['z' + lane + k];
+  if (v !== undefined && Number.isFinite(Number(v))) return Number(v);
+  const old = k === 't' ? fx.zoneTop : fx.zoneH;               // older levels used one box for every lane
+  return Number.isFinite(Number(old)) && old !== undefined ? Number(old) : def;
+}
 function fireHitbox(fx) {
-  hitZone = { on: Number(fx.zoneOn) === 1, top: Number(fx.zoneTop) || 0, h: Math.max(20, Number(fx.zoneH) || 160) };
-  tileHb = { scale: Number(fx.tileScale) || 1, offset: Number(fx.tileOffset) || 0 };
+  hitZone = { on: Number(fx.zoneOn) === 1, lanes: [0, 1, 2, 3].map(l => ({ top: hbVal(fx, l, 't', 400), h: Math.max(20, hbVal(fx, l, 'h', 140)) })) };
+  tileHb = { scale: 1, offset: 0 };
 }
 function fireVideo(fx) {
   if (!fx.url) return;
@@ -254,7 +262,7 @@ function fireVideo(fx) {
   fxLater(() => { v.pause(); if (v.parentNode) v.parentNode.removeChild(v); }, (fx.duration || 5) * 1000);
 }
 function particleColor() {
-  switch (cosmeticFx) {
+  switch (lockCosmetics ? 'default' : cosmeticFx) {
     case 'sparkle': return Math.random() < 0.5 ? '#fff2a8' : '#ffffff';
     case 'fire': return ['#ff7a18', '#ffd23f', '#ff3d00'][Math.floor(Math.random() * 3)];
     case 'confetti': return ['#ff4f81', '#4fd1ff', '#ffd23f', '#7cff6b', '#b36bff'][Math.floor(Math.random() * 5)];
@@ -263,7 +271,7 @@ function particleColor() {
 }
 const TILE_COSMETIC_COLORS = { ice: '#7fdcff', gold: '#ffcf40', neon: '#39ff88', royal: '#9b5cff' };
 function tileFill() {
-  if (currentTileStyle.c1 === '#000000' && TILE_COSMETIC_COLORS[cosmeticTile]) return TILE_COSMETIC_COLORS[cosmeticTile];
+  if (!lockCosmetics && currentTileStyle.c1 === '#000000' && TILE_COSMETIC_COLORS[cosmeticTile]) return TILE_COSMETIC_COLORS[cosmeticTile];
   return currentTileStyle.c1;
 }
 function tileOffsetX(t) {
@@ -309,8 +317,11 @@ window.addEventListener('keydown', e => {
 function drawHitboxOverlay() {
   ctx.save();
   if (hitZone.on) {
-    ctx.globalAlpha = 0.16; ctx.fillStyle = '#00f0ff'; ctx.fillRect(0, hitZone.top, GW, hitZone.h);
-    ctx.globalAlpha = 1; ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.strokeRect(1, hitZone.top, GW - 2, hitZone.h); ctx.setLineDash([]);
+    hitZone.lanes.forEach((z, l) => {
+      ctx.globalAlpha = 0.16; ctx.fillStyle = '#00f0ff'; ctx.fillRect(l * laneW + 1, z.top, laneW - 2, z.h);
+      ctx.globalAlpha = 1; ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.strokeRect(l * laneW + 2, z.top, laneW - 4, z.h);
+    });
+    ctx.setLineDash([]);
   }
   const vis = tiles.filter(t => !t.interacted && t.y > 0 && t.y - TILE_H < GH).sort((a, b) => b.y - a.y);
   ctx.font = '700 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -418,7 +429,7 @@ function showCompletionScreen() {
   document.getElementById('death-title').classList.add('good');
   document.getElementById('death-stars').innerHTML = [1, 2, 3].map(i => '<span class="' + (i <= stars ? 'on' : '') + '">★</span>').join('');
   document.getElementById('final-score').innerText = 'Score: ' + Math.floor(score);
-  document.getElementById('death-retry-btn').classList.toggle('hidden', isPlaytesting);
+  document.getElementById('death-retry-btn').classList.remove('hidden');
   document.getElementById('death-quit-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
   const eb = document.getElementById('death-editor-btn'); if (eb) eb.classList.toggle('hidden', !isVerifying);
@@ -440,9 +451,8 @@ window.addEventListener('blur', releaseAllKeys);
 // Does this tile's hitbox overlap the input hitbox? (No zone set = the classic "tap anywhere" behaviour.)
 function inInputZone(t) {
   if (!hitZone.on) return true;
-  const h = TILE_H * (tileHb.scale || 1);
-  const cy = t.y - TILE_H / 2 + (tileHb.offset || 0);
-  return cy + h / 2 >= hitZone.top && cy - h / 2 <= hitZone.top + hitZone.h;
+  const z = hitZone.lanes[t.lane];
+  return t.y >= z.top && t.y - TILE_H <= z.top + z.h;          // tile spans [y-TILE_H, y]; touching the box at all is enough
 }
 
 function pressLane(laneIndex) {
@@ -484,7 +494,7 @@ window.addEventListener("keydown", (e) => {
     toggleExtraSettings();
     return;
   }
-  if (k === ' ' && isDead && !isPlaytesting && !isVerifying && !isBattleMode) {
+  if (k === ' ' && isDead && !gameActive && !inEditor && !isBattleMode && !document.body.classList.contains('menus-open') && (lastStartArgs !== null || isPlaytesting || isVerifying)) {
     e.preventDefault();
     restartGame();
     return;
@@ -601,14 +611,26 @@ function drawEditorLayer() {
       ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2, top + h / 2);
     }
   });
-  // hitbox preview: the selected hitbox change (or the one active at the playhead)
+  // hitbox editor: one box per lane. The selected hitbox change shows drag handles; otherwise the one active at the playhead is shown faintly.
   let hb = selectedEffect && selectedEffect.type === 'hitbox' ? selectedEffect : null;
+  const editing = !!hb;
   if (!hb) recordedEffects.forEach(f => { if (f.type === 'hitbox' && f.time <= editorTimer) hb = f; });
   if (hb && Number(hb.zoneOn) === 1) {
-    ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#00f0ff'; ctx.fillRect(0, hb.zoneTop, GW, hb.zoneH);
-    ctx.globalAlpha = 1; ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.strokeRect(1, hb.zoneTop, GW - 2, hb.zoneH);
-    ctx.setLineDash([]); ctx.fillStyle = '#00f0ff'; ctx.font = '700 10px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText('INPUT HITBOX', 6, hb.zoneTop + 4); ctx.restore();
+    ctx.save();
+    for (let l = 0; l < 4; l++) {
+      const top = hbVal(hb, l, 't', 400), h = Math.max(20, hbVal(hb, l, 'h', 140));
+      ctx.globalAlpha = editing ? 0.28 : 0.12; ctx.fillStyle = '#00f0ff'; ctx.fillRect(l * laneW + 2, top, laneW - 4, h);
+      ctx.globalAlpha = 1; ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash(editing ? [] : [6, 4]); ctx.strokeRect(l * laneW + 2, top, laneW - 4, h);
+      if (editing) {
+        ctx.setLineDash([]); ctx.fillStyle = '#00f0ff'; ctx.fillRect(l * laneW + laneW / 2 - 16, top + h - 6, 32, 6);      // resize handle
+        ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText('LANE ' + (l + 1), l * laneW + laneW / 2, top + 4);
+      }
+    }
+    if (editing) {   // real-size tile ruler so you can judge box sizes against an actual tile
+      ctx.setLineDash([3, 3]); ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.5; ctx.strokeRect(laneW * 1.5 - 20, lineY - TILE_H, 40, TILE_H);
+      ctx.setLineDash([]); ctx.globalAlpha = 0.8; ctx.fillStyle = '#fff'; ctx.font = '700 9px system-ui'; ctx.textAlign = 'center'; ctx.fillText('tile size', laneW * 1.5, lineY - TILE_H - 11);
+    }
+    ctx.restore();
   }
   // flashes for tiles you just recorded with the keyboard
   for (let i = editorVisualTiles.length - 1; i >= 0; i--) {
@@ -886,6 +908,7 @@ function startEditor(existingLevel) {
   val('edit-bg-brightness', existingLevel && existingLevel.backgroundBrightness ? existingLevel.backgroundBrightness : 100);
   document.getElementById('edit-disable-holds').checked = existingLevel ? !!existingLevel.disableHolds : false;
   const st = document.getElementById('edit-strict'); if (st) st.checked = existingLevel ? !!existingLevel.strictMode : false;
+  const lc = document.getElementById('edit-lock-cos'); if (lc) lc.checked = existingLevel ? !!existingLevel.lockCosmetics : false;
   val('edit-tags', existingLevel && existingLevel.tags ? existingLevel.tags.join(', ') : '');
   if (!existingLevel || !existingLevel._draft) currentDraft = null;
   document.getElementById('btn-create-tiles').classList.remove('active');
