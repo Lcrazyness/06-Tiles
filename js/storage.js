@@ -146,6 +146,9 @@ function buildLevelObject(name) {
     backgroundBrightness: Number(document.getElementById('edit-bg-brightness')?.value || 100),
     bpm: Math.round(editorBpm),
     gridOffset: editorGridOffset,
+    hasAudio: !!currentAudioBlob,
+    audioName: currentAudioName || null,
+    audioType: currentAudioType || null,
     plays: 0,
     createdAt: Date.now()
   };
@@ -162,7 +165,17 @@ async function saveCustomLevel() {
   if (idx !== -1) { level.plays = myLevels[idx].plays || 0; level.createdAt = myLevels[idx].createdAt || level.createdAt; myLevels[idx] = level; }
   else myLevels.push(level);
   currentEditingId = level.id;
-  if (persistMyLevels()) { closeCreatorMenu(); toast(idx !== -1 ? 'Level updated.' : 'Saved to My Levels.', 'good'); }
+  if (persistMyLevels()) {
+    try {
+      if (currentAudioBlob) await saveLevelAudio(level.id);
+      else if (!level.hasAudio) await deleteLevelAudio(level.id);
+      closeCreatorMenu();
+      toast(idx !== -1 ? 'Level updated.' : 'Saved to My Levels.', 'good');
+    } catch (e) {
+      closeCreatorMenu();
+      toast('Level saved, but the song could not be stored.', 'bad');
+    }
+  }
 }
 
 function startLevelVerification() {
@@ -270,6 +283,94 @@ function loadCustomLevelFile(event) {
 }
 
 let currentAudioUrl = null;
+let currentAudioBlob = null;
+let currentAudioName = '';
+let currentAudioType = '';
+
+const LEVEL_AUDIO_DB = 'et_level_audio_db';
+const LEVEL_AUDIO_STORE = 'audio';
+
+function openLevelAudioDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('IndexedDB is not available.')); return; }
+    const req = indexedDB.open(LEVEL_AUDIO_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(LEVEL_AUDIO_STORE)) db.createObjectStore(LEVEL_AUDIO_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Could not open level audio storage.'));
+  });
+}
+
+async function saveLevelAudio(levelId) {
+  if (!levelId || !currentAudioBlob) return;
+  const db = await openLevelAudioDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(LEVEL_AUDIO_STORE, 'readwrite');
+    tx.objectStore(LEVEL_AUDIO_STORE).put({
+      blob: currentAudioBlob,
+      name: currentAudioName,
+      type: currentAudioType
+    }, String(levelId));
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error || new Error('Could not save the level song.'));
+  });
+  db.close();
+}
+
+async function deleteLevelAudio(levelId) {
+  if (!levelId || !window.indexedDB) return;
+  try {
+    const db = await openLevelAudioDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(LEVEL_AUDIO_STORE, 'readwrite');
+      tx.objectStore(LEVEL_AUDIO_STORE).delete(String(levelId));
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch (e) {}
+}
+
+async function loadLevelAudio(levelId) {
+  if (!levelId || !window.indexedDB) return false;
+  try {
+    const db = await openLevelAudioDb();
+    const entry = await new Promise((resolve, reject) => {
+      const tx = db.transaction(LEVEL_AUDIO_STORE, 'readonly');
+      const req = tx.objectStore(LEVEL_AUDIO_STORE).get(String(levelId));
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    if (!entry || !entry.blob) return false;
+    if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+    currentAudioBlob = entry.blob;
+    currentAudioName = entry.name || '';
+    currentAudioType = entry.type || entry.blob.type || '';
+    currentAudioUrl = URL.createObjectURL(entry.blob);
+    bgAudio.src = currentAudioUrl;
+    bgAudio.load();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function loadLevelAudioForEditor(level) {
+  if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+  currentAudioUrl = null;
+  currentAudioBlob = null;
+  currentAudioName = '';
+  currentAudioType = '';
+  bgAudio.pause();
+  bgAudio.removeAttribute('src');
+  bgAudio.load();
+  if (level && level.hasAudio && level.id) await loadLevelAudio(level.id);
+  if (typeof refreshEditorTimeline === 'function') refreshEditorTimeline();
+}
+
 function loadAudioFile(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -279,6 +380,9 @@ function loadAudioFile(event) {
     return;
   }
   if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+  currentAudioBlob = file;
+  currentAudioName = file.name;
+  currentAudioType = file.type || 'audio/*';
   currentAudioUrl = URL.createObjectURL(file);
   bgAudio.src = currentAudioUrl; bgAudio.load();
   bgAudio.onloadedmetadata = () => { if (typeof refreshEditorTimeline === 'function') refreshEditorTimeline(); };
@@ -302,6 +406,7 @@ async function deleteCustomLevel(levelId) {
   if (!(await uiConfirm('Delete "' + level.name + '" from this device? This cannot be undone.' + (level.published ? ' (The published copy stays online; remove it from My Published.)' : ''), 'Delete', true))) return false;
   myLevels.splice(idx, 1);
   persistMyLevels();
+  await deleteLevelAudio(level.id);
   return true;
 }
 
@@ -318,6 +423,7 @@ function autosaveEditorLevel() {
   else myLevels.push(level);
   currentEditingId = level.id;
   persistMyLevels();
+  if (currentAudioBlob) saveLevelAudio(level.id).catch(() => {});
   toast('Level auto-saved to My Levels.', 'good');
   if (currentDraft && currentDraft.role !== 'verifier') draftSave(true);
 }
