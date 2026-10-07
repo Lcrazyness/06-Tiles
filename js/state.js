@@ -17,7 +17,7 @@ const overlays = [
   'main-menu', 'settings-menu', 'death-screen', 'pause-menu', 'my-levels-menu',
   'creator-menu', 'effects-menu', 'browse-levels-menu', 'editor-level-settings',
   'profile-modal', 'stats-modal', 'admin-panel', 'level-detail-menu', 'battle-menu', 'battle-level-picker',
-  'battle-waiting-menu', 'battle-incoming-menu', 'battle-result-menu'
+  'battle-waiting-menu', 'battle-incoming-menu', 'battle-result-menu', 'shared-menu', 'spectate-menu', 'friends-menu'
 ];
 
 // Battle match state (first to 3 round wins)
@@ -97,3 +97,17 @@ let isBattleMode = false;
 function getEditorBeat() { return 60 / Math.max(30, editorBpm); }
 function getEditorGridStep() { return getEditorBeat() / editorGridDivision; }
 function getEditorPPS() { return EDITOR_BASE_SPEED * 60 * editorZoom; }
+
+// --- v4: strict mode, hitbox zones, effects, practice, globe, cosmetics ---
+let strictMode = false;
+let hitZone = { on: false, top: 420, h: 160 };      // input hitbox (board coords); off = classic "tap anywhere"
+let tileHb = { scale: 1, offset: 0 };               // tile hitbox scale / vertical offset (used with the input zone)
+let tileMoveFx = null, tileHideFx = null;
+let practiceMode = false, practiceArmed = false, practiceStartSec = 0, practiceCheckpoint = 0, practiceNextAuto = 0;
+let levelLastNoteTime = 0, runStartedAt = 0;
+let globeOn = localStorage.getItem('et_globe') === 'true';
+const globeGhosts = new Map();                      // player name -> { idx, lane, ts }
+let cosmeticTile = 'default', cosmeticFx = 'default';
+let currentDraft = null;                            // { id, rev, role } while editing a shared level
+
+let editorStartPos = null, startPosArmed = false;   // Geometry-Dash-style start position (editor playtests begin here)
