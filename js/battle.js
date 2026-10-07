@@ -50,11 +50,18 @@ async function connectBattle() {
   battleSocket = io(API_BASE_URL, { auth: { token: getAuthToken() || undefined, guestId: getGuestId() }, transports: ['websocket', 'polling'], reconnectionAttempts: 6 });
   const s = battleSocket;
 
-  s.on('connect', () => setBattleConn('online', 'Online'));
+  s.on('connect', () => { setBattleConn('online', 'Online'); if (globeLevelId) s.emit('globe_join', { levelId: globeLevelId }); });
   s.on('connect_error', err => {
     if (err && err.message === 'banned') { setBattleConn('error', 'Account banned'); toast('Your account is banned.', 'bad'); return; }
     setBattleConn('error', 'Server unreachable - tap to retry');
   });
+  s.on('globe_tap', d => { if (globeOn) globeGhosts.set(d.name, { idx: d.idx, lane: d.lane, ts: performance.now() }); });
+  s.on('elo_change', d => toast('Battle rating ' + (d.delta >= 0 ? '+' : '') + d.delta, d.delta >= 0 ? 'good' : 'bad'));
+  s.on('friend_request', d => toast(d.from + ' sent you a friend request.'));
+  s.on('spectate_matches', list => renderSpectateList(list));
+  s.on('spectate_failed', d => { toast(d.message, 'bad'); emitBattle('spectate_list'); });
+  s.on('spec_state', d => updateSpectateView(d));
+  s.on('spec_progress', d => updateSpectateProgress(d));
   s.on('banned', d => { if (typeof handleBanned === 'function') handleBanned(d); });
   s.on('warning', d => { if (typeof showWarning === 'function') showWarning(d.message); });
   s.on('disconnect', () => {
@@ -110,7 +117,11 @@ function disconnectBattle() {
 function emitBattle(event, payload) { if (battleSocket && battleSocket.connected) battleSocket.emit(event, payload); }
 
 // --- lobby ---
-function openBattleMenu() { toggleMenu('battle-menu'); connectBattle(); renderOnlinePlayers(); }
+function openBattleMenu() {
+  toggleMenu('battle-menu'); connectBattle(); renderOnlinePlayers();
+  const host = document.querySelector('#battle-menu .screen-col') || document.querySelector('#battle-menu .screen-body') || document.getElementById('battle-menu');
+  if (host && !host.querySelector('.battle-extras')) host.insertAdjacentHTML('afterbegin', '<div class="row-btns battle-extras"><button class="btn small btn-ghost" onclick="openFriends()">👥 Friends</button><button class="btn small btn-ghost" onclick="openSpectate()">👁 Spectate</button></div>');
+}
 function leaveBattleMenu() { if (!activeMatch) disconnectBattle(); toggleMenu('main-menu'); }
 function isBattleMenuOpenish() { return !document.getElementById('battle-menu').classList.contains('hidden'); }
 function setWaiting(title, sub) {
@@ -273,4 +284,55 @@ async function forfeitBattlePrompt() {
     leaveActiveMatch(); stopLoop(); gameActive = false; bgAudio.pause(); showGameHud(false);
     toggleMenu('battle-menu');
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// Globe: see where other players on the same level are
+// ---------------------------------------------------------------------------
+let globeLevelId = null;
+async function globeSync(levelId) {
+  if (levelId === undefined) levelId = globeLevelId;
+  const want = globeOn && levelId && /^[0-9a-f-]{36}$/i.test(String(levelId)) && API_BASE_URL ? String(levelId) : null;
+  if (!want) { if (globeLevelId) emitBattle('globe_leave'); globeLevelId = null; globeGhosts.clear(); return; }
+  globeLevelId = want;
+  await connectBattle();
+  emitBattle('globe_join', { levelId: want });
+}
+function globeTap(idx, lane) { if (globeLevelId) emitBattle('globe_tap', { levelId: globeLevelId, idx, lane }); }
+
+// ---------------------------------------------------------------------------
+// Spectating: a live scoreboard + progress bars for a battle
+// ---------------------------------------------------------------------------
+let spectating = null;
+async function openSpectate() {
+  const el = document.getElementById('spectate-menu');
+  el.innerHTML = screenHtml('SPECTATE', "toggleMenu('battle-menu')", '<div class="empty">Looking for live battles…</div>');
+  toggleMenu('spectate-menu');
+  await connectBattle();
+  emitBattle('spectate_list');
+}
+function renderSpectateList(list) {
+  const el = document.getElementById('spectate-menu');
+  if (!el || el.classList.contains('hidden') || spectating) return;
+  el.innerHTML = screenHtml('SPECTATE', "toggleMenu('battle-menu')", '<div class="row-btns"><button class="btn small" onclick="emitBattle(\'spectate_list\')">↻ Refresh</button></div>' +
+    (list.length ? '<div class="song-list">' + list.map(m => `<div class="song-row"><div class="song-info"><div class="song-title">${escapeHtml(m.a)} <small>vs</small> ${escapeHtml(m.b)}</div><div class="song-sub">${escapeHtml(m.level)} · round ${m.round} · ${m.scoreA} – ${m.scoreB}</div></div><button class="btn small btn-play" onclick="watchMatch('${m.matchId}')">WATCH</button></div>`).join('') + '</div>' : '<div class="empty">No live battles right now.</div>'));
+}
+function watchMatch(matchId) { spectating = { matchId, names: [], bars: {} }; emitBattle('spectate_join', { matchId }); }
+function leaveSpectate() { spectating = null; emitBattle('spectate_leave'); openSpectate(); }
+function updateSpectateView(d) {
+  const el = document.getElementById('spectate-menu');
+  if (!el || !spectating || d.matchId !== spectating.matchId) return;
+  const [a, b] = d.players;
+  spectating.names = [a.name, b.name];
+  const note = d.over ? '🏁 ' + escapeHtml(d.winner || '') + ' wins the battle!' : d.roundWinner ? 'Round won by ' + escapeHtml(d.roundWinner) : d.roundStart ? 'Round ' + d.round + ' started' : '';
+  el.innerHTML = screenHtml('WATCHING', 'leaveSpectate()', `<div class="hero-name center">${escapeHtml(d.level)}</div><div class="spec-score">${escapeHtml(a.name)} <b>${a.rounds}</b> – <b>${b.rounds}</b> ${escapeHtml(b.name)}</div><div class="note center">First to ${d.target} · round ${d.round}</div>
+    <div class="spec-bars"><div class="spec-name">${escapeHtml(a.name)}</div><div class="race-track"><i id="spec-bar-0"></i></div><div class="spec-name">${escapeHtml(b.name)}</div><div class="race-track"><i id="spec-bar-1"></i></div></div><div class="note center" id="spec-note">${note}</div>`);
+  spectating.bars = {};
+}
+function updateSpectateProgress(d) {
+  if (!spectating || d.matchId !== spectating.matchId) return;
+  const i = spectating.names.indexOf(d.name);
+  const bar = document.getElementById('spec-bar-' + i);
+  if (bar) bar.style.width = d.pct + '%';
 }
