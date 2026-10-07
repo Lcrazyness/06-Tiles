@@ -223,3 +223,85 @@ document.addEventListener('DOMContentLoaded', () => {
   const g = document.getElementById('setting-globe');
   if (g) { g.checked = globeOn; g.addEventListener('change', () => { globeOn = g.checked; localStorage.setItem('et_globe', String(globeOn)); if (!globeOn) globeGhosts.clear(); if (typeof globeSync === 'function') globeSync(); }); }
 });
+
+
+// ---------------------------------------------------------------------------
+// Input sounds: one sound per lane, uploaded from your computer (kept in this browser's IndexedDB).
+// Played through WebAudio so there is no delay on tap.
+// ---------------------------------------------------------------------------
+const LaneSounds = (() => {
+  const DB = 'et_sounds', STORE = 'sounds';
+  let db = null, ac = null;
+  const buffers = [null, null, null, null];
+  let vol = Number(localStorage.getItem('et_laneSoundVol'));
+  if (!Number.isFinite(vol) || localStorage.getItem('et_laneSoundVol') === null) vol = 0.8;
+
+  const open = () => new Promise((res, rej) => {
+    if (db) return res(db);
+    const r = indexedDB.open(DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+    r.onsuccess = () => { db = r.result; res(db); };
+    r.onerror = () => rej(r.error);
+  });
+  const idb = async (mode, fn) => {
+    const d = await open();
+    return new Promise((res, rej) => { const tx = d.transaction(STORE, mode); const req = fn(tx.objectStore(STORE)); tx.oncomplete = () => res(req && req.result); tx.onerror = () => rej(tx.error); });
+  };
+  const audioCtx = () => {
+    if (!ac) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; ac = new C(); }
+    if (ac.state === 'suspended') ac.resume().catch(() => {});
+    return ac;
+  };
+  const decode = async blob => {
+    const a = audioCtx(); if (!a) throw new Error('Audio is not supported here.');
+    const data = await blob.arrayBuffer();
+    return new Promise((res, rej) => a.decodeAudioData(data, res, rej));
+  };
+  const nameOf = i => localStorage.getItem('et_laneSoundName' + i) || '';
+
+  function refreshUi() {
+    for (let i = 0; i < 4; i++) {
+      const el = document.getElementById('ls-name-' + i);
+      if (el) el.textContent = buffers[i] ? nameOf(i) || 'Custom sound' : 'Default (silent)';
+    }
+  }
+  async function load() {
+    try { for (let i = 0; i < 4; i++) { const blob = await idb('readonly', s => s.get('lane' + i)); buffers[i] = blob ? await decode(blob).catch(() => null) : null; } } catch (e) {}
+    refreshUi();
+  }
+  async function set(i, file) {
+    if (!file) return;
+    if (!/^audio\//.test(file.type)) { toast('Pick an audio file (mp3, wav, ogg).', 'bad'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast('Keep it under 2 MB - short clips work best.', 'bad'); return; }
+    try {
+      const buf = await decode(file);
+      await idb('readwrite', s => s.put(file, 'lane' + i));
+      buffers[i] = buf; localStorage.setItem('et_laneSoundName' + i, file.name.slice(0, 40));
+      toast('Lane ' + (i + 1) + ' sound saved.', 'good'); play(i);
+    } catch (e) { toast('Could not read that audio file.', 'bad'); }
+    refreshUi();
+  }
+  async function clear(i) { try { await idb('readwrite', s => s.delete('lane' + i)); } catch (e) {} buffers[i] = null; localStorage.removeItem('et_laneSoundName' + i); refreshUi(); }
+  function play(i) {
+    const b = buffers[i]; if (!b) return;
+    const a = audioCtx(); if (!a) return;
+    const src = a.createBufferSource(), g = a.createGain();
+    src.buffer = b; g.gain.value = vol; src.connect(g); g.connect(a.destination); src.start();
+  }
+  function setVolume(v) { vol = Math.max(0, Math.min(1, Number(v))); localStorage.setItem('et_laneSoundVol', String(vol)); }
+
+  function buildPanel() {
+    const host = document.querySelector('#settings-menu .screen-col') || document.querySelector('#settings-menu .screen-body');
+    if (!host || document.getElementById('lane-sounds-panel')) return;
+    const rows = [0, 1, 2, 3].map(i => `<div class="settings-row"><span>Lane ${i + 1} sound <small id="ls-name-${i}">Default (silent)</small></span>
+      <span class="ls-btns"><button class="btn small" onclick="document.getElementById('ls-file-${i}').click()">Upload</button><button class="btn small btn-ghost" onclick="LaneSounds.play(${i})">▶</button><button class="btn small btn-ghost" onclick="LaneSounds.clear(${i})">✕</button></span>
+      <input type="file" id="ls-file-${i}" accept="audio/*" style="display:none" onchange="LaneSounds.set(${i}, this.files[0]); this.value=''"></div>`).join('');
+    host.insertAdjacentHTML('beforeend', `<div class="panel" id="lane-sounds-panel"><div class="section-title">INPUT SOUNDS</div>
+      <div class="note">Play your own sound every time you hit a tile - one for each lane. Short mp3 / wav / ogg clips (under 2 MB). They stay in this browser.</div>${rows}
+      <div class="settings-row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" value="${vol}" oninput="LaneSounds.setVolume(this.value)"></div></div>`);
+    refreshUi();
+  }
+  return { load, set, clear, play, setVolume, buildPanel };
+})();
+function playLaneSound(lane) { LaneSounds.play(lane); }
+document.addEventListener('DOMContentLoaded', () => { LaneSounds.buildPanel(); LaneSounds.load(); });
