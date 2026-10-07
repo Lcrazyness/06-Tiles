@@ -87,6 +87,7 @@
       <div class="settings-row"><span>Lane letters on tiles</span><input type="checkbox" id="setting-show-lane-text"></div>
       <div class="settings-row"><span>Hide death screen</span><input type="checkbox" id="setting-hide-death"></div>
       <div class="settings-row"><span>Auto retry after 2s</span><input type="checkbox" id="setting-auto-retry"></div>
+      <div class="settings-row"><span>Globe (see other players on the same level)</span><input type="checkbox" id="setting-globe"></div>
       <div class="section-title">KEYBINDS</div>
       <div class="keybind-grid">
         <label>Lane 1 <input id="keybind-0" maxlength="1" value="r"></label><label>Lane 2 <input id="keybind-1" maxlength="1" value="t"></label>
@@ -145,6 +146,7 @@
 <div id="death-screen" class="overlay overlay-dim hidden">
   <div class="center-panel"><h1 id="death-title">FAILED</h1><div id="death-stars" class="stars"></div><p id="final-score" class="final-score">Score: 0</p>
     <button id="death-retry-btn" class="btn btn-play" onclick="restartGame()">RETRY <kbd>Space</kbd></button>
+    <button id="death-editor-btn" class="btn btn-ghost hidden" onclick="backToEditorFromDeath()">✎ Back to editor</button>
     <button id="death-quit-btn" class="btn btn-ghost" onclick="quitPlaytestOrGame()">Quit to menu</button>
     <button id="death-stop-playtest-btn" class="btn btn-danger hidden" onclick="stopPlaytestFromDeath()">Stop playtesting</button>
   </div>
@@ -159,6 +161,10 @@
       <button class="icon-btn" onclick="openEffectsMenu()" title="Effects">✨</button>
       <button class="icon-btn" onclick="openEditorSettingsMenu()" title="Level settings">⚙</button>
       <button id="btn-delete-mode" class="icon-btn" onclick="toggleDeleteMode()" title="Delete tiles">🗑️</button>
+      <button id="btn-start-pos" class="icon-btn" onclick="toggleStartPos()" title="Start position: playtests begin at the playhead">🚩</button>
+      <button class="icon-btn" onclick="editorUndo()" title="Undo (Ctrl+Z)">↶</button>
+      <button class="icon-btn" onclick="editorRedo()" title="Redo (Ctrl+Y)">↷</button>
+      <button class="icon-btn" onclick="deleteAllEditor()" title="Delete everything">🧹</button>
     </div>
     <div class="editor-topbar-group"><div class="pill" id="editor-tile-count">0 tiles</div><div class="pill" id="editor-timer-panel">0.00s</div></div>
   </div>
@@ -223,6 +229,8 @@
     <div class="settings-row"><span>Target FPS</span><input type="number" id="edit-fps" value="60" min="10" max="240" class="num-in"></div>
     <div class="settings-row"><span>Audio offset (ms)</span><input type="number" id="edit-audio-offset" value="0" class="num-in"></div>
     <div class="settings-row"><span>Disable hold tiles</span><input type="checkbox" id="edit-disable-holds"></div>
+    <div class="settings-row"><span>Strict mode <small>(hit tile 1 before tile 2 - no skipping)</small></span><input type="checkbox" id="edit-strict"></div>
+    <div class="settings-row"><span>Tags <small>(speed, chords, holds, memory, tech, long, short, jumps, streams, strict, beginner)</small></span><input type="text" id="edit-tags" class="num-in wide" placeholder="speed, chords"></div>
     <div class="settings-row"><span>Difficulty</span><select id="edit-difficulty" class="num-in"><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Insane</option><option>Extreme</option></select></div>
     <div class="section-title">APPEARANCE</div>
     <div class="settings-row"><span>Background</span><input type="color" id="edit-bg-color" value="#202738"></div>
@@ -238,6 +246,8 @@
     <button class="btn btn-ghost" onclick="closeCreatorMenu()">▶ Resume</button>
     <button class="btn btn-play" onclick="publishLevel()">🚀 Verify &amp; publish</button>
     <button class="btn btn-green" onclick="saveCustomLevel()">💾 Save to My Levels</button>
+    <button class="btn btn-ghost" onclick="openShareLevel()">👥 Collab / set verifier</button>
+    <button class="btn btn-ghost" id="draft-save-btn" onclick="draftSave()">☁ Save shared level</button>
     <button class="btn btn-ghost" onclick="downloadLevelData()">⬇ Download .json</button>
     <button class="btn btn-danger" onclick="exitEditorWithoutSaving()">Quit editor</button>
   </div>
@@ -254,7 +264,7 @@
       <aside class="effect-library-panel">
         <div class="effect-category-tabs">
           <button class="effect-tab active" data-cat="visual" onclick="switchEffectCategory('visual')">VISUAL</button><button class="effect-tab" data-cat="speed" onclick="switchEffectCategory('speed')">SPEED</button>
-          <button class="effect-tab" data-cat="image" onclick="switchEffectCategory('image')">IMAGE</button><button class="effect-tab" data-cat="audio" onclick="switchEffectCategory('audio')">AUDIO</button>
+          <button class="effect-tab" data-cat="image" onclick="switchEffectCategory('image')">IMAGE</button><button class="effect-tab" data-cat="audio" onclick="switchEffectCategory('audio')">AUDIO</button><button class="effect-tab" data-cat="advanced" onclick="switchEffectCategory('advanced')">ADVANCED</button>
         </div>
         <div class="effect-library-list" id="effect-library-visual">
           <button class="effect-library-card" onclick="addPulseEffect()"><span class="effect-library-icon">✦</span><span><b>Pulse</b><small>Timed flash / color</small></span><strong>+</strong></button>
@@ -276,6 +286,13 @@
             <div class="quick-position-row"><button onclick="setExtraImagePosition('center')">CENTER</button><button onclick="setExtraImagePosition('top')">TOP</button><button onclick="setExtraImagePosition('bottom')">BOTTOM</button></div>
             <button class="btn small btn-play" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button></div>
         </div>
+        <div class="effect-library-list hidden" id="effect-library-advanced"><div class="effect-library-form">
+          <div class="form-block-title">HITBOX EDITOR</div><div class="muted-note">Move or resize where taps count (and how tall each tile counts) from this moment on. Add another one set to "Off" to go back to normal. Select it to preview the zone on the board.</div>
+          <button class="btn small btn-play" onclick="addHitboxEffect()">ADD HITBOX CHANGE</button>
+          <div class="form-block-title">TILE MOVE</div><button class="btn small btn-play" onclick="addTileMoveEffect()">ADD TILE MOVE</button>
+          <div class="form-block-title">TILE HIDE (MEMORY)</div><button class="btn small btn-play" onclick="addTileHideEffect()">ADD TILE HIDE</button>
+          <div class="form-block-title">VIDEO BACKGROUND</div><input type="text" id="fx-video-url" class="form-input" placeholder="https://…/clip.mp4 (direct link)"><button class="btn small btn-play" onclick="addVideoEffect()">ADD VIDEO</button>
+        </div></div>
         <div class="effect-library-list hidden" id="effect-library-audio"><div class="effect-library-form"><div class="form-block-title">EXTRA SFX</div><input type="file" id="fx-sfx-upload" accept="audio/*"><button class="btn small btn-play" onclick="addSfxEffect()">ADD SFX</button></div></div>
       </aside>
       <main class="effect-editor-main">
@@ -287,6 +304,10 @@
     </div>
   </div>
 </div>
+
+<div id="shared-menu" class="overlay hidden"></div>
+<div id="spectate-menu" class="overlay hidden"></div>
+<div id="friends-menu" class="overlay hidden"></div>
 
 <!-- ============ DIALOG + TOASTS ============ -->
 <div id="dialog" class="hidden"><div class="dialog-box"><h3 id="dialog-title"></h3><p id="dialog-msg"></p><input type="text" id="dialog-input" class="hidden" maxlength="80">
