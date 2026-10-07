@@ -138,6 +138,8 @@ function buildLevelObject(name) {
     fps: parseInt(document.getElementById('edit-fps').value) || 60,
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
     disableHolds: document.getElementById('edit-disable-holds').checked,
+    strictMode: !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked),
+    tags: String((document.getElementById('edit-tags') || {}).value || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean).slice(0, 5),
     difficulty: document.getElementById('edit-difficulty').value || 'Normal',
     backgroundColor: document.getElementById('edit-bg-color')?.value || '#202738',
     backgroundBrightness: Number(document.getElementById('edit-bg-brightness')?.value || 100),
@@ -176,6 +178,7 @@ function startLevelVerification() {
 
 async function publishLevel() {
   if (recordedTiles.length === 0) { toast('Place some tiles first!'); return; }
+  if (currentDraft && currentDraft.role === 'owner' && currentDraft.verifier) { closeCreatorMenu(); await draftPublishFlow(); return; }
   if (!getAuthToken()) {
     closeCreatorMenu();
     if (await uiConfirm('You need an account to publish levels (so they have an author and you can remove them later). Log in now? Your level stays in the editor.', 'Log in')) {
@@ -299,4 +302,90 @@ async function deleteCustomLevel(levelId) {
   myLevels.splice(idx, 1);
   persistMyLevels();
   return true;
+}
+
+
+// ---------------------------------------------------------------------------
+// Auto-save (used when you leave a verification run for the main menu)
+// ---------------------------------------------------------------------------
+function autosaveEditorLevel() {
+  if (!recordedTiles.length) return;
+  const level = buildLevelObject(currentEditingName || 'Untitled level');
+  if (currentEditingOnlineId) { level.onlineId = currentEditingOnlineId; level.published = true; }
+  const idx = myLevels.findIndex(l => l.id === level.id);
+  if (idx !== -1) { level.plays = myLevels[idx].plays || 0; level.createdAt = myLevels[idx].createdAt || level.createdAt; myLevels[idx] = level; }
+  else myLevels.push(level);
+  currentEditingId = level.id;
+  persistMyLevels();
+  toast('Level auto-saved to My Levels.', 'good');
+  if (currentDraft && currentDraft.role !== 'verifier') draftSave(true);
+}
+
+// ---------------------------------------------------------------------------
+// Shared levels: collaborate on a level, give someone verification access
+// ---------------------------------------------------------------------------
+async function ensureDraft() {
+  if (currentDraft) return currentDraft;
+  if (!getAuthToken()) { toast('Log in to share a level.', 'bad'); return null; }
+  if (!recordedTiles.length) { toast('Place some tiles first!'); return null; }
+  const name = currentEditingName || (await uiPrompt('Name this shared level:', 'My Level', 'Share'));
+  if (!name || !name.trim()) return null;
+  currentEditingName = name.trim().slice(0, 80);
+  const data = await apiRequest('/api/drafts', { method: 'POST', auth: true, body: buildLevelObject(currentEditingName) });
+  currentDraft = { id: data.draft.id, rev: data.draft.rev, role: 'owner', verifier: null, verified: false };
+  return currentDraft;
+}
+
+async function openShareLevel() {
+  try {
+    closeCreatorMenu();
+    const d = await ensureDraft(); if (!d) return;
+    if (d.role !== 'owner') { toast('Only the owner can change who has access.', 'bad'); return; }
+    await draftSave(true);
+    const r = await openFormDialog({
+      title: 'Share "' + currentEditingName + '"', message: 'Editors can change the level. A verifier is the one who has to beat it before you can publish. Choose Remove to take someone off.',
+      fields: [
+        { id: 'username', label: 'Their username', type: 'text', value: '', maxlength: 20 },
+        { id: 'role', label: 'Their role', type: 'select', value: 'editor', options: [{ value: 'editor', label: 'Editor (collaborator)' }, { value: 'verifier', label: 'Verifier' }, { value: 'remove', label: 'Remove access' }] }
+      ], okText: 'Share'
+    });
+    if (!r || !r.username.trim()) return;
+    await apiRequest('/api/drafts/' + d.id + '/share', { method: 'POST', auth: true, body: { username: r.username.trim(), role: r.role } });
+    if (r.role === 'verifier') { d.verifier = r.username.trim(); d.verified = false; }
+    toast(r.role === 'remove' ? 'Access removed.' : r.username.trim() + ' is now ' + (r.role === 'verifier' ? 'the verifier.' : 'an editor.') + ' Find it under Shared in My Levels.', 'good');
+  } catch (e) { toast(e.message || 'Could not share the level.', 'bad'); }
+}
+
+async function draftSave(silent) {
+  if (!currentDraft || currentDraft.role === 'verifier') { if (!silent) toast('Not a shared level (or you are only the verifier).'); return; }
+  try {
+    const data = await apiRequest('/api/drafts/' + currentDraft.id, { method: 'PUT', auth: true, body: { rev: currentDraft.rev, level: buildLevelObject(currentEditingName || 'My Level') } });
+    currentDraft.rev = data.draft.rev; currentDraft.verified = false;
+    if (!silent) { closeCreatorMenu(); toast('Shared level saved.', 'good'); }
+  } catch (e) {
+    if (e.status === 409) await uiAlert(e.message, 'Not saved');
+    else if (!silent) toast(e.message || 'Could not save.', 'bad');
+  }
+}
+
+async function draftMarkVerified() {
+  if (!currentDraft) return;
+  try {
+    await apiRequest('/api/drafts/' + currentDraft.id + '/verified', { method: 'POST', auth: true, body: { rev: currentDraft.rev } });
+    currentDraft.verified = true;
+    toast(currentDraft.role === 'verifier' ? 'Verified! The owner can publish it now.' : 'Verified! Ready to publish.', 'good');
+  } catch (e) { toast(e.message || 'Could not record the verification.', 'bad'); }
+}
+
+async function draftPublishFlow() {
+  try {
+    await draftSave(true);
+    const list = await apiRequest('/api/drafts', { auth: true });
+    const me = (list.drafts || []).find(x => x.id === currentDraft.id);
+    if (!me || !me.verified) { await uiAlert('Waiting for ' + (currentDraft.verifier || 'your verifier') + ' to verify the latest save. They can open it from Shared in My Levels and play it through.', 'Not verified yet'); return; }
+    if (!(await uiConfirm('Publish "' + currentEditingName + '" for everyone?', 'Publish'))) return;
+    const data = await apiRequest('/api/drafts/' + currentDraft.id + '/publish', { method: 'POST', auth: true, body: {} });
+    currentEditingOnlineId = data.level.id;
+    await uiAlert('"' + currentEditingName + '" is live!', 'Published');
+  } catch (e) { await uiAlert(e.message || 'Could not publish.', 'Publish failed'); }
 }
