@@ -300,12 +300,12 @@ function toggleTimelineDock() {
 // Effects studio
 // ---------------------------------------------------------------------------
 function effectKindLabel(fx) {
-  return { pulse: 'PULSE', tile_style: 'TILE STYLE', speed: 'SPEED', image: 'IMAGE', extra_image: 'EXTRA IMAGE', sfx: 'SFX' }[fx.type] || String(fx.type).toUpperCase();
+  return { pulse: 'PULSE', tile_style: 'TILE STYLE', speed: 'SPEED', image: 'IMAGE', extra_image: 'EXTRA IMAGE', sfx: 'SFX', hitbox: 'HITBOX', tilemove: 'TILE MOVE', tilehide: 'TILE HIDE', video: 'VIDEO' }[fx.type] || String(fx.type).toUpperCase();
 }
 
 function switchEffectCategory(cat) {
   currentEffectCategory = cat;
-  ['visual', 'speed', 'image', 'audio'].forEach(c => {
+  ['visual', 'speed', 'image', 'audio', 'advanced'].forEach(c => {
     const el = document.getElementById('effect-library-' + c);
     if (el) el.classList.toggle('hidden', c !== cat);
   });
@@ -365,6 +365,14 @@ function addExtraImageEffect() {
     alpha: parseFloat(document.getElementById('fx-extra-alpha').value) || 1,
     duration: parseFloat(document.getElementById('fx-extra-dur').value) || 2
   });
+}
+function addHitboxEffect() { pushEffect({ type: 'hitbox', time: editorTimer, zoneOn: 1, zoneTop: 420, zoneH: 160, tileScale: 1, tileOffset: 0 }); }
+function addTileMoveEffect() { pushEffect({ type: 'tilemove', time: editorTimer, mode: 0, amount: 60, duration: 2 }); }
+function addTileHideEffect() { pushEffect({ type: 'tilehide', time: editorTimer, mode: 0, fadeY: 200, duration: 3 }); }
+function addVideoEffect() {
+  const url = (document.getElementById('fx-video-url').value || '').trim();
+  if (!/^https:\/\/[^\s"'<>]{4,490}$/i.test(url)) { toast('Paste a direct https link to a video file (.mp4 / .webm).', 'bad'); return; }
+  pushEffect({ type: 'video', time: editorTimer, url, layer: 0, alpha: 0.6, duration: 5, loop: 1 });
 }
 function addSfxEffect() {
   if (!loadedSfxDataUrl) { toast('Choose an audio file first.'); return; }
@@ -439,6 +447,30 @@ function describeEffectFields(fx) {
       num('Fade in', 'inTrans', { step: 0.05, min: 0 });
       num('Fade out', 'outTrans', { step: 0.05, min: 0 });
       break;
+    case 'hitbox':
+      sel('Input zone', 'zoneOn', [{ v: 1, l: 'On' }, { v: 0, l: 'Off (tap anywhere)' }]);
+      num('Zone top (0-640)', 'zoneTop', { step: 10, min: 0, max: 620 });
+      num('Zone height', 'zoneH', { step: 10, min: 20, max: 640 });
+      num('Tile hitbox scale', 'tileScale', { step: 0.1, min: 0.3, max: 3 });
+      num('Tile hitbox offset (px)', 'tileOffset', { step: 5, min: -200, max: 200 });
+      break;
+    case 'tilemove':
+      sel('Mode', 'mode', [{ v: 0, l: 'Shift sideways' }, { v: 1, l: 'Sway' }]);
+      num('Amount (px)', 'amount', { step: 5, min: -180, max: 180 });
+      num('Duration', 'duration', { step: 0.1, min: 0.2 });
+      break;
+    case 'tilehide':
+      sel('Mode', 'mode', [{ v: 0, l: 'Fade out as they fall' }, { v: 1, l: 'Invisible' }]);
+      num('Fade starts at Y', 'fadeY', { step: 10, min: 0, max: 600 });
+      num('Duration', 'duration', { step: 0.1, min: 0.2 });
+      break;
+    case 'video':
+      fields.push({ label: 'Video URL (https)', key: 'url', kind: 'text' });
+      sel('Layer', 'layer', [{ v: 0, l: 'Background' }, { v: 1, l: 'Foreground' }]);
+      num('Alpha', 'alpha', { step: 0.05, min: 0, max: 1 });
+      num('Duration', 'duration', { step: 0.5, min: 0.5 });
+      sel('Loop', 'loop', [{ v: 1, l: 'Yes' }, { v: 0, l: 'No' }]);
+      break;
     case 'extra_image':
       sel('Layer', 'layer', [{ v: 0, l: 'Background' }, { v: 1, l: 'Foreground' }]);
       num('X', 'x', { step: 5 }); num('Y', 'y', { step: 5 });
@@ -471,6 +503,9 @@ function buildFieldsInto(container, fx) {
     if (f.kind === 'color') {
       input = document.createElement('input'); input.type = 'color'; input.value = fx[f.key] || '#000000';
       input.oninput = () => { fx[f.key] = input.value; onEffectFieldChanged(); };
+    } else if (f.kind === 'text') {
+      input = document.createElement('input'); input.type = 'text'; input.value = fx[f.key] || '';
+      input.oninput = () => { fx[f.key] = input.value.trim(); onEffectFieldChanged(); };
     } else if (f.kind === 'select') {
       input = document.createElement('select');
       f.options.forEach(o => {
@@ -583,7 +618,7 @@ function renderEffectTimeRuler() {
 function trackRowForEffect(fx) {
   if (fx.type === 'pulse' || fx.type === 'tile_style') return 0;
   if (fx.type === 'speed') return 1;
-  if (fx.type === 'image' || fx.type === 'extra_image') return 2;
+  if (fx.type === 'image' || fx.type === 'extra_image' || fx.type === 'video') return 2;
   return 3;
 }
 
@@ -693,3 +728,52 @@ if (levelIconUpload) {
     event.target.value = '';
   });
 }
+
+
+// ---------------------------------------------------------------------------
+// Undo / redo / delete all.  History works by comparing the level data after every
+// click/key/field change, so it covers every way of editing (recording, dragging, inspector fields...).
+// ---------------------------------------------------------------------------
+let undoStack = [], redoStack = [], lastSnap = null;
+const snapState = () => JSON.stringify([recordedTiles, recordedEffects]);
+function historyReset() { undoStack = []; redoStack = []; lastSnap = snapState(); }
+function historyCheck() {
+  if (!inEditor) return;
+  const now = snapState();
+  if (lastSnap === null) { lastSnap = now; return; }
+  if (now === lastSnap) return;
+  undoStack.push(lastSnap); if (undoStack.length > 100) undoStack.shift();
+  redoStack = []; lastSnap = now;
+}
+function applySnap(str) {
+  const [t, e] = JSON.parse(str);
+  recordedTiles = t; recordedEffects = e; lastSnap = str;
+  selectedEffect = null; levelVerified = false;
+  refreshEditorTimeline(); renderEffectTracks(); renderSelectedEffectPanels();
+}
+function editorUndo() {
+  historyCheck();
+  if (!undoStack.length) { toast('Nothing to undo.'); return; }
+  redoStack.push(lastSnap); applySnap(undoStack.pop());
+}
+function editorRedo() {
+  historyCheck();
+  if (!redoStack.length) { toast('Nothing to redo.'); return; }
+  undoStack.push(lastSnap); applySnap(redoStack.pop());
+}
+async function deleteAllEditor() {
+  if (!recordedTiles.length && !recordedEffects.length) { toast('Nothing to delete.'); return; }
+  if (!(await uiConfirm('Delete ALL tiles and effects? You can undo this with ↶.', 'Delete all', true))) return;
+  historyCheck();
+  recordedTiles = []; recordedEffects = []; selectedEffect = null; levelVerified = false;
+  refreshEditorTimeline(); renderEffectTracks(); renderSelectedEffectPanels();
+  historyCheck(); toast('Everything deleted. ↶ brings it back.');
+}
+['pointerup', 'keyup', 'change'].forEach(ev => document.addEventListener(ev, () => setTimeout(historyCheck, 0)));
+setInterval(historyCheck, 500);
+document.addEventListener('keydown', e => {
+  if (!inEditor || isTypingTarget(e) || dialogOpen() || !(e.ctrlKey || e.metaKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); editorUndo(); }
+  else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); editorRedo(); }
+});
