@@ -25,11 +25,14 @@ class Tile {
     this.holdDuration = holdDuration;
     this.interacted = false;
     this.failed = false;
+    this.noteIdx = -1;
+    this.time = 0;
   }
 }
 
 class Particle {
   constructor(x, y) {
+    this.color = particleColor();
     this.x = x; this.y = y;
     this.vx = (Math.random() - 0.5) * 15;
     this.vy = (Math.random() - 0.5) * 15;
@@ -103,6 +106,7 @@ function showGameHud(show, battle) {
 
 function editorLevelConfig() {
   return {
+    strictMode: !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked),
     lives: Math.max(1, Math.min(10, parseInt(document.getElementById('edit-lives').value) || 3)),
     fps: parseInt(document.getElementById('edit-fps').value) || 60,
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
@@ -168,6 +172,18 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     currentLives = maxLives;
     windowLevelFPS = cfg.fps >= 10 ? cfg.fps : 60;
     levelDisableHolds = cfg.disableHolds;
+    strictMode = sourceLevel ? !!sourceLevel.strictMode : !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked);
+    hitZone = { on: false, top: 420, h: 160 }; tileHb = { scale: 1, offset: 0 }; tileMoveFx = null; tileHideFx = null;
+    levelLastNoteTime = pendingTiles.length ? pendingTiles[pendingTiles.length - 1].time : 0;
+    runStartedAt = performance.now();
+    practiceMode = practiceArmed && !!loadedLevelObj; practiceArmed = false;
+    if (!practiceMode) { practiceStartSec = 0; practiceCheckpoint = 0; }
+    practiceNextAuto = practiceStartSec + levelLastNoteTime * 0.1;
+    if (practiceMode && practiceStartSec > 0) fastForwardTo(practiceStartSec);
+    else if (startPosArmed && isPlaytesting && editorStartPos !== null) { fastForwardTo(editorStartPos); if (levelUsesAudio) { levelAudioStarted = true; try { bgAudio.currentTime = Math.max(0, editorStartPos + Math.abs(levelAudioOffsetMs) / 1000 * (levelAudioOffsetMs < 0 ? 1 : -1)); } catch (e) {} bgAudio.play().catch(() => {}); } }
+    startPosArmed = false;
+    globeGhosts.clear();
+    if (typeof globeSync === 'function') globeSync(loadedLevelObj && loadedLevelObj.id);
     levelAudioOffsetMs = parseInt(cfg.audioOffset) || 0;
     document.getElementById('lives-count').innerText = currentLives;
 
@@ -223,6 +239,98 @@ function fireExtraImage(fx) {
 function fireTileStyle(fx) { currentTileStyle.c1 = fx.c1; currentTileStyle.c2 = fx.c2; currentTileStyle.alpha = fx.alpha; }
 function fireSpeedChange(fx) { initialSpeed = speed; targetSpeed = fx.target; speedTransitionDuration = fx.transDuration; speedTransitionTime = 0; }
 function fireSFX(fx) { const audio = new Audio(fx.src); audio.play().catch(() => {}); }
+function fireHitbox(fx) {
+  hitZone = { on: Number(fx.zoneOn) === 1, top: Number(fx.zoneTop) || 0, h: Math.max(20, Number(fx.zoneH) || 160) };
+  tileHb = { scale: Number(fx.tileScale) || 1, offset: Number(fx.tileOffset) || 0 };
+}
+function fireVideo(fx) {
+  if (!fx.url) return;
+  const v = document.createElement('video');
+  v.src = fx.url; v.muted = true; v.loop = Number(fx.loop) !== 0; v.playsInline = true; v.autoplay = true;
+  v.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:' + (fx.alpha === undefined ? 0.6 : fx.alpha) + ';';
+  const c = fx.layer == 1 ? document.getElementById('extra-images-fg') : document.getElementById('extra-images-bg');
+  if (!c) return;
+  c.appendChild(v); v.play().catch(() => {});
+  fxLater(() => { v.pause(); if (v.parentNode) v.parentNode.removeChild(v); }, (fx.duration || 5) * 1000);
+}
+function particleColor() {
+  switch (cosmeticFx) {
+    case 'sparkle': return Math.random() < 0.5 ? '#fff2a8' : '#ffffff';
+    case 'fire': return ['#ff7a18', '#ffd23f', '#ff3d00'][Math.floor(Math.random() * 3)];
+    case 'confetti': return ['#ff4f81', '#4fd1ff', '#ffd23f', '#7cff6b', '#b36bff'][Math.floor(Math.random() * 5)];
+    default: return '#00ffff';
+  }
+}
+const TILE_COSMETIC_COLORS = { ice: '#7fdcff', gold: '#ffcf40', neon: '#39ff88', royal: '#9b5cff' };
+function tileFill() {
+  if (currentTileStyle.c1 === '#000000' && TILE_COSMETIC_COLORS[cosmeticTile]) return TILE_COSMETIC_COLORS[cosmeticTile];
+  return currentTileStyle.c1;
+}
+function tileOffsetX(t) {
+  const m = tileMoveFx; if (!m) return 0;
+  const el = customPlayTime - m.start; if (el < 0 || el > m.dur) return 0;
+  const edge = Math.max(0, Math.min(1, el / 0.3, (m.dur - el) / 0.3));
+  return m.mode === 1 ? Math.sin(el * 5 + t.y / 90) * m.amount * edge : m.amount * edge;
+}
+function tileAlphaMul(headTop) {
+  const h = tileHideFx; if (!h) return 1;
+  const el = customPlayTime - h.start; if (el < 0 || el > h.dur) return 1;
+  if (h.mode === 1) return 0;                                   // invisible: pure memory
+  return headTop < h.fadeY ? 1 : Math.max(0, 1 - (headTop - h.fadeY) / 120);   // fades out as it falls
+}
+function globeColor(name) { return 'hsl(' + (hashString(name) % 360) + ',90%,62%)'; }
+
+// Practice mode: start anywhere, checkpoints every 10% (or press C), dying sends you back to the checkpoint.
+function fastForwardTo(sec) {
+  customPlayTime = Math.max(0, sec - 1.2);
+  while (pendingTileIdx < pendingTiles.length && pendingTiles[pendingTileIdx].time < sec) pendingTileIdx++;
+  while (pendingEffectIdx < pendingEffects.length && pendingEffects[pendingEffectIdx].time <= customPlayTime) {
+    const fx = pendingEffects[pendingEffectIdx++];
+    if (fx.type === 'tile_style') fireTileStyle(fx);
+    else if (fx.type === 'speed') { speed = targetSpeed = initialSpeed = fx.target; speedTransitionDuration = 0; }
+    else if (fx.type === 'hitbox') fireHitbox(fx);
+  }
+}
+function maybeAutoCheckpoint() {
+  if (!practiceMode || !levelLastNoteTime || customPlayTime < practiceNextAuto) return;
+  practiceCheckpoint = customPlayTime; practiceNextAuto = customPlayTime + levelLastNoteTime * 0.1;
+  toast('Checkpoint ' + Math.min(99, Math.round(customPlayTime / levelLastNoteTime * 100)) + '%');
+}
+function practiceRespawn() {
+  practiceStartSec = practiceCheckpoint; practiceArmed = true;
+  if (lastStartArgs) startGame.apply(null, lastStartArgs);
+}
+window.addEventListener('keydown', e => {
+  if (e.key.toLowerCase() !== 'c' || e.repeat || !practiceMode || !gameActive || isTypingTarget(e)) return;
+  practiceCheckpoint = customPlayTime; toast('Checkpoint set at ' + Math.round(customPlayTime / Math.max(1, levelLastNoteTime) * 100) + '%', 'good');
+});
+
+// Hitbox overlay (Settings > Show hitboxes): the input zone, plus a line between consecutive tiles labelled with the time you get to reach the next one.
+function drawHitboxOverlay() {
+  ctx.save();
+  if (hitZone.on) {
+    ctx.globalAlpha = 0.16; ctx.fillStyle = '#00f0ff'; ctx.fillRect(0, hitZone.top, GW, hitZone.h);
+    ctx.globalAlpha = 1; ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.strokeRect(1, hitZone.top, GW - 2, hitZone.h); ctx.setLineDash([]);
+  }
+  const vis = tiles.filter(t => !t.interacted && t.y > 0 && t.y - TILE_H < GH).sort((a, b) => b.y - a.y);
+  ctx.font = '700 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < vis.length - 1; i++) {
+    const a = vis[i], b = vis[i + 1];
+    if (Math.abs(a.y - b.y) < 3) continue;                       // same row (chord)
+    const gapMs = Math.round(Math.abs(a.y - b.y) / Math.max(1, speed * 60) * 1000);
+    const ax = a.lane * laneW + laneW / 2 + tileOffsetX(a), ay = a.y - TILE_H / 2;
+    const bx = b.lane * laneW + laneW / 2 + tileOffsetX(b), by = b.y - TILE_H / 2;
+    ctx.globalAlpha = 0.9; ctx.lineWidth = 2;
+    ctx.strokeStyle = gapMs < 120 ? '#ff3b81' : gapMs < 220 ? '#ffd23f' : '#7cff6b';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    const mx = (ax + bx) / 2, my = (ay + by) / 2, label = gapMs + 'ms';
+    const w = ctx.measureText(label).width + 8;
+    ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(mx - w / 2, my - 7, w, 14);
+    ctx.fillStyle = '#fff'; ctx.fillText(label, mx, my);
+  }
+  ctx.restore();
+}
+
 
 // --- level clock: runs from the same frame delta as tile movement ---
 function updateCustomLevel(dtSec) {
@@ -241,7 +349,9 @@ function updateCustomLevel(dtSec) {
     if (customPlayTime < spawnAt) break;
     // If a frame ran long, start the tile where it *should* be so arrival time stays exact.
     const y = -TILE_H + pxPerSec * (customPlayTime - spawnAt);
-    tiles.push(new Tile(n.lane, y, levelDisableHolds ? false : n.isHold, n.holdDuration));
+    const nt = new Tile(n.lane, y, levelDisableHolds ? false : n.isHold, n.holdDuration);
+    nt.noteIdx = pendingTileIdx; nt.time = n.time;
+    tiles.push(nt);
     pendingTileIdx++;
   }
   while (pendingEffectIdx < pendingEffects.length && customPlayTime >= pendingEffects[pendingEffectIdx].time) {
@@ -252,7 +362,13 @@ function updateCustomLevel(dtSec) {
     else if (fx.type === 'tile_style') fireTileStyle(fx);
     else if (fx.type === 'speed') fireSpeedChange(fx);
     else if (fx.type === 'sfx') fireSFX(fx);
+    else if (fx.type === 'hitbox') fireHitbox(fx);
+    else if (fx.type === 'tilemove') tileMoveFx = { mode: Number(fx.mode) || 0, amount: Number(fx.amount) || 0, dur: Math.max(0.1, Number(fx.duration) || 1), start: customPlayTime };
+    else if (fx.type === 'tilehide') tileHideFx = { mode: Number(fx.mode) || 0, fadeY: Number(fx.fadeY) || 200, dur: Math.max(0.1, Number(fx.duration) || 2), start: customPlayTime };
+    else if (fx.type === 'video') fireVideo(fx);
+    if (practiceMode) maybeAutoCheckpoint();
   }
+  if (practiceMode) maybeAutoCheckpoint();
 
   if (speedTransitionDuration > 0) {
     speedTransitionTime += dtSec;
@@ -277,6 +393,7 @@ function updateCustomLevel(dtSec) {
   if (isVerifying) {
     isVerifying = false; levelVerified = true;
     showGameHud(false);
+    if (currentDraft && typeof draftMarkVerified === 'function') draftMarkVerified();
     if (pendingPublishAfterVerification) {
       pendingPublishAfterVerification = false;
       enterEditorView();
@@ -304,6 +421,7 @@ function showCompletionScreen() {
   document.getElementById('death-retry-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-quit-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
+  const eb = document.getElementById('death-editor-btn'); if (eb) eb.classList.toggle('hidden', !isVerifying);
   toggleMenu('death-screen');
 }
 
@@ -319,28 +437,40 @@ function releaseAllKeys() {
 }
 window.addEventListener('blur', releaseAllKeys);
 
+// Does this tile's hitbox overlap the input hitbox? (No zone set = the classic "tap anywhere" behaviour.)
+function inInputZone(t) {
+  if (!hitZone.on) return true;
+  const h = TILE_H * (tileHb.scale || 1);
+  const cy = t.y - TILE_H / 2 + (tileHb.offset || 0);
+  return cy + h / 2 >= hitZone.top && cy - h / 2 <= hitZone.top + hitZone.h;
+}
+
 function pressLane(laneIndex) {
   if (!gameActive || isDead || inEditor || isPaused) return;
-  // closest tile to the hit line that hasn't been played yet
-  let nearest = null;
-  for (const t of tiles) if (!t.interacted && (!nearest || t.y > nearest.y)) nearest = t;
-  if (!nearest) return;
-  // the nearest unplayed tile IN THIS LANE (don't rely on array order)
-  let target = null;
-  for (const t of tiles) if (!t.interacted && t.lane === laneIndex && (!target || t.y > target.y)) target = t;
-  let targetY = target ? target.y : 0;
-  let nearestY = nearest.y;
+  let nearestAll = null;                         // the next tile in order, whatever the zone says
+  for (const t of tiles) if (!t.interacted && (!nearestAll || t.y > nearestAll.y)) nearestAll = t;
+  if (!nearestAll) return;
+  let nearest = null, target = null;             // among tiles inside the input zone
+  for (const t of tiles) {
+    if (t.interacted || !inInputZone(t)) continue;
+    if (!nearest || t.y > nearest.y) nearest = t;
+    if (t.lane === laneIndex && (!target || t.y > target.y)) target = t;
+  }
+  if (!nearest) return;                          // nothing inside the zone: taps do nothing
+  let targetY = target ? target.y : 0, nearestY = nearest.y;
   const cbfToggle = document.getElementById('setting-cbf');
   if (cbfToggle && cbfToggle.checked) {
-    // click-before-frame: the press happened a little after the last drawn frame, so catch the tiles up
     const subFrameDt = Math.max(0, Math.min(2, (performance.now() - lastTime) / 16.666));
     if (target) targetY += speed * subFrameDt;
     nearestY += speed * subFrameDt;
   }
-  // Valid when it is the nearest tile, or part of the same row (chords / tiles a hair apart).
-  if (target && (target === nearest || targetY >= nearestY - TILE_H * 0.85)) {
+  let ok;
+  if (strictMode) ok = !!target && target.y >= nearestAll.y - 3;      // STRICT: you must hit tile 1 before tile 2, no skipping
+  else ok = !!target && (target === nearest || targetY >= nearestY - TILE_H * 0.85);
+  if (ok) {
     target.interacted = true; score += 10; notesHitThisGame++;
     for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
+    if (globeOn && typeof globeTap === 'function') globeTap(target.noteIdx, laneIndex);
   } else if (nearestY - TILE_H < GH && nearestY + TILE_H > 0) {
     if (!handleHit()) die("WRONG ORDER!");
   }
@@ -471,6 +601,15 @@ function drawEditorLayer() {
       ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2, top + h / 2);
     }
   });
+  // hitbox preview: the selected hitbox change (or the one active at the playhead)
+  let hb = selectedEffect && selectedEffect.type === 'hitbox' ? selectedEffect : null;
+  if (!hb) recordedEffects.forEach(f => { if (f.type === 'hitbox' && f.time <= editorTimer) hb = f; });
+  if (hb && Number(hb.zoneOn) === 1) {
+    ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#00f0ff'; ctx.fillRect(0, hb.zoneTop, GW, hb.zoneH);
+    ctx.globalAlpha = 1; ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.strokeRect(1, hb.zoneTop, GW - 2, hb.zoneH);
+    ctx.setLineDash([]); ctx.fillStyle = '#00f0ff'; ctx.font = '700 10px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('INPUT HITBOX', 6, hb.zoneTop + 4); ctx.restore();
+  }
   // flashes for tiles you just recorded with the keyboard
   for (let i = editorVisualTiles.length - 1; i >= 0; i--) {
     const v = editorVisualTiles[i];
@@ -551,32 +690,46 @@ function gameLoop(ts) {
       }
     }
 
-    // Plain flat tiles — the classic look, unchanged.
+    const ox = tileOffsetX(t);
+    const hideMul = tileAlphaMul(headTop);
     if (t.isHold) {
+      ctx.globalAlpha = hideMul;
       ctx.fillStyle = t.interacted ? "#333" : "#000";
-      ctx.fillRect(t.lane * laneW + 12, tailTop, laneW - 24, holdLength);
+      ctx.fillRect(t.lane * laneW + 12 + ox, tailTop, laneW - 24, holdLength);
     }
-    ctx.globalAlpha = t.interacted ? 0.25 : currentTileStyle.alpha;
-    ctx.fillStyle = t.interacted ? "#222" : currentTileStyle.c1;
-    ctx.fillRect(t.lane * laneW + 2, headTop, laneW - 4, TILE_H);
+    ctx.globalAlpha = (t.interacted ? 0.25 : currentTileStyle.alpha) * hideMul;
+    ctx.fillStyle = t.interacted ? "#222" : tileFill();
+    ctx.fillRect(t.lane * laneW + 2 + ox, headTop, laneW - 4, TILE_H);
+    if (globeOn && globeGhosts.size && !t.interacted) {
+      let row = 0; const now = performance.now();
+      globeGhosts.forEach((g, name) => {
+        if (now - g.ts > 7000) { globeGhosts.delete(name); return; }
+        if (g.idx !== t.noteIdx) return;
+        ctx.globalAlpha = 1; ctx.strokeStyle = globeColor(name); ctx.lineWidth = 3;
+        ctx.strokeRect(t.lane * laneW + 4 + ox, headTop + 2, laneW - 8, TILE_H - 4);
+        ctx.fillStyle = globeColor(name); ctx.font = "700 11px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+        ctx.fillText('● ' + name, t.lane * laneW + laneW / 2 + ox, headTop + 6 + row * 13); row++;
+      });
+    }
     if (showHitboxes) {
       ctx.globalAlpha = 1; ctx.strokeStyle = "#ff3b81"; ctx.lineWidth = 2;
-      ctx.strokeRect(t.lane * laneW + 2, headTop, laneW - 4, TILE_H);
+      ctx.strokeRect(t.lane * laneW + 2 + ox, headTop, laneW - 4, TILE_H);
     }
     if (showLaneText) {
       ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff"; ctx.font = "700 28px Arial";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2, headTop + TILE_H / 2);
+      ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2 + ox, headTop + TILE_H / 2);
     }
     ctx.globalAlpha = 1.0;
   }
+  if (showHitboxes && gameActive && isCustomGame) drawHitboxOverlay();
 
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.update(dt);
     if (p.life <= 0) { particles.splice(i, 1); continue; }
     ctx.globalAlpha = Math.max(0, p.life);
-    ctx.fillStyle = "#00ffff";
+    ctx.fillStyle = p.color || "#00ffff";
     ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1.0;
@@ -621,7 +774,8 @@ function resumeGame() {
 
 function die(reason) {
   if (isDead) return;
-  if (isVerifying) { isVerifying = false; levelVerified = false; pendingPublishAfterVerification = false; }
+  if (isVerifying) levelVerified = false;          // stays in verify mode so Retry re-runs the verification
+  if (practiceMode && !isBattleMode) { isDead = true; gameActive = false; stopLoop(); practiceRespawn(); return; }
   isDead = true;
   gameActive = false;
   stopLoop();
@@ -669,7 +823,16 @@ function quitPlaytestOrGame() {
   gameActive = false; isDead = true; isPaused = false; score = 0; scoreEl.innerText = "0";
   bgAudio.pause();
   if (wasBattle && typeof leaveActiveMatch === 'function') leaveActiveMatch();
-  if (isPlaytesting || isVerifying) { stopPlaytest(); return; }
+  if (isVerifying) {                       // leaving to the main menu mid-verification: keep the work
+    isVerifying = false; levelVerified = false;
+    if (typeof autosaveEditorLevel === 'function') autosaveEditorLevel();
+    document.getElementById('death-screen').classList.add('hidden');
+    document.getElementById('pause-menu').classList.add('hidden');
+    showGameHud(false); document.getElementById('editor-ui').classList.add('hidden');
+    inEditor = false; resetState(); toggleMenu('main-menu');
+    return;
+  }
+  if (isPlaytesting) { stopPlaytest(); return; }
   showGameHud(false);
   isBattleMode = false;
   toggleMenu('main-menu');
@@ -708,6 +871,8 @@ function startEditor(existingLevel) {
   else currentEditingOnlineId = existingLevel.onlineId || null;
   currentLevelIcon = existingLevel ? (existingLevel.icon || null) : null;
   editorTimer = 0; isRecording = false; deleteMode = false; selectedEffect = null; editorPlaying = false; levelVerified = false;
+  editorStartPos = null; { const b = document.getElementById('btn-start-pos'); if (b) { b.textContent = '🚩'; b.classList.remove('active'); } }
+  setTimeout(() => { if (typeof historyReset === 'function') historyReset(); }, 60);
   editorBpm = existingLevel && existingLevel.bpm ? existingLevel.bpm : 120;
   editorGridOffset = existingLevel && existingLevel.gridOffset ? existingLevel.gridOffset : 0;
   const val = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
@@ -720,6 +885,9 @@ function startEditor(existingLevel) {
   val('edit-bg-color', existingLevel && existingLevel.backgroundColor ? existingLevel.backgroundColor : '#202738');
   val('edit-bg-brightness', existingLevel && existingLevel.backgroundBrightness ? existingLevel.backgroundBrightness : 100);
   document.getElementById('edit-disable-holds').checked = existingLevel ? !!existingLevel.disableHolds : false;
+  const st = document.getElementById('edit-strict'); if (st) st.checked = existingLevel ? !!existingLevel.strictMode : false;
+  val('edit-tags', existingLevel && existingLevel.tags ? existingLevel.tags.join(', ') : '');
+  if (!existingLevel || !existingLevel._draft) currentDraft = null;
   document.getElementById('btn-create-tiles').classList.remove('active');
   document.getElementById('btn-delete-mode').classList.remove('active');
   document.getElementById('btn-delete-mode-2').classList.remove('active');
@@ -782,6 +950,7 @@ function startPlaytest() {
   canvas.classList.remove('delete-cursor');
   ['btn-delete-mode', 'btn-delete-mode-2'].forEach(id => document.getElementById(id)?.classList.remove('active'));
   closeAllDrawers();
+  startPosArmed = editorStartPos !== null;
   startGame('playtest', true, -1, recordedTiles, recordedEffects);
 }
 
@@ -790,3 +959,12 @@ function stopPlaytest() {
   enterEditorView();
 }
 function stopPlaytestFromDeath() { stopPlaytest(); }
+function backToEditorFromDeath() { isVerifying = false; levelVerified = false; stopPlaytest(); }
+
+// Start position: put a flag at the playhead; playtests start from it (with speed/hitbox/style state applied). Tap again at the same spot to remove it.
+function toggleStartPos() {
+  const btn = document.getElementById('btn-start-pos');
+  if (editorStartPos !== null && Math.abs(editorStartPos - editorTimer) < 0.05) { editorStartPos = null; toast('Start position removed.'); }
+  else { editorStartPos = Math.round(editorTimer * 1000) / 1000; toast('Start position set at ' + editorStartPos.toFixed(2) + 's - playtest starts here.', 'good'); }
+  if (btn) { btn.textContent = editorStartPos === null ? '🚩' : '🚩 ' + editorStartPos.toFixed(1) + 's'; btn.classList.toggle('active', editorStartPos !== null); }
+}
