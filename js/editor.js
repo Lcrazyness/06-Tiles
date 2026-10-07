@@ -102,6 +102,7 @@ function boardPoint(e) {
 function handleEditorPointer(e) {
   if (!inEditor) return;
   e.preventDefault();
+  if (handleHitboxPointer(e)) return;
   const { x, y } = boardPoint(e);
   if (x < 0 || x > GW || y < 0 || y > GH) return;
   const lane = Math.max(0, Math.min(3, Math.floor(x / laneW)));
@@ -366,7 +367,10 @@ function addExtraImageEffect() {
     duration: parseFloat(document.getElementById('fx-extra-dur').value) || 2
   });
 }
-function addHitboxEffect() { pushEffect({ type: 'hitbox', time: editorTimer, zoneOn: 1, zoneTop: 420, zoneH: 160, tileScale: 1, tileOffset: 0 }); }
+function addHitboxEffect() {
+  pushEffect({ type: 'hitbox', time: editorTimer, zoneOn: 1, z0t: 400, z0h: 140, z1t: 400, z1h: 140, z2t: 400, z2h: 140, z3t: 400, z3h: 140 });
+  toast('Drag the cyan boxes on the board. Drag a box to move it, drag its bottom bar to resize it.');
+}
 function addTileMoveEffect() { pushEffect({ type: 'tilemove', time: editorTimer, mode: 0, amount: 60, duration: 2 }); }
 function addTileHideEffect() { pushEffect({ type: 'tilehide', time: editorTimer, mode: 0, fadeY: 200, duration: 3 }); }
 function addVideoEffect() {
@@ -448,11 +452,10 @@ function describeEffectFields(fx) {
       num('Fade out', 'outTrans', { step: 0.05, min: 0 });
       break;
     case 'hitbox':
-      sel('Input zone', 'zoneOn', [{ v: 1, l: 'On' }, { v: 0, l: 'Off (tap anywhere)' }]);
-      num('Zone top (0-640)', 'zoneTop', { step: 10, min: 0, max: 620 });
-      num('Zone height', 'zoneH', { step: 10, min: 20, max: 640 });
-      num('Tile hitbox scale', 'tileScale', { step: 0.1, min: 0.3, max: 3 });
-      num('Tile hitbox offset (px)', 'tileOffset', { step: 5, min: -200, max: 200 });
+      sel('Hitboxes', 'zoneOn', [{ v: 1, l: 'On (drag the boxes)' }, { v: 0, l: 'Off (tap anywhere)' }]);
+      fields.push({ label: 'Drag the cyan boxes on the board - one per lane. Tiles count as hit-able as soon as they touch their lane\'s box.', kind: 'note' });
+      fields.push({ label: '', kind: 'button', text: 'Make every lane match lane 1', onClick: fx => { for (let l = 1; l < 4; l++) { fx['z' + l + 't'] = fx.z0t; fx['z' + l + 'h'] = fx.z0h; } } });
+      fields.push({ label: '', kind: 'button', text: 'Reset boxes', onClick: fx => { for (let l = 0; l < 4; l++) { fx['z' + l + 't'] = 400; fx['z' + l + 'h'] = 140; } } });
       break;
     case 'tilemove':
       sel('Mode', 'mode', [{ v: 0, l: 'Shift sideways' }, { v: 1, l: 'Sway' }]);
@@ -503,6 +506,11 @@ function buildFieldsInto(container, fx) {
     if (f.kind === 'color') {
       input = document.createElement('input'); input.type = 'color'; input.value = fx[f.key] || '#000000';
       input.oninput = () => { fx[f.key] = input.value; onEffectFieldChanged(); };
+    } else if (f.kind === 'note') {
+      row.className = 'muted-note'; row.textContent = f.label; container.appendChild(row); return;
+    } else if (f.kind === 'button') {
+      input = document.createElement('button'); input.className = 'btn small btn-ghost'; input.textContent = f.text;
+      input.onclick = () => { f.onClick(fx); onEffectFieldChanged(); buildFieldsInto(container, fx); };
     } else if (f.kind === 'text') {
       input = document.createElement('input'); input.type = 'text'; input.value = fx[f.key] || '';
       input.oninput = () => { fx[f.key] = input.value.trim(); onEffectFieldChanged(); };
@@ -777,3 +785,31 @@ document.addEventListener('keydown', e => {
   if (k === 'z' && !e.shiftKey) { e.preventDefault(); editorUndo(); }
   else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); editorRedo(); }
 });
+
+
+// ---------------------------------------------------------------------------
+// Hitbox editor: drag the per-lane boxes on the board
+// ---------------------------------------------------------------------------
+let hbDrag = null;
+function handleHitboxPointer(e) {
+  const fx = selectedEffect;
+  if (!fx || fx.type !== 'hitbox' || Number(fx.zoneOn) !== 1) return false;
+  const { x, y } = boardPoint(e);
+  if (x < 0 || x > GW) return false;
+  const lane = Math.max(0, Math.min(3, Math.floor(x / laneW)));
+  const top = hbVal(fx, lane, 't', 400), h = Math.max(20, hbVal(fx, lane, 'h', 140));
+  if (y < top - 8 || y > top + h + 8) return false;
+  hbDrag = { lane, mode: y >= top + h - 20 ? 'resize' : 'move', startY: y, top0: top, h0: h };
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  return true;
+}
+canvas.addEventListener('pointermove', e => {
+  if (!hbDrag || !selectedEffect) return;
+  const { y } = boardPoint(e), dy = y - hbDrag.startY, l = hbDrag.lane;
+  const snap = v => Math.round(v / 5) * 5;
+  if (hbDrag.mode === 'move') selectedEffect['z' + l + 't'] = Math.max(0, Math.min(GH - hbDrag.h0, snap(hbDrag.top0 + dy)));
+  else selectedEffect['z' + l + 'h'] = Math.max(20, Math.min(GH - hbDrag.top0, snap(hbDrag.h0 + dy)));
+});
+const endHbDrag = () => { if (!hbDrag) return; hbDrag = null; onEffectFieldChanged(); };
+canvas.addEventListener('pointerup', endHbDrag);
+canvas.addEventListener('pointercancel', endHbDrag);
