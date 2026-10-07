@@ -480,6 +480,7 @@ function pressLane(laneIndex) {
   if (ok) {
     target.interacted = true; score += 10; notesHitThisGame++;
     for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
+    if (typeof playLaneSound === 'function') playLaneSound(laneIndex);
     if (globeOn && typeof globeTap === 'function') globeTap(target.noteIdx, laneIndex);
   } else if (nearestY - TILE_H < GH && nearestY + TILE_H > 0) {
     if (!handleHit()) die("WRONG ORDER!");
