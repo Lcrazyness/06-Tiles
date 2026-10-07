@@ -12,6 +12,8 @@ function saveAuthSession(token, user) {
   localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
   currentProfile = user.username;
   localStorage.setItem(CURRENT_PROFILE_KEY, currentProfile);
+  cosmeticTile = (user.cosmetics && user.cosmetics.tile) || 'default';
+  cosmeticFx = (user.cosmetics && user.cosmetics.fx) || 'default';
   refreshProfileButton();
   updateAdminButton(user);
   if (user && user.warning && !warningShown && !warningAckPending) showWarning(user.warning);
@@ -36,12 +38,14 @@ function renderAccountModal() {
   const st = (user && user.statistics) || {};
   modal.innerHTML = user ? screenHtml('ACCOUNT', 'closeAccountModal()', `
       <div class="panel profile-hero">
-        <div class="avatar big">${user.profileIcon ? '<img src="' + escapeHtml(user.profileIcon) + '" alt="">' : escapeHtml(user.username.slice(0, 1).toUpperCase())}</div>
-        <div><div class="hero-name">${escapeHtml(user.username)}</div><div class="hero-sub">Online account${user.isAdmin ? ' · Admin' : ''}</div></div>
+        <div class="avatar big ${frameClass(user)}">${user.profileIcon ? '<img src="' + escapeHtml(user.profileIcon) + '" alt="">' : escapeHtml(user.username.slice(0, 1).toUpperCase())}</div>
+        <div><div class="hero-name">${escapeHtml(user.username)}</div><div class="hero-sub">${escapeHtml(user.title || 'Online account')}${user.isAdmin ? ' · Admin' : ''}</div></div>
       </div>
       <label class="btn btn-ghost" for="profile-icon-upload">Change profile icon</label>
       <input type="file" id="profile-icon-upload" accept="image/*" style="display:none" onchange="uploadProfileIcon(event)">
       <div class="panel note">★ ${user.stars || 0} stars · ${user.creatorPoints || 0} creator points · Games ${st.gamesPlayed || 0} · Completed ${st.gamesCompleted || 0} · Best score ${st.bestScore || 0}</div>
+      ${xpPanelHtml(user)}${achievementsHtml(user)}${cosmeticsHtml(user)}
+      <button class="btn btn-ghost" onclick="openFriends()">👥 Friends</button>
       <button class="btn btn-ghost" onclick="logoutAccount()">Log out</button>`)
   : screenHtml('ACCOUNT', 'closeAccountModal()', `
       <div class="panel note">Log in to publish levels, rate them, show up on leaderboards and battle under your own name.</div>
@@ -105,7 +109,7 @@ function authFetch(url, options = {}) {
 
 function beginStatsGame() { statsGameFinalized = false; }
 async function finishStatsGame(completed) {
-  if (statsGameFinalized || !getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode) return;
+  if (statsGameFinalized || !getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode || practiceMode) return;
   // Only levels played from Browse > Levels count - not the endless modes, loaded files or your own levels
   // (the server also refuses your own published levels).
   const a = lastStartArgs;
@@ -114,7 +118,10 @@ async function finishStatsGame(completed) {
   statsGameFinalized = true;
   const before = getAuthUser();
   try {
-    const data = await apiRequest('/api/stats/game', { method: 'POST', auth: true, body: { levelId: lvl.id, started: true, completed: !!completed, score: Math.floor(score), notesHit: notesHitThisGame } });
+    const data = await apiRequest('/api/stats/game', { method: 'POST', auth: true, body: { levelId: lvl.id, started: true, completed: !!completed, score: Math.floor(score), notesHit: notesHitThisGame,
+      pct: Math.max(0, Math.min(100, Math.floor(customPlayTime / Math.max(1, levelLastNoteTime) * 100))), elapsed: (performance.now() - runStartedAt) / 1000 } });
+    if (data.dailyBonus) toast('Daily level bonus: +' + data.dailyBonus + ' ★', 'good');
+    if (typeof loadMyProgress === 'function') loadMyProgress();
     if (data.user) {
       saveAuthSession(getAuthToken(), data.user);
       const gained = Number(data.user.stars || 0) - Number((before && before.stars) || 0);
@@ -149,7 +156,7 @@ function statsGridHtml(st, u) {
     <div class="stat-card"><span>TOTAL SCORE</span><b>${n(st.totalScore)}</b></div>
     <div class="stat-card"><span>NOTES HIT</span><b>${n(st.totalNotesHit)}</b></div>
     <div class="stat-card"><span>BATTLE WIN RATE</span><b>${formatBattleWinRate(st)}</b></div></div>` + difficultyBeatenHtml(u) +
-    '<div class="note center">Games, score and notes only count levels played from Browse (not your own levels).</div>';
+    xpPanelHtml(u) + achievementsHtml(u) + '<div class="note center">Games, score and notes only count levels played from Browse (not your own levels).</div>';
 }
 
 async function openStatsModal() {
@@ -243,3 +250,48 @@ setInterval(() => {
     .then(d => { if (d && d.user) saveAuthSession(getAuthToken(), d.user); })
     .catch(e => { if (e && e.status === 401) clearAuthSession(); });
 }, 30000);
+
+
+// ---------------------------------------------------------------------------
+// XP / achievements / cosmetics
+// ---------------------------------------------------------------------------
+const ACH_INFO = {
+  first_clear: ['First Clear', 'Complete a level'], rated_clear: ['Rated!', 'Beat a rated level'], insane: ['Insane', 'Beat an Insane rated level'], extreme: ['Extreme', 'Beat an Extreme rated level'],
+  notes_1k: ['1,000 Notes', 'Hit 1,000 notes'], notes_10k: ['10,000 Notes', 'Hit 10,000 notes'], win_1: ['First Blood', 'Win a battle'], win_10: ['Duelist', 'Win 10 battles'],
+  creator_1: ['Creator', 'Have a level rated'], list_1: ['On the List', 'Beat a List level'], stars_25: ['25 Stars', 'Earn 25 stars'], stars_100: ['100 Stars', 'Earn 100 stars'],
+  ep_500: ['500 EP', 'Earn 500 Extreme Points'], level_10: ['Level 10', 'Reach player level 10'], elo_1200: ['Rated 1200', 'Reach 1200 battle rating']
+};
+const COSMETIC_INFO = {
+  tile: { default: ['Classic', ''], ice: ['Ice', '5 stars'], gold: ['Gold', '25 stars'], neon: ['Neon', '100 Extreme Points'], royal: ['Royal', 'Have a level rated'] },
+  fx: { default: ['Cyan', ''], sparkle: ['Sparkle', '10 stars'], fire: ['Fire', '250 Extreme Points'], confetti: ['Confetti', '5 battle wins'] },
+  frame: { none: ['None', ''], bronze: ['Bronze', 'Level 5'], silver: ['Silver', 'Level 15'], gold: ['Gold', 'Level 30'], creator: ['Creator', 'Have a level rated'], list: ['List', 'Beat a List level'] }
+};
+const frameClass = u => 'frame-' + ((u && ((u.cosmetics && u.cosmetics.frame) || u.frame)) || 'none');
+
+function xpPanelHtml(u) {
+  if (!u || u.level === undefined) return '';
+  const base = 100 * (u.level - 1) * (u.level - 1), span = Math.max(1, u.xpNext - base);
+  const pct = Math.max(0, Math.min(100, Math.round((u.xp - base) / span * 100)));
+  return `<div class="panel"><div class="xp-line"><b>Lv ${u.level} · ${escapeHtml(u.title || '')}</b><span>${Number(u.xp).toLocaleString()} XP</span></div><div class="xp-bar"><i style="width:${pct}%"></i></div>
+    <div class="note center">Battle rating <b>${u.elo || 1000}</b></div></div>`;
+}
+function achievementsHtml(u) {
+  const have = new Set((u && u.achievements) || []);
+  return '<div class="panel"><div class="section-title">ACHIEVEMENTS ' + have.size + '/' + Object.keys(ACH_INFO).length + '</div><div class="ach-grid">' +
+    Object.keys(ACH_INFO).map(id => `<div class="ach ${have.has(id) ? 'on' : ''}" title="${escapeHtml(ACH_INFO[id][1])}"><b>${have.has(id) ? '★' : '🔒'}</b><span>${escapeHtml(ACH_INFO[id][0])}</span></div>`).join('') + '</div></div>';
+}
+function cosmeticsHtml(u) {
+  if (!u || !u.unlocked) return '';
+  const row = kind => '<div class="cos-row"><span class="cos-kind">' + kind.toUpperCase() + '</span>' + Object.keys(COSMETIC_INFO[kind]).map(id => {
+    const ok = u.unlocked[kind].includes(id), on = (u.cosmetics || {})[kind] === id;
+    return `<button class="cos ${on ? 'on' : ''}" ${ok ? '' : 'disabled'} onclick="equipCosmetic('${kind}','${id}')" title="${ok ? '' : 'Unlock: ' + escapeHtml(COSMETIC_INFO[kind][id][1])}">${escapeHtml(COSMETIC_INFO[kind][id][0])}${ok ? '' : ' 🔒'}</button>`;
+  }).join('') + '</div>';
+  return '<div class="panel"><div class="section-title">COSMETICS</div>' + row('tile') + row('fx') + row('frame') + '</div>';
+}
+async function equipCosmetic(kind, id) {
+  const u = getAuthUser(); if (!u) return;
+  try {
+    const data = await apiRequest('/api/profile/cosmetics', { method: 'PATCH', auth: true, body: Object.assign({}, u.cosmetics, { [kind]: id }) });
+    saveAuthSession(getAuthToken(), data.user); renderAccountModal();
+  } catch (e) { toast(e.message, 'bad'); }
+}
