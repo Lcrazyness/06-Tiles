@@ -246,3 +246,5 @@ input:focus{border-color:var(--blue)}
 .spec-bars{display:flex;flex-direction:column;gap:6px;margin-top:12px}.spec-name{font-weight:700;font-size:13px}
 .race-track{height:14px;border-radius:8px;background:rgba(255,255,255,.1);overflow:hidden}.race-track i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--gold));transition:width .2s}
 .hero-name.center{text-align:center}
+
+.ls-btns{display:flex;gap:6px}#lane-sounds-panel .settings-row{gap:10px}
