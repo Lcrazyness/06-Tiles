@@ -113,3 +113,14 @@ let cosmeticTile = 'default', cosmeticFx = 'default';
 let currentDraft = null;                            // { id, rev, role } while editing a shared level
 
 let editorStartPos = null, startPosArmed = false;   // Geometry-Dash-style start position (editor playtests begin here)
+
+// --- v5 ---
+let maxBpm = 500;                                   // admins can change this (server setting)
+let practiceCheckpoints = [], practiceBaseSec = 0;  // GD-style practice: P places a checkpoint, O removes the last
+let editorStartPositions = [], activeStartIdx = -1, levelStartPositions = [];
+let currentAudioBlob = null, currentAttempt = 0;
+const globePresence = { count: 0 };
+const SHORTCUT_DEFAULTS = { pPlace: 'p', pRemove: 'o', sPrev: 'q', sNext: 'e', switcher: true };
+let shortcuts = Object.assign({}, SHORTCUT_DEFAULTS, (() => { try { return JSON.parse(localStorage.getItem('et_shortcuts') || '{}'); } catch (e) { return {}; } })());
+function bumpAttempts(id) { let m = {}; try { m = JSON.parse(localStorage.getItem('et_attempts') || '{}'); } catch (e) {} m[id] = (m[id] || 0) + 1; try { localStorage.setItem('et_attempts', JSON.stringify(m)); } catch (e) {} return m[id]; }
+function getAttempts(id) { try { return (JSON.parse(localStorage.getItem('et_attempts') || '{}'))[id] || 0; } catch (e) { return 0; } }
