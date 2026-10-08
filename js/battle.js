@@ -55,7 +55,10 @@ async function connectBattle() {
     if (err && err.message === 'banned') { setBattleConn('error', 'Account banned'); toast('Your account is banned.', 'bad'); return; }
     setBattleConn('error', 'Server unreachable - tap to retry');
   });
-  s.on('globe_tap', d => { if (globeOn) globeGhosts.set(d.name, { idx: d.idx, lane: d.lane, ts: performance.now() }); });
+  s.on('globe_tap', d => { if (globeOn) globeGhosts.set(d.name, { idx: d.idx, lane: d.lane, ts: performance.now(), pct: d.idx / Math.max(1, pendingTiles.length) }); });
+  s.on('globe_presence', d => { globePresence.count = d.count; });
+  s.on('announcement', d => uiAlert(d.message, '📢 Announcement'));
+  s.on('settings_changed', d => { if (d.maxBpm) maxBpm = d.maxBpm; showAnnouncement(d.announcement); });
   s.on('elo_change', d => toast('Battle rating ' + (d.delta >= 0 ? '+' : '') + d.delta, d.delta >= 0 ? 'good' : 'bad'));
   s.on('friend_request', d => toast(d.from + ' sent you a friend request.'));
   s.on('spectate_matches', list => renderSpectateList(list));
