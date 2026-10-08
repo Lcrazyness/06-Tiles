@@ -50,7 +50,7 @@ function toggleEditorSnap() {
 function onBpmChanged(value) {
   const bpm = Number(value);
   if (!Number.isFinite(bpm)) return;
-  editorBpm = Math.max(30, Math.min(300, bpm));
+  editorBpm = Math.max(30, Math.min(maxBpm, bpm));
   updateGridReadout();
 }
 function onGridOffsetChanged(value) {
@@ -183,7 +183,7 @@ function updateDrawerBackdrop() {
 // ---------------------------------------------------------------------------
 function timelineMax() {
   let maxT = 30;
-  if (bgAudio.duration && isFinite(bgAudio.duration)) maxT = Math.max(maxT, bgAudio.duration);
+  if (bgAudio.duration && isFinite(bgAudio.duration)) maxT = Math.max(maxT, bgAudio.duration - editorOffsetMs() / 1000);
   recordedTiles.forEach(t => { if (t.time + 5 > maxT) maxT = t.time + 5; });
   recordedEffects.forEach(e => { if (e.time + 5 > maxT) maxT = e.time + 5; });
   return maxT;
@@ -239,7 +239,7 @@ function updateEditorPlayhead() {
 
 function setEditorTime(t) {
   editorTimer = Math.max(0, t);
-  if (bgAudio.src && !editorPlaying) { try { bgAudio.currentTime = editorTimer; } catch (e) {} }
+  if (bgAudio.src && !editorPlaying) { try { bgAudio.currentTime = Math.max(0, songPos(editorTimer)); } catch (e) {} }
   updateEditorPlayhead();
   if (!document.getElementById('effects-menu').classList.contains('hidden')) updateEffectPlayheadDisplays();
 }
@@ -247,7 +247,7 @@ function setEditorTime(t) {
 function scrubTimeline(value) {
   const wasPlaying = editorPlaying;
   setEditorTime(parseFloat(value) || 0);
-  if (wasPlaying && bgAudio.src) { try { bgAudio.currentTime = editorTimer; } catch (e) {} }
+  if (wasPlaying && bgAudio.src) { try { bgAudio.currentTime = Math.max(0, songPos(editorTimer)); } catch (e) {} }
 }
 function nudgeEditorTime(delta) { setEditorTime(editorTimer + delta); }
 
@@ -259,11 +259,12 @@ function jumpEditorEnd() {
 }
 
 // Called every frame by the game loop while the editor is showing.
-let editorUiAccum = 0;
+let editorUiAccum = 0, editorSongWaiting = false;
 function editorTick(dtSec) {
   if (!editorPlaying) return;
   const audioPlaying = bgAudio.src && !bgAudio.paused && !bgAudio.ended;
-  if (audioPlaying) editorTimer = bgAudio.currentTime;   // the song is the master clock when there is one
+  if (editorSongWaiting && songPos(editorTimer) >= 0) { editorSongWaiting = false; try { bgAudio.currentTime = songPos(editorTimer); } catch (e) {} bgAudio.play().catch(() => {}); }
+  if (audioPlaying) editorTimer = bgAudio.currentTime - editorOffsetMs() / 1000;   // the song is the master clock when there is one
   else editorTimer += dtSec;
   editorUiAccum += dtSec;
   if (editorUiAccum >= 0.05) { editorUiAccum = 0; updateEditorPlayhead(); }
@@ -274,7 +275,10 @@ function toggleEditorTransport() {
   const btn = document.getElementById('editor-transport-btn');
   if (btn) btn.innerText = editorPlaying ? '⏸' : '▶';
   if (editorPlaying) {
-    if (bgAudio.src) { try { bgAudio.currentTime = editorTimer; } catch (e) {} bgAudio.play().catch(() => {}); }
+    if (bgAudio.src) {
+      if (songPos(editorTimer) >= 0) { try { bgAudio.currentTime = songPos(editorTimer); } catch (e) {} bgAudio.play().catch(() => {}); editorSongWaiting = false; }
+      else { bgAudio.pause(); editorSongWaiting = true; }   // negative music offset: the song joins in later
+    }
   } else {
     bgAudio.pause();
     if (isRecording) {
@@ -597,7 +601,7 @@ function getEffectTimelineDuration() {
   let maxT = 20;
   recordedTiles.forEach(t => maxT = Math.max(maxT, t.time + (t.holdDuration || 0) + 3));
   recordedEffects.forEach(e => maxT = Math.max(maxT, e.time + (e.duration || 0.5) + 3));
-  if (bgAudio.duration && isFinite(bgAudio.duration)) maxT = Math.max(maxT, bgAudio.duration);
+  if (bgAudio.duration && isFinite(bgAudio.duration)) maxT = Math.max(maxT, bgAudio.duration - editorOffsetMs() / 1000);
   return maxT;
 }
 
