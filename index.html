@@ -139,12 +139,13 @@
   <div class="center-panel"><h2>PAUSED</h2>
     <button class="btn btn-play" onclick="resumeGame()">▶ RESUME</button>
     <button class="btn btn-ghost" onclick="restartGame()">↻ Restart</button>
+    <button class="btn btn-ghost" id="pause-practice-btn" onclick="togglePracticeFromPause()">🎯 Practice mode</button>
     <button class="btn btn-ghost" id="pause-quit-btn" onclick="quitPlaytestOrGame()">Quit to menu</button>
     <button class="btn btn-danger hidden" id="pause-stop-btn" onclick="stopPlaytestFromDeath()">Stop playtesting</button>
   </div>
 </div>
 <div id="death-screen" class="overlay overlay-dim hidden">
-  <div class="center-panel"><h1 id="death-title">FAILED</h1><div id="death-stars" class="stars"></div><p id="final-score" class="final-score">Score: 0</p>
+  <div class="center-panel"><h1 id="death-title">FAILED</h1><div id="death-stars" class="stars"></div><p id="final-score" class="final-score">Score: 0</p><div id="death-info" class="death-info"></div>
     <button id="death-retry-btn" class="btn btn-play" onclick="restartGame()">RETRY <kbd>Space</kbd></button>
     <button id="death-editor-btn" class="btn btn-ghost hidden" onclick="backToEditorFromDeath()">✎ Back to editor</button>
     <button id="death-quit-btn" class="btn btn-ghost" onclick="quitPlaytestOrGame()">Quit to menu</button>
@@ -222,12 +223,12 @@
   <div class="screen-header"><button class="back-btn" onclick="closeEditorSettingsMenu()">‹</button><h2>LEVEL SETTINGS</h2><div class="header-right"></div></div>
   <div class="screen-body"><div class="screen-col">
     <div class="section-title">TIMING &amp; SNAPPING</div>
-    <div class="settings-row"><span>BPM</span><input type="number" id="edit-bpm" value="120" min="30" max="300" step="0.5" oninput="onBpmChanged(this.value)" class="num-in"></div>
+    <div class="settings-row"><span>BPM</span><input type="number" id="edit-bpm" value="120" min="30" max="500" step="0.5" oninput="onBpmChanged(this.value)" class="num-in"></div>
     <div class="settings-row"><span>Grid offset (s)</span><input type="number" id="edit-grid-offset" value="0" step="0.01" oninput="onGridOffsetChanged(this.value)" class="num-in"></div>
     <div class="note">Grid step: <b id="grid-readout">0.250s</b> · <b id="bpm-readout">120 BPM</b>. Set BPM + offset to match your song so tiles snap to the beat. Pick the subdivision (1/1 … 1/8) on the timeline.</div>
     <div class="section-title">PLAY SETTINGS</div>
     <div class="settings-row"><span>Target FPS</span><input type="number" id="edit-fps" value="60" min="10" max="240" class="num-in"></div>
-    <div class="settings-row"><span>Audio offset (ms)</span><input type="number" id="edit-audio-offset" value="0" class="num-in"></div>
+    <div class="settings-row"><span>Music offset (ms) <small>+ = song plays earlier · − = song plays later</small></span><input type="number" id="edit-audio-offset" value="0" class="num-in"></div>
     <div class="settings-row"><span>Disable hold tiles</span><input type="checkbox" id="edit-disable-holds"></div>
     <div class="settings-row"><span>Lock tile look <small>(ignore players' custom tile colors &amp; effects)</small></span><input type="checkbox" id="edit-lock-cos"></div>
     <div class="settings-row"><span>Strict mode <small>(hit tile 1 before tile 2 - no skipping)</small></span><input type="checkbox" id="edit-strict"></div>
@@ -314,6 +315,8 @@
 <div id="dialog" class="hidden"><div class="dialog-box"><h3 id="dialog-title"></h3><p id="dialog-msg"></p><input type="text" id="dialog-input" class="hidden" maxlength="80">
   <div class="row-btns"><button class="btn btn-ghost" id="dialog-cancel">Cancel</button><button class="btn btn-play" id="dialog-ok">OK</button></div></div></div>
 <div id="toast-host"></div>
+<div id="attempt-hud" class="hidden"></div>
+<div id="announcement-bar" class="hidden"></div>
 <div id="warning-screen" class="hidden"></div>
 
 <script src="js/config.js?v=20261005-3"></script>
