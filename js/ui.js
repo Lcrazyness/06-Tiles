@@ -305,3 +305,45 @@ const LaneSounds = (() => {
 })();
 function playLaneSound(lane) { LaneSounds.play(lane); }
 document.addEventListener('DOMContentLoaded', () => { LaneSounds.buildPanel(); LaneSounds.load(); });
+
+
+// ---------------------------------------------------------------------------
+// Admin-controlled settings + announcement banner
+// ---------------------------------------------------------------------------
+async function loadAppSettings() {
+  if (typeof API_BASE_URL === 'undefined' || !API_BASE_URL) return;
+  try {
+    const d = await apiRequest('/api/settings');
+    maxBpm = d.maxBpm || 500;
+    const bpmIn = document.getElementById('edit-bpm'); if (bpmIn) bpmIn.max = maxBpm;
+    showAnnouncement(d.announcement);
+  } catch (e) {}
+}
+function showAnnouncement(text) {
+  const bar = document.getElementById('announcement-bar'); if (!bar) return;
+  if (!text || localStorage.getItem('et_annSeen') === text) { bar.classList.add('hidden'); return; }
+  bar.innerHTML = '<span></span><button onclick="dismissAnnouncement()" aria-label="Dismiss">×</button>';
+  bar.firstChild.textContent = '📢 ' + text; bar.dataset.text = text; bar.classList.remove('hidden');
+}
+function dismissAnnouncement() { const bar = document.getElementById('announcement-bar'); if (bar) { localStorage.setItem('et_annSeen', bar.dataset.text || ''); bar.classList.add('hidden'); } }
+
+// ---------------------------------------------------------------------------
+// Shortcuts settings: practice checkpoint keys + start position switcher
+// ---------------------------------------------------------------------------
+function buildShortcutsPanel() {
+  const host = document.querySelector('#settings-menu .screen-col') || document.querySelector('#settings-menu .screen-body');
+  if (!host || document.getElementById('shortcuts-panel')) return;
+  const row = (id, label) => `<label>${label}<input id="sc-${id}" maxlength="1" value="${escapeHtml(shortcuts[id])}"></label>`;
+  host.insertAdjacentHTML('beforeend', `<div class="panel" id="shortcuts-panel"><div class="section-title">PRACTICE & START POSITIONS</div>
+    <div class="shortcut-grid">${row('pPlace', 'Place checkpoint')}${row('pRemove', 'Remove checkpoint')}${row('sPrev', 'Previous start pos')}${row('sNext', 'Next start pos')}</div>
+    <div class="settings-row"><span>Start position switcher <small>(Q / E in practice mode and editor playtests)</small></span><input type="checkbox" id="sc-switcher" ${shortcuts.switcher ? 'checked' : ''}></div></div>`);
+  const save = () => {
+    const keys = ['pPlace', 'pRemove', 'sPrev', 'sNext'].map(id => (document.getElementById('sc-' + id).value || '').toLowerCase());
+    if (keys.some(k => !/^[a-z0-9]$/.test(k)) || new Set(keys).size !== 4) { toast('Each shortcut needs its own single letter or number.', 'bad'); return; }
+    if (keys.some(k => keyMap.includes(k))) { toast('A shortcut can\'t share a key with a lane.', 'bad'); return; }
+    shortcuts = { pPlace: keys[0], pRemove: keys[1], sPrev: keys[2], sNext: keys[3], switcher: document.getElementById('sc-switcher').checked };
+    localStorage.setItem('et_shortcuts', JSON.stringify(shortcuts)); toast('Shortcuts saved.', 'good');
+  };
+  host.querySelectorAll('#shortcuts-panel input').forEach(i => i.addEventListener('change', save));
+}
+document.addEventListener('DOMContentLoaded', () => { buildShortcutsPanel(); loadAppSettings(); setInterval(loadAppSettings, 5 * 60 * 1000); });
