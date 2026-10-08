@@ -200,6 +200,7 @@ async function playLevelEntry(level, source) {
   if (source === 'local') {
     registerPlay(level.id, false);
     currentEditingId = null;
+    await attachLocalAudio(level);
     startGame(level.name, true, -1, level.data, level.effects || [], false, level);
     return;
   }
@@ -226,6 +227,7 @@ function openLevelDetail(level, source, fromAdmin = false) {
     <button class="btn btn-play" id="detail-play">▶ PLAY</button>
     ${online ? '<button class="btn btn-ghost" id="detail-practice">🎯 Practice (checkpoints)</button><button class="btn btn-ghost" id="detail-board">🏆 Level leaderboard</button><button class="btn btn-ghost" id="detail-comments">💬 Comments</button><button class="btn btn-ghost" id="detail-report">⚑ Report</button>' : ''}
     ${source === 'mine-online' ? '<button class="btn btn-ghost" id="detail-versions">⏪ Versions / roll back</button>' : ''}
+    ${source === 'local' && level.verifiedHash ? '<button class="btn btn-ghost" id="detail-unverify">✔ Verified - clear verification</button>' : ''}
     ${source === 'local' ? '<button class="btn btn-ghost" id="detail-edit">✎ Edit</button><button class="btn btn-danger" id="detail-del">Delete from device</button>' : ''}
     ${source === 'mine-online' ? '<button class="btn btn-ghost" id="detail-edit-online">✎ Edit (updates it publicly)</button><button class="btn btn-danger" id="detail-unpub">Remove from Browse</button>' : ''}
     ${isAdminUser() && source !== 'local' ? '<div class="section-title">ADMIN</div><button class="btn btn-ghost" id="detail-admin-rate">★ Rate / edit rating</button><button class="btn btn-ghost" id="detail-admin-list">🏆 Set list position</button>' : ''}`;
@@ -234,7 +236,11 @@ function openLevelDetail(level, source, fromAdmin = false) {
   document.getElementById('detail-play').onclick = () => playLevelEntry(level, source);
   const q = id => document.getElementById(id);
   const pr = online && level.id && myProgress[level.id];
-  if (q('detail-best') && pr) q('detail-best').textContent = 'Your best: ' + (pr.completed ? 'completed ✔' : pr.bestPct + '%') + ' · score ' + Number(pr.bestScore).toLocaleString();
+  { const bits = []; if (pr) bits.push('Your best: ' + (pr.completed ? 'completed ✔' : pr.bestPct + '%') + ' · score ' + Number(pr.bestScore).toLocaleString());
+    const at = getAttempts(level.id); if (at) bits.push('Attempts: ' + at);
+    if (source === 'local' && level.verifiedHash && level.verifiedHash === hashString(JSON.stringify(level.data))) bits.push('Verified ✔');
+    if (q('detail-best')) q('detail-best').textContent = bits.join(' · ');
+    if (q('detail-unverify')) q('detail-unverify').onclick = () => { delete level.verifiedHash; persistMyLevels(); toast('Verification cleared.'); openLevelDetail(level, source); }; }
   if (q('detail-practice')) q('detail-practice').onclick = () => practiceLevel(level);
   if (q('detail-board')) q('detail-board').onclick = () => openLevelBoard(level);
   if (q('detail-comments')) q('detail-comments').onclick = () => openComments(level);
@@ -283,16 +289,19 @@ async function loadAdminPanel(tab) {
   const draw = (inner, overview) => {
     const unread = overview ? overview.unreadNotifications : 0;
     const tb = (id, label) => `<button class="tab ${adminTab === id ? 'active' : ''}" onclick="loadAdminPanel('${id}')">${label}</button>`;
-    modal.innerHTML = screenHtml('ADMIN', null, `<div class="tabs">${tb('alerts', 'Alerts' + (unread ? ' (' + unread + ')' : ''))}${tb('levels', 'Levels')}${tb('players', 'Players')}</div>` + inner, '<button class="btn small" onclick="loadAdminPanel()">↻</button>');
+    modal.innerHTML = screenHtml('ADMIN', null, `<div class="tabs admin-tabs wrap">${tb('alerts', 'Alerts' + (unread ? ' (' + unread + ')' : ''))}${tb('reports', 'Reports' + (overview && overview.pendingReports ? ' (' + overview.pendingReports + ')' : ''))}${tb('levels', 'Levels')}${tb('players', 'Players')}${tb('log', 'Log')}${tb('settings', 'Settings')}</div>` + inner, '<button class="btn small" onclick="loadAdminPanel()">↻</button>');
   };
   toggleMenu('admin-panel');
   if (!getAuthToken()) { draw('<div class="empty">Log in as an admin first.</div>'); return; }
   draw('<div class="empty">Loading…</div>');
   try {
     const overview = await apiRequest('/api/admin/overview', { auth: true });
-    const stats = `<div class="stats-grid three"><div class="stat-card"><span>PLAYERS</span><b>${overview.users}</b></div><div class="stat-card"><span>LEVELS</span><b>${overview.levels}</b></div><div class="stat-card"><span>ONLINE NOW</span><b>${overview.onlineNow}</b></div></div>`;
+    const stats = `<div class="stats-grid three"><div class="stat-card"><span>PLAYERS</span><b>${overview.users}</b></div><div class="stat-card"><span>LEVELS</span><b>${overview.levels}</b></div><div class="stat-card"><span>ONLINE NOW</span><b>${overview.onlineNow}</b></div><div class="stat-card"><span>NEW USERS 24H</span><b>${overview.newUsers24h}</b></div><div class="stat-card"><span>NEW LEVELS 24H</span><b>${overview.newLevels24h}</b></div><div class="stat-card"><span>BANNED / MUTED</span><b>${overview.banned} / ${overview.muted}</b></div></div>`;
     if (adminTab === 'alerts') draw(stats + await adminAlertsHtml(), overview);
     else if (adminTab === 'players') draw(stats + await adminPlayersHtml(), overview);
+    else if (adminTab === 'reports') draw(stats + await adminReportsHtml(), overview);
+    else if (adminTab === 'log') draw(await adminLogHtml(), overview);
+    else if (adminTab === 'settings') draw(await adminSettingsHtml(), overview);
     else draw(stats + await adminLevelsHtml(), overview);
     updateAdminButton(getAuthUser());
   } catch (e) { draw(errorBox(e.message, 'loadAdminPanel()')); }
@@ -326,7 +335,7 @@ async function adminLevelsHtml() {
       <div class="song-row admin-row"><div class="song-art" style="${l.icon ? '' : 'background:' + artGradient(l.name)}">${l.icon ? '<img src="' + escapeHtml(l.icon) + '" alt="">' : '♪'}</div>
         <div class="song-info"><div class="song-title">${escapeHtml(l.name)}</div><div class="song-sub">by ${escapeHtml(l.author)} · ★ ${Number(l.ratingAverage || 0).toFixed(1)} · ▶ ${l.plays}</div>
           <div class="song-meta"><span class="diff-badge ${difficultyBadgeClass(l.difficulty)}">${l.difficulty}</span>${l.featured ? '<span class="feat">★ ' + l.ratedStars + ' RATED</span>' : ''}${l.listPosition ? '<span class="feat list">#' + l.listPosition + ' · ' + l.listPoints + ' EP</span>' : ''}</div></div>
-        <div class="admin-actions"><button class="btn small" onclick="adminRateById('${l.id}')">${l.featured ? 'Edit rating' : 'Rate'}</button><button class="btn small btn-ghost" onclick="adminListById('${l.id}')">List</button><button class="btn small btn-danger" onclick="deleteAdminLevel('${l.id}')">Delete</button></div></div>`).join('') : '<div class="empty">No levels.</div>'}</div>`;
+        <div class="admin-actions"><button class="btn small" onclick="adminRateById('${l.id}')">${l.featured ? 'Edit rating' : 'Rate'}</button><button class="btn small btn-ghost" onclick="adminListById('${l.id}')">List</button><button class="btn small btn-ghost" onclick="adminEditLevel('${l.id}')">Edit</button>${l.hasAudio ? `<button class="btn small btn-ghost" onclick="adminRemoveAudio('${l.id}')">🎵✕</button>` : ''}<button class="btn small btn-ghost" onclick="adminMakeDaily('${l.id}')">Daily</button><button class="btn small btn-danger" onclick="deleteAdminLevel('${l.id}')">Delete</button></div></div>`).join('') : '<div class="empty">No levels.</div>'}</div>`;
 }
 
 let adminLevelCache = {};
@@ -394,10 +403,11 @@ async function adminPlayerMenu(id) {
       { value: 'history', label: '📜 View history' }, { value: 'warn', label: '⚠ Send a warning' }, { value: 'ban', label: '🚫 Ban for a while' },
       ...(p.banned ? [{ value: 'unban', label: '✔ Lift the ban' }] : []),
       ...(p.owner ? [] : p.isAdmin ? [{ value: 'demote', label: '🛡 Remove admin (owners only)' }] : [{ value: 'promote', label: '🛡 Make admin' }]),
-      { value: 'reset', label: '🗑 Remove all their stats' }] }], okText: 'Next'
+      { value: 'reset', label: '🗑 Remove all their stats' }, ...adminExtraOptions(p)] }], okText: 'Next'
   });
   if (!r) return;
   try {
+    if (await adminExtraAction(r.action, p)) return;
     if (r.action === 'history') await adminShowHistory(p);
     else if (r.action === 'warn') await adminWarn(p);
     else if (r.action === 'ban') await adminBan(p);
@@ -467,6 +477,7 @@ function renderLevelCard(level, source) {
   if (info) {
     const extra = [];
     if (level.strictMode) extra.push('<span class="feat strict">STRICT</span>');
+    if (level.hasAudio) extra.push('<span class="tag">🎵 music</span>');
     (level.tags || []).forEach(t => extra.push('<span class="tag">' + escapeHtml(t) + '</span>'));
     if (pr) extra.push('<span class="best-pct' + (pr.completed ? ' done' : '') + '">' + (pr.completed ? '✔ 100%' : 'Best ' + pr.bestPct + '%') + '</span>');
     if (extra.length) info.insertAdjacentHTML('beforeend', '<div class="song-meta">' + extra.join('') + '</div>');
@@ -502,7 +513,7 @@ async function practiceLevel(level) {
     const v = await uiPrompt('Start from what percent of the level? (0-95). Checkpoints are set every 10%, or press C. Practice runs don\'t count for stats.', '0', 'Start');
     if (v === null) return;
     const pct = Math.max(0, Math.min(95, Number(v) || 0));
-    practiceArmed = true; practiceStartSec = last * pct / 100; practiceCheckpoint = practiceStartSec;
+    practiceArmed = true; practiceStartSec = last * pct / 100; practiceBaseSec = practiceStartSec; practiceCheckpoints = [];
     levelDetailReturnTo = 'browse-levels-menu';
     startGame(full.name, true, -1, full.data, full.effects || [], true, full);
   } catch (e) { toast(e.message, 'bad'); }
@@ -547,8 +558,9 @@ async function openVersions(level) {
     const d = await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/versions', { auth: true });
     const el = document.getElementById('level-detail-menu');
     el.innerHTML = screenHtml('VERSIONS', null, `<div class="hero-name">${escapeHtml(level.name)}</div><div class="note center">Every update keeps the previous version (last 10). Roll back to undo a bad update.</div>` +
-      (d.versions.length ? '<div class="song-list">' + d.versions.map(v => `<div class="song-row"><div class="song-info"><div class="song-title">${escapeHtml(v.name)}</div><div class="song-sub">${new Date(v.savedAt).toLocaleString()} · ${v.tiles} tiles</div></div><button class="btn small" data-v="${v.id}">Roll back</button></div>`).join('') + '</div>' : '<div class="empty">No older versions yet.</div>'));
+      (d.versions.length ? '<div class="song-list">' + d.versions.map(v => `<div class="song-row"><div class="song-info"><div class="song-title">${escapeHtml(v.name)}</div><div class="song-sub">${new Date(v.savedAt).toLocaleString()} · ${v.tiles} tiles</div></div><button class="btn small" data-v="${v.id}">Roll back</button><button class="btn small btn-danger" data-dv="${v.id}">✕</button></div>`).join('') + '</div>' : '<div class="empty">No older versions yet.</div>'));
     el.querySelector('.back-btn').onclick = () => openLevelDetail(level, 'mine-online');
+    el.querySelectorAll('[data-dv]').forEach(b => { b.onclick = async () => { try { await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/versions/' + b.dataset.dv, { method: 'DELETE', auth: true }); openVersions(level); } catch (e) { toast(e.message, 'bad'); } }; });
     el.querySelectorAll('[data-v]').forEach(b => { b.onclick = async () => {
       if (!(await uiConfirm('Roll the public level back to this version? The current one is kept as a version too.', 'Roll back', true))) return;
       try { await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/rollback', { method: 'POST', auth: true, body: { versionId: Number(b.dataset.v) } }); toast('Rolled back.', 'good'); openVersions(level); } catch (e) { toast(e.message, 'bad'); } }; });
@@ -597,7 +609,7 @@ async function openShared() {
   try {
     const d = await apiRequest('/api/drafts', { auth: true });
     el.innerHTML = screenHtml('SHARED LEVELS', "openMyLevels()", '<div class="note center">Levels you share (from the editor menu: 👥 Collab) or that others shared with you. A set verifier has to beat the level before the owner can publish it.</div>' +
-      (d.drafts.length ? '<div class="song-list">' + d.drafts.map(x => `<div class="song-row"><div class="song-art" style="background:${artGradient(x.name)}">♪</div><div class="song-info"><div class="song-title">${escapeHtml(x.name)}</div><div class="song-sub">by ${escapeHtml(x.owner)} · you are ${x.role} · ${x.tileCount} tiles · v${x.rev}</div><div class="song-meta">${x.verifier ? '<span class="tag">verifier: ' + escapeHtml(x.verifier) + '</span>' : ''}${x.verified ? '<span class="feat">✔ VERIFIED' + (x.verifiedBy ? ' by ' + escapeHtml(x.verifiedBy) : '') + '</span>' : '<span class="tag">not verified</span>'}${x.published ? '<span class="tag">published</span>' : ''}</div></div><div class="admin-actions"><button class="btn small btn-play" onclick="openDraft('${x.id}')">${x.role === 'verifier' ? 'Verify' : 'Open'}</button>${x.role === 'owner' ? `<button class="btn small btn-danger" onclick="deleteDraft('${x.id}')">✕</button>` : ''}</div></div>`).join('') + '</div>' : '<div class="empty">Nothing shared yet.</div>'));
+      (d.drafts.length ? '<div class="song-list">' + d.drafts.map(x => `<div class="song-row"><div class="song-art" style="background:${artGradient(x.name)}">♪</div><div class="song-info"><div class="song-title">${escapeHtml(x.name)}</div><div class="song-sub">by ${escapeHtml(x.owner)} · you are ${x.role} · ${x.tileCount} tiles · v${x.rev}</div><div class="song-meta">${x.verifier ? '<span class="tag">verifier: ' + escapeHtml(x.verifier) + '</span>' : ''}${x.verified ? '<span class="feat">✔ VERIFIED' + (x.verifiedBy ? ' by ' + escapeHtml(x.verifiedBy) : '') + '</span>' : '<span class="tag">not verified</span>'}${x.published ? '<span class="tag">published</span>' : ''}</div></div><div class="admin-actions">${x.verified && x.role !== 'editor' ? `<button class="btn small btn-ghost" onclick="unverifyDraft('${x.id}')">Unverify</button>` : ''}<button class="btn small btn-play" onclick="openDraft('${x.id}')">${x.role === 'verifier' ? 'Verify' : 'Open'}</button>${x.role === 'owner' ? `<button class="btn small btn-danger" onclick="deleteDraft('${x.id}')">✕</button>` : ''}</div></div>`).join('') + '</div>' : '<div class="empty">Nothing shared yet.</div>'));
   } catch (e) { el.innerHTML = screenHtml('SHARED LEVELS', "openMyLevels()", errorBox(e.message, 'openShared()')); }
 }
 async function openDraft(id) {
@@ -627,4 +639,77 @@ async function adminShowHistory(p) {
     const lines = d.history.map(h => new Date(h.at).toLocaleString() + ' · ' + h.admin + ' · ' + h.action + (h.detail ? ' - ' + h.detail : ''));
     await uiAlert(p.username + ': ' + d.reports + ' reports against them, ' + d.flags + ' suspicious-result flags.\n\n' + (lines.length ? lines.join('\n') : 'No moderation history.'), 'History');
   } catch (e) { toast(e.message, 'bad'); }
+}
+
+async function unverifyDraft(id) { try { await apiRequest('/api/drafts/' + id + '/unverify', { method: 'POST', auth: true, body: {} }); toast('Verification cleared.'); openShared(); } catch (e) { toast(e.message, 'bad'); } }
+
+// ---------------------------------------------------------------------------
+// MORE ADMIN: reports, audit log, settings, broadcast, player + level tools
+// ---------------------------------------------------------------------------
+async function adminReportsHtml() {
+  const d = await apiRequest('/api/admin/reports', { auth: true });
+  if (!d.reports.length) return '<div class="empty">No reports.</div>';
+  return '<div class="song-list">' + d.reports.map(r => `<div class="song-row admin-row ${r.handled ? 'read' : 'unread'}"><div class="song-art" style="background:${artGradient(r.reason)}">⚑</div>
+    <div class="song-info"><div class="song-title">${escapeHtml(r.reporter || '?')} → ${r.kind === 'level' ? 'level "' + escapeHtml(r.levelName || '?') + '"' : escapeHtml(r.target || '?')}</div><div class="song-sub">${escapeHtml(r.reason)} · ${timeAgo(r.createdAt)}</div></div>
+    <div class="admin-actions">${r.levelId ? `<button class="btn small" onclick="adminViewLevel('${r.levelId}')">View</button>` : ''}${r.target ? `<button class="btn small" onclick="adminOpenPlayer('${escapeHtml(r.target)}')">Player</button>` : ''}${r.handled ? '' : `<button class="btn small btn-ghost" onclick="adminHandleReport(${r.id})">Handled</button>`}</div></div>`).join('') + '</div>';
+}
+async function adminHandleReport(id) { try { await apiRequest('/api/admin/reports/' + id + '/handle', { method: 'POST', auth: true, body: {} }); loadAdminPanel('reports'); } catch (e) { toast(e.message, 'bad'); } }
+async function adminLogHtml() {
+  const d = await apiRequest('/api/admin/log', { auth: true });
+  if (!d.log.length) return '<div class="empty">Nothing logged yet.</div>';
+  return '<div class="song-list">' + d.log.map(l => `<div class="song-row"><div class="song-info"><div class="song-title">${escapeHtml(l.admin)} · ${escapeHtml(l.action)}</div><div class="song-sub">${escapeHtml(l.target)}${l.detail ? ' - ' + escapeHtml(l.detail) : ''} · ${timeAgo(l.at)}</div></div></div>`).join('') + '</div>';
+}
+async function adminSettingsHtml() {
+  const s = (await apiRequest('/api/admin/settings', { auth: true })).settings;
+  return `<div class="panel"><div class="section-title">GAME SETTINGS</div>
+    <label class="form-label">Max BPM in the editor</label><input id="as-maxbpm" class="form-input" type="number" min="60" max="2000" value="${s.maxBpm}">
+    <label class="form-label">Daily level bonus stars</label><input id="as-daily" class="form-input" type="number" min="0" max="50" value="${s.dailyBonusStars}">
+    <label class="form-label">Announcement banner (shown to everyone, empty = none)</label><textarea id="as-ann" class="form-input" rows="2" maxlength="300">${escapeHtml(s.announcement || '')}</textarea>
+    <div class="settings-row"><span>Comments open</span><input type="checkbox" id="as-comments" ${s.commentsOpen ? 'checked' : ''}></div>
+    <div class="settings-row"><span>New registrations open</span><input type="checkbox" id="as-reg" ${s.registrationOpen ? 'checked' : ''}></div>
+    <button class="btn btn-play" onclick="adminSaveSettings()">Save settings</button></div>
+    <div class="panel"><div class="section-title">TOOLS</div><button class="btn btn-ghost" onclick="adminBroadcast()">📢 Popup message to everyone online</button><button class="btn btn-ghost" onclick="adminClearDaily()">↺ Back to the automatic daily level</button></div>`;
+}
+async function adminSaveSettings() {
+  try {
+    await apiRequest('/api/admin/settings', { method: 'PUT', auth: true, body: { maxBpm: Number(document.getElementById('as-maxbpm').value), dailyBonusStars: Number(document.getElementById('as-daily').value), announcement: document.getElementById('as-ann').value, commentsOpen: document.getElementById('as-comments').checked, registrationOpen: document.getElementById('as-reg').checked } });
+    toast('Settings saved.', 'good'); loadAppSettings();
+  } catch (e) { toast(e.message, 'bad'); }
+}
+async function adminBroadcast() {
+  const r = await openFormDialog({ title: 'Broadcast', message: 'Pops up on the screen of everyone who is online right now.', fields: [{ id: 'message', label: 'Message', type: 'textarea', rows: 3, maxlength: 300, value: '' }], okText: 'Send' });
+  if (!r || !r.message.trim()) return;
+  try { const d = await apiRequest('/api/admin/broadcast', { method: 'POST', auth: true, body: { message: r.message.trim() } }); toast('Sent to ' + d.recipients + ' online.', 'good'); } catch (e) { toast(e.message, 'bad'); }
+}
+async function adminClearDaily() { try { await apiRequest('/api/admin/daily', { method: 'POST', auth: true, body: { levelId: null } }); toast('Daily level is automatic again.', 'good'); } catch (e) { toast(e.message, 'bad'); } }
+async function adminMakeDaily(id) { try { await apiRequest('/api/admin/daily', { method: 'POST', auth: true, body: { levelId: id } }); toast('That level is today\'s daily level.', 'good'); } catch (e) { toast(e.message, 'bad'); } }
+async function adminRemoveAudio(id) {
+  if (!(await uiConfirm('Remove the music from this level?', 'Remove music', true))) return;
+  try { await apiRequest('/api/admin/levels/' + id + '/audio', { method: 'PATCH', auth: true, body: {} }); toast('Music removed.', 'good'); loadAdminPanel('levels'); } catch (e) { toast(e.message, 'bad'); }
+}
+async function adminEditLevel(id) {
+  const l = adminLevelCache[id]; if (!l) return;
+  const r = await openFormDialog({ title: 'Edit "' + l.name + '"', fields: [{ id: 'name', label: 'Name', type: 'text', value: l.name, maxlength: 80 }, { id: 'tags', label: 'Tags (comma separated)', type: 'text', value: (l.tags || []).join(', '), maxlength: 100 }], okText: 'Save' });
+  if (!r) return;
+  try { await apiRequest('/api/admin/levels/' + id + '/edit', { method: 'PATCH', auth: true, body: { name: r.name, tags: r.tags.split(',').map(t => t.trim()).filter(Boolean) } }); toast('Saved.', 'good'); loadAdminPanel('levels'); } catch (e) { toast(e.message, 'bad'); }
+}
+function adminExtraOptions(p) {
+  return [{ value: 'rename', label: '✎ Rename player' }, p.muted ? { value: 'unmute', label: '🔊 Unmute' } : { value: 'mute', label: '🔇 Mute (no comments/publishing)' },
+    { value: 'stars', label: '★ Give / take bonus stars' }, ...(p.owner ? [] : [{ value: 'password', label: '🔑 Set a new password' }]),
+    { value: 'dellevels', label: '🗑 Delete all their levels' }, ...(p.isAdmin ? [] : [{ value: 'delaccount', label: '☠ Delete account' }])];
+}
+async function adminExtraAction(action, p) {
+  const post = (path, body, ok) => apiRequest('/api/admin/players/' + p.id + path, { method: 'POST', auth: true, body }).then(() => { toast(ok, 'good'); loadAdminPanel('players'); });
+  if (action === 'rename') { const r = await openFormDialog({ title: 'Rename ' + p.username, fields: [{ id: 'u', label: 'New username', type: 'text', value: p.username, maxlength: 20 }], okText: 'Rename' }); if (r) await post('/username', { username: r.u.trim() }, 'Renamed.'); return true; }
+  if (action === 'unmute') { await post('/mute', { unmute: true }, 'Unmuted.'); return true; }
+  if (action === 'mute') {
+    const r = await openFormDialog({ title: 'Mute ' + p.username, message: 'Muted players can\'t comment or publish levels.', fields: [{ id: 'amount', label: 'Length', type: 'number', value: '1', maxlength: 6 }, { id: 'unit', label: 'Unit', type: 'select', value: 'days', options: [{ value: 'minutes', label: 'Minutes' }, { value: 'hours', label: 'Hours' }, { value: 'days', label: 'Days' }, { value: 'perm', label: 'Permanent' }] }], okText: 'Mute', danger: true });
+    if (r) { const per = { minutes: 1, hours: 60, days: 1440 }; await post('/mute', r.unit === 'perm' ? { permanent: true } : { minutes: Math.round(Number(r.amount) * per[r.unit]) }, 'Muted.'); }
+    return true;
+  }
+  if (action === 'stars') { const r = await openFormDialog({ title: 'Bonus stars for ' + p.username, message: 'Positive adds stars, negative removes them.', fields: [{ id: 'd', label: 'Amount', type: 'number', value: '5', maxlength: 5 }], okText: 'Apply' }); if (r) await post('/stars', { delta: Number(r.d) }, 'Stars updated.'); return true; }
+  if (action === 'password') { const r = await openFormDialog({ title: 'New password for ' + p.username, message: 'They can log in with it right away. Tell them to change it.', fields: [{ id: 'pw', label: 'New password (8+ characters)', type: 'text', value: '', maxlength: 128 }], okText: 'Set password' }); if (r) await post('/password', { password: r.pw }, 'Password set.'); return true; }
+  if (action === 'dellevels') { if (await uiConfirm('Delete ALL of ' + p.username + '\'s levels? This can\'t be undone.', 'Delete levels', true)) await post('/delete-levels', {}, 'Levels deleted.'); return true; }
+  if (action === 'delaccount') { if (await uiConfirm('Permanently delete ' + p.username + '\'s account and everything on it?', 'Delete account', true)) { await apiRequest('/api/admin/players/' + p.id, { method: 'DELETE', auth: true }); toast('Account deleted.', 'good'); loadAdminPanel('players'); } return true; }
+  return false;
 }
