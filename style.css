@@ -248,3 +248,12 @@ input:focus{border-color:var(--blue)}
 .hero-name.center{text-align:center}
 
 .ls-btns{display:flex;gap:6px}#lane-sounds-panel .settings-row{gap:10px}
+
+/* ===== v5 ===== */
+#attempt-hud{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:30;font-size:12px;font-weight:800;letter-spacing:.08em;color:#fff;opacity:.75;pointer-events:none;text-shadow:0 1px 4px #000}
+.death-info{font-size:20px;font-weight:800;color:var(--gold);margin:-4px 0 6px}
+#announcement-bar{position:fixed;top:0;left:0;right:0;z-index:150;background:linear-gradient(90deg,#7a3cff,#00b7d6);color:#fff;text-align:center;font-weight:700;font-size:13px;padding:8px 40px 8px 12px}
+#announcement-bar button{position:absolute;right:8px;top:4px;background:none;border:0;color:#fff;font-size:18px}
+.shortcut-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.shortcut-grid label{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:13px}
+.shortcut-grid input{width:42px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--line);background:rgba(0,0,0,.35);color:#fff;font-weight:800;text-transform:uppercase}
+.admin-tabs .tab{padding:8px 10px;font-size:12px}
