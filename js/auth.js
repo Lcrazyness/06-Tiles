@@ -45,6 +45,7 @@ function renderAccountModal() {
       <input type="file" id="profile-icon-upload" accept="image/*" style="display:none" onchange="uploadProfileIcon(event)">
       <div class="panel note">★ ${user.stars || 0} stars · ${user.creatorPoints || 0} creator points · Games ${st.gamesPlayed || 0} · Completed ${st.gamesCompleted || 0} · Best score ${st.bestScore || 0}</div>
       ${xpPanelHtml(user)}${achievementsHtml(user)}${cosmeticsHtml(user)}
+      <button class="btn btn-ghost" onclick="changeUsername()">✎ Change username</button>
       <button class="btn btn-ghost" onclick="openFriends()">👥 Friends</button>
       <button class="btn btn-ghost" onclick="logoutAccount()">Log out</button>`)
   : screenHtml('ACCOUNT', 'closeAccountModal()', `
@@ -293,5 +294,15 @@ async function equipCosmetic(kind, id) {
   try {
     const data = await apiRequest('/api/profile/cosmetics', { method: 'PATCH', auth: true, body: Object.assign({}, u.cosmetics, { [kind]: id }) });
     saveAuthSession(getAuthToken(), data.user); renderAccountModal();
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+async function changeUsername() {
+  const u = getAuthUser(); if (!u) return;
+  const v = await uiPrompt('New username (letters, numbers, underscores). You can change it once every 24 hours.', u.username, 'Change');
+  if (!v || v.trim() === u.username) return;
+  try {
+    const d = await apiRequest('/api/profile/username', { method: 'PATCH', auth: true, body: { username: v.trim() } });
+    saveAuthSession(d.token, d.user); toast('You are now ' + d.user.username + '.', 'good'); renderAccountModal();
   } catch (e) { toast(e.message, 'bad'); }
 }
