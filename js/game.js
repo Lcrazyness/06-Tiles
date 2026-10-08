@@ -101,6 +101,7 @@ function handleHit() {
 function showGameHud(show, battle) {
   ['lives-display', 'game-hud', 'score-container'].forEach(id => document.getElementById(id).classList.toggle('hidden', !show));
   document.getElementById('pause-btn').classList.toggle('hidden', !show || !!battle);
+  { const ah = document.getElementById('attempt-hud'); if (ah && !show) ah.classList.add('hidden'); }
   if (!show) document.getElementById('battle-race-hud').classList.add('hidden');
 }
 
@@ -178,31 +179,46 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     lockCosmetics = sourceLevel ? !!sourceLevel.lockCosmetics : !!(document.getElementById('edit-lock-cos') && document.getElementById('edit-lock-cos').checked);
     levelLastNoteTime = pendingTiles.length ? pendingTiles[pendingTiles.length - 1].time : 0;
     runStartedAt = performance.now();
+    const wasRespawn = practiceArmed;
     practiceMode = practiceArmed && !!loadedLevelObj; practiceArmed = false;
-    if (!practiceMode) { practiceStartSec = 0; practiceCheckpoint = 0; }
-    practiceNextAuto = practiceStartSec + levelLastNoteTime * 0.1;
+    if (!practiceMode) { practiceStartSec = 0; practiceBaseSec = 0; practiceCheckpoints = []; }
+    const levelKey = loadedLevelObj && loadedLevelObj.id ? loadedLevelObj.id : 'editor-' + (currentEditingId || 'new');
+    if (!wasRespawn) currentAttempt = bumpAttempts(levelKey);
+    { const ah = document.getElementById('attempt-hud'); if (ah) { ah.textContent = 'Attempt ' + currentAttempt + (practiceMode ? ' · PRACTICE' : ''); ah.classList.toggle('hidden', isBattleMode); } }
     if (practiceMode && practiceStartSec > 0) fastForwardTo(practiceStartSec);
-    else if (startPosArmed && isPlaytesting && editorStartPos !== null) { fastForwardTo(editorStartPos); if (levelUsesAudio) { levelAudioStarted = true; try { bgAudio.currentTime = Math.max(0, editorStartPos + Math.abs(levelAudioOffsetMs) / 1000 * (levelAudioOffsetMs < 0 ? 1 : -1)); } catch (e) {} bgAudio.play().catch(() => {}); } }
+    else if (startPosArmed && isPlaytesting && editorStartPos !== null) fastForwardTo(editorStartPos);
     startPosArmed = false;
     globeGhosts.clear();
     if (typeof globeSync === 'function') globeSync(loadedLevelObj && loadedLevelObj.id);
     levelAudioOffsetMs = parseInt(cfg.audioOffset) || 0;
     document.getElementById('lives-count').innerText = currentLives;
 
-    // The song only belongs to the level being edited. Levels opened from My Levels / Browse / battles
-    // don't carry audio, so they must not play whatever song happened to be loaded last.
-    levelUsesAudio = !loadedLevelObj && !!bgAudio.src;
+    // Music: levels carry their own song (saved with the level / published with it). Editor playtests use the song loaded in the editor.
+    let audioSrc = null;
+    if (sourceLevel) audioSrc = sourceLevel._audioUrl || sourceLevel.audio || null;
+    else if (currentAudioUrl) audioSrc = currentAudioUrl;
+    levelUsesAudio = !!audioSrc && !isBattleMode;
+    levelStartPositions = sourceLevel && Array.isArray(sourceLevel.startPositions) ? sourceLevel.startPositions : [];
     if (levelUsesAudio) {
-      if (levelAudioOffsetMs <= 0) {
-        try { bgAudio.currentTime = Math.abs(levelAudioOffsetMs) / 1000; } catch (e) {}
-        bgAudio.play().catch(() => {});
-        levelAudioStarted = true;
-      }
-    }
+      if (bgAudio.getAttribute('src') !== audioSrc) { bgAudio.src = audioSrc; bgAudio.load(); }
+      seekLevelAudio();
+    } else bgAudio.pause();
   }
   startLoop();
 }
 let levelUsesAudio = false;
+// Music offset (ms): + = the song plays EARLIER than the level (song is ahead), - = the song plays LATER (starts after the level has begun).
+function seekLevelAudio() {
+  if (!levelUsesAudio) return;
+  const st = customPlayTime + levelAudioOffsetMs / 1000;
+  const go = () => {
+    if (st >= 0) { try { bgAudio.currentTime = st; } catch (e) {} bgAudio.play().catch(() => {}); levelAudioStarted = true; }
+    else { bgAudio.pause(); try { bgAudio.currentTime = 0; } catch (e) {} levelAudioStarted = false; }
+  };
+  if (bgAudio.readyState >= 1) go(); else bgAudio.addEventListener('loadedmetadata', go, { once: true });
+}
+const editorOffsetMs = () => parseInt((document.getElementById('edit-audio-offset') || {}).value) || 0;
+const songPos = t => t + editorOffsetMs() / 1000;
 
 function spawnTile() {
   let currentSpawn = patterns[currentMode] ? patterns[currentMode][patternStep] : Math.floor(Math.random() * 4);
@@ -299,18 +315,46 @@ function fastForwardTo(sec) {
     else if (fx.type === 'hitbox') fireHitbox(fx);
   }
 }
-function maybeAutoCheckpoint() {
-  if (!practiceMode || !levelLastNoteTime || customPlayTime < practiceNextAuto) return;
-  practiceCheckpoint = customPlayTime; practiceNextAuto = customPlayTime + levelLastNoteTime * 0.1;
-  toast('Checkpoint ' + Math.min(99, Math.round(customPlayTime / levelLastNoteTime * 100)) + '%');
-}
+function maybeAutoCheckpoint() {}   // (checkpoints are manual now, like Geometry Dash: P = place, O = remove)
 function practiceRespawn() {
-  practiceStartSec = practiceCheckpoint; practiceArmed = true;
+  practiceStartSec = practiceCheckpoints.length ? practiceCheckpoints[practiceCheckpoints.length - 1] : practiceBaseSec;
+  practiceArmed = true;
   if (lastStartArgs) startGame.apply(null, lastStartArgs);
 }
+function togglePracticeFromPause() {
+  if (!lastStartArgs || !lastStartArgs[6] || isBattleMode || isPlaytesting || isVerifying) { toast('Practice works on levels from My Levels and Browse.'); return; }
+  if (!practiceMode) {
+    practiceMode = true; practiceCheckpoints = []; practiceBaseSec = 0;
+    toast('Practice ON - press ' + shortcuts.pPlace.toUpperCase() + ' to place a checkpoint, ' + shortcuts.pRemove.toUpperCase() + ' to remove it. Stats don\'t count.', 'good');
+    resumeGame();
+  } else {
+    practiceMode = false; practiceCheckpoints = []; practiceBaseSec = 0;
+    toast('Practice off.'); restartGame();
+  }
+}
+function switchStartPos(dir) {
+  if (!shortcuts.switcher || isBattleMode) return;
+  const playtest = isPlaytesting;
+  if (!playtest && !practiceMode) return;                  // start positions only work in editor playtests and practice
+  const list = playtest ? editorStartPositions : levelStartPositions;
+  if (!list.length) { toast('This level has no start positions.'); return; }
+  activeStartIdx = Math.max(-1, Math.min(list.length - 1, activeStartIdx + dir));
+  const t = activeStartIdx >= 0 ? list[activeStartIdx] : 0;
+  toast(activeStartIdx >= 0 ? 'Start position ' + (activeStartIdx + 1) + '/' + list.length + ' (' + t.toFixed(1) + 's)' : 'Start of the level');
+  document.getElementById('death-screen').classList.add('hidden');
+  if (playtest) { startPlaytest(); }
+  else { practiceBaseSec = t; practiceCheckpoints = []; practiceStartSec = t; practiceArmed = true; if (lastStartArgs) startGame.apply(null, lastStartArgs); }
+}
 window.addEventListener('keydown', e => {
-  if (e.key.toLowerCase() !== 'c' || e.repeat || !practiceMode || !gameActive || isTypingTarget(e)) return;
-  practiceCheckpoint = customPlayTime; toast('Checkpoint set at ' + Math.round(customPlayTime / Math.max(1, levelLastNoteTime) * 100) + '%', 'good');
+  if (e.repeat || isTypingTarget(e) || dialogOpen() || inEditor || (!gameActive && !isDead)) return;
+  const k = e.key.toLowerCase();
+  if (keyMap.includes(k)) return;
+  if (practiceMode && gameActive && !isPaused) {
+    if (k === shortcuts.pPlace) { practiceCheckpoints.push(customPlayTime); toast('Checkpoint #' + practiceCheckpoints.length, 'good'); return; }
+    if (k === shortcuts.pRemove) { if (practiceCheckpoints.length) { practiceCheckpoints.pop(); toast('Checkpoint removed (' + practiceCheckpoints.length + ' left)'); } return; }
+  }
+  if (k === shortcuts.sPrev) switchStartPos(-1);
+  else if (k === shortcuts.sNext) switchStartPos(1);
 });
 
 // Hitbox overlay (Settings > Show hitboxes): the input zone, plus a line between consecutive tiles labelled with the time you get to reach the next one.
@@ -347,9 +391,9 @@ function drawHitboxOverlay() {
 function updateCustomLevel(dtSec) {
   customPlayTime += dtSec;
 
-  if (levelUsesAudio && !levelAudioStarted && customPlayTime * 1000 >= levelAudioOffsetMs) {
+  if (levelUsesAudio && !levelAudioStarted && customPlayTime * 1000 + levelAudioOffsetMs >= 0) {
     levelAudioStarted = true;
-    try { bgAudio.currentTime = 0; } catch (e) {}
+    try { bgAudio.currentTime = Math.max(0, customPlayTime + levelAudioOffsetMs / 1000); } catch (e) {}
     bgAudio.play().catch(() => {});
   }
 
@@ -416,6 +460,7 @@ function updateCustomLevel(dtSec) {
   } else if (isBattleMode) {
     if (typeof handleBattleFinish === 'function') handleBattleFinish(true, 'FINISHED');
   } else {
+    markVerifiedByPlay();
     finishStatsGame(true);
     showCompletionScreen();
   }
@@ -433,6 +478,8 @@ function showCompletionScreen() {
   document.getElementById('death-quit-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
   const eb = document.getElementById('death-editor-btn'); if (eb) eb.classList.toggle('hidden', !isVerifying);
+  { const pctDied = Math.min(99, Math.floor(customPlayTime / Math.max(0.001, levelLastNoteTime) * 100)); const di = document.getElementById('death-info');
+    if (di) di.textContent = (levelLastNoteTime ? 'Died at ' + pctDied + '%  ·  ' : '') + 'Attempt ' + currentAttempt; }
   toggleMenu('death-screen');
 }
 
@@ -728,10 +775,13 @@ function gameLoop(ts) {
       globeGhosts.forEach((g, name) => {
         if (now - g.ts > 7000) { globeGhosts.delete(name); return; }
         if (g.idx !== t.noteIdx) return;
-        ctx.globalAlpha = 1; ctx.strokeStyle = globeColor(name); ctx.lineWidth = 3;
-        ctx.strokeRect(t.lane * laneW + 4 + ox, headTop + 2, laneW - 8, TILE_H - 4);
-        ctx.fillStyle = globeColor(name); ctx.font = "700 11px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-        ctx.fillText('● ' + name, t.lane * laneW + laneW / 2 + ox, headTop + 6 + row * 13); row++;
+        const col = globeColor(name), cx = t.lane * laneW + laneW / 2 + ox;
+        ctx.save(); ctx.globalAlpha = 1; ctx.shadowColor = col; ctx.shadowBlur = 16; ctx.strokeStyle = col; ctx.lineWidth = 4;
+        ctx.strokeRect(t.lane * laneW + 5 + ox, headTop + 3, laneW - 10, TILE_H - 6); ctx.restore();
+        const tag = name.length > 10 ? name.slice(0, 9) + '…' : name;
+        ctx.font = "700 11px system-ui, sans-serif"; const tw = ctx.measureText(tag).width + 14;
+        ctx.fillStyle = col; ctx.fillRect(cx - tw / 2, headTop + 8 + row * 18, tw, 16);
+        ctx.fillStyle = "#000"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(tag, cx, headTop + 16 + row * 18); row++;
       });
     }
     if (showHitboxes) {
@@ -746,6 +796,7 @@ function gameLoop(ts) {
     ctx.globalAlpha = 1.0;
   }
   if (showHitboxes && gameActive && isCustomGame) drawHitboxOverlay();
+  if (globeOn && typeof globeLevelId !== 'undefined' && globeLevelId && gameActive) drawGlobeHud();
 
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -768,6 +819,7 @@ function pauseGame() {
   if (!bgAudio.paused) bgAudio.pause();
   document.getElementById('pause-stop-btn').classList.toggle('hidden', !isPlaytesting);
   document.getElementById('pause-quit-btn').classList.toggle('hidden', isPlaytesting);
+  { const pb = document.getElementById('pause-practice-btn'); if (pb) { pb.textContent = practiceMode ? '🎯 Practice: ON (tap to turn off)' : '🎯 Practice mode'; pb.classList.toggle('hidden', isPlaytesting || isVerifying || !(lastStartArgs && lastStartArgs[6])); } }
   toggleMenu('pause-menu');
 }
 
@@ -894,7 +946,8 @@ function startEditor(existingLevel) {
   else currentEditingOnlineId = existingLevel.onlineId || null;
   currentLevelIcon = existingLevel ? (existingLevel.icon || null) : null;
   editorTimer = 0; isRecording = false; deleteMode = false; selectedEffect = null; editorPlaying = false; levelVerified = false;
-  editorStartPos = null; { const b = document.getElementById('btn-start-pos'); if (b) { b.textContent = '🚩'; b.classList.remove('active'); } }
+  editorStartPositions = existingLevel && Array.isArray(existingLevel.startPositions) ? existingLevel.startPositions.slice() : []; activeStartIdx = -1; editorStartPos = null; updateStartPosButton();
+  loadEditorAudioFor(existingLevel);
   setTimeout(() => { if (typeof historyReset === 'function') historyReset(); }, 60);
   editorBpm = existingLevel && existingLevel.bpm ? existingLevel.bpm : 120;
   editorGridOffset = existingLevel && existingLevel.gridOffset ? existingLevel.gridOffset : 0;
@@ -936,7 +989,7 @@ function toggleSongTester() {
   isSongTesting = !isSongTesting;
   const btn = document.getElementById('btn-song-test');
   if (btn) btn.classList.toggle('active', isSongTesting);
-  if (isSongTesting) { bgAudio.currentTime = editorTimer; bgAudio.play().catch(() => {}); }
+  if (isSongTesting) { bgAudio.currentTime = Math.max(0, songPos(editorTimer)); bgAudio.play().catch(() => {}); }
   else { bgAudio.pause(); }
 }
 
@@ -974,6 +1027,7 @@ function startPlaytest() {
   canvas.classList.remove('delete-cursor');
   ['btn-delete-mode', 'btn-delete-mode-2'].forEach(id => document.getElementById(id)?.classList.remove('active'));
   closeAllDrawers();
+  editorStartPos = activeStartIdx >= 0 && editorStartPositions[activeStartIdx] !== undefined ? editorStartPositions[activeStartIdx] : null;
   startPosArmed = editorStartPos !== null;
   startGame('playtest', true, -1, recordedTiles, recordedEffects);
 }
@@ -985,10 +1039,34 @@ function stopPlaytest() {
 function stopPlaytestFromDeath() { stopPlaytest(); }
 function backToEditorFromDeath() { isVerifying = false; levelVerified = false; stopPlaytest(); }
 
-// Start position: put a flag at the playhead; playtests start from it (with speed/hitbox/style state applied). Tap again at the same spot to remove it.
+// Start positions (like Geometry Dash start pos): flag the playhead; place as many as you like. Playtests start from the active one;
+// Q / E (changeable in Settings) switch between them. They're saved with the level and also work in practice mode for players.
+function updateStartPosButton() {
+  const btn = document.getElementById('btn-start-pos'); if (!btn) return;
+  btn.textContent = editorStartPositions.length ? '🚩 ' + (activeStartIdx >= 0 ? (activeStartIdx + 1) + '/' : '') + editorStartPositions.length : '🚩';
+  btn.classList.toggle('active', editorStartPositions.length > 0);
+}
 function toggleStartPos() {
-  const btn = document.getElementById('btn-start-pos');
-  if (editorStartPos !== null && Math.abs(editorStartPos - editorTimer) < 0.05) { editorStartPos = null; toast('Start position removed.'); }
-  else { editorStartPos = Math.round(editorTimer * 1000) / 1000; toast('Start position set at ' + editorStartPos.toFixed(2) + 's - playtest starts here.', 'good'); }
-  if (btn) { btn.textContent = editorStartPos === null ? '🚩' : '🚩 ' + editorStartPos.toFixed(1) + 's'; btn.classList.toggle('active', editorStartPos !== null); }
+  const i = editorStartPositions.findIndex(t => Math.abs(t - editorTimer) < 0.05);
+  if (i >= 0) { editorStartPositions.splice(i, 1); activeStartIdx = Math.min(activeStartIdx, editorStartPositions.length - 1); toast('Start position removed.'); }
+  else {
+    const t = Math.round(editorTimer * 1000) / 1000;
+    editorStartPositions.push(t); editorStartPositions.sort((a, b) => a - b);
+    activeStartIdx = editorStartPositions.indexOf(t);
+    toast('Start position set at ' + t.toFixed(2) + 's (' + editorStartPositions.length + ' total). Tap again at the same spot to remove it.', 'good');
+  }
+  levelVerified = false; updateStartPosButton();
+}
+// Editor music: keep what you loaded with the level
+async function loadEditorAudioFor(level) {
+  if (!level) { clearEditorAudio(); return; }
+  let blob = null;
+  try {
+    if (level.audio) blob = dataUrlToBlob(level.audio);
+    else {
+      const local = myLevels.find(l => l.id === level.id) || myLevels.find(l => l.onlineId && l.onlineId === level.id);
+      if (local) blob = await LevelAudio.get(local.id);
+    }
+  } catch (e) {}
+  if (blob) setEditorAudio(blob); else clearEditorAudio();
 }
