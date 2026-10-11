@@ -34,7 +34,7 @@ function layoutCanvas() {
   const vw = window.innerWidth, vh = window.innerHeight;
   let top = 0, availH = vh;
   if (inEditor) {
-    const bar = 60;
+    const bar = 98;
     const dock = document.getElementById('timeline-dock');
     const dockH = dock ? (dock.classList.contains('collapsed') ? 34 : dock.offsetHeight) : 0;
     top = bar;
@@ -133,6 +133,8 @@ function openFormDialog({ title = '', message = '', fields = [], okText = 'OK', 
       const label = '<label class="form-label" for="ff-' + f.id + '">' + escapeHtml(f.label || '') + '</label>';
       if (f.type === 'select') return label + '<select id="ff-' + f.id + '" class="form-input">' + f.options.map(o => '<option value="' + escapeHtml(String(o.value)) + '"' + (String(o.value) === String(f.value) ? ' selected' : '') + '>' + escapeHtml(o.label) + '</option>').join('') + '</select>';
       if (f.type === 'textarea') return label + '<textarea id="ff-' + f.id + '" class="form-input" rows="' + (f.rows || 4) + '" maxlength="' + (f.maxlength || 600) + '">' + escapeHtml(f.value || '') + '</textarea>';
+      if (f.type === 'file') return label + '<input id="ff-' + f.id + '" class="form-input" type="file" accept="' + escapeHtml(f.accept || 'image/*') + '">';
+      if (f.type === 'checkbox') return '<label class="form-check"><input id="ff-' + f.id + '" type="checkbox"' + (f.value ? ' checked' : '') + '> ' + escapeHtml(f.label || '') + '</label>';
       return label + '<input id="ff-' + f.id + '" class="form-input" type="' + (f.type || 'text') + '" maxlength="' + (f.maxlength || 120) + '" value="' + escapeHtml(f.value || '') + '">';
     }).join('');
     host.innerHTML = '<div class="dialog-box"><h3>' + escapeHtml(title) + '</h3>' + (message ? '<p>' + escapeHtml(message) + '</p>' : '') + fieldHtml +
@@ -140,7 +142,7 @@ function openFormDialog({ title = '', message = '', fields = [], okText = 'OK', 
     document.body.appendChild(host);
     const close = value => { host.remove(); resolve(value); };
     host.querySelector('#ff-cancel').onclick = () => close(null);
-    host.querySelector('#ff-ok').onclick = () => { const out = {}; fields.forEach(f => { out[f.id] = host.querySelector('#ff-' + f.id).value; }); close(out); };
+    host.querySelector('#ff-ok').onclick = () => { const out = {}; fields.forEach(f => { const i = host.querySelector('#ff-' + f.id); if (f.type === 'file') { out[f.id] = i.value; out[f.id + 'File'] = i.files && i.files[0]; } else if (f.type === 'checkbox') out[f.id] = i.checked; else out[f.id] = i.value; }); close(out); };
     host.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); close(null); } });
     setTimeout(() => { const first = host.querySelector('.form-input'); if (first) first.focus(); }, 30);
   });
