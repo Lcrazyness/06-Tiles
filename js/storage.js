@@ -35,10 +35,32 @@ function loadMyLevels() {
 let myLevels = loadMyLevels();
 
 function getCustomLevels() { return myLevels; }
+// My Levels live in IndexedDB (hundreds of MB) because levels with images / many objects outgrow localStorage's ~5 MB.
+// A small localStorage copy is still kept as a fast fallback.
+const MyLevelsDB = (() => {
+  let db = null;
+  const open = () => new Promise((res, rej) => { if (db) return res(db); if (!window.indexedDB) return rej(new Error('no idb')); const r = indexedDB.open('et_store', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => { db = r.result; res(db); }; r.onerror = () => rej(r.error); });
+  const run = (mode, fn) => open().then(d => new Promise((res, rej) => { const tx = d.transaction('kv', mode); const rq = fn(tx.objectStore('kv')); tx.oncomplete = () => res(rq && rq.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); }));
+  return { get: k => run('readonly', s => s.get(k)), set: (k, v) => run('readwrite', s => s.put(v, k)) };
+})();
+const IDB_FLAG = 'et_myLevels_idb';
+let persistTimer = null, persistFailed = false;
 function persistMyLevels() {
-  try { localStorage.setItem(MY_LEVELS_KEY, JSON.stringify(myLevels)); return true; }
-  catch (e) { toast('Your browser storage is full - delete some levels or download them first.', 'bad'); return false; }
+  const json = JSON.stringify(myLevels);
+  if (json.length < 2500000) { try { localStorage.setItem(MY_LEVELS_KEY, json); } catch (e) {} }
+  else { try { localStorage.removeItem(MY_LEVELS_KEY); } catch (e) {} }
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    MyLevelsDB.set('myLevels', JSON.parse(json)).then(() => { try { localStorage.setItem(IDB_FLAG, '1'); } catch (e) {} persistFailed = false; })
+      .catch(() => { if (!persistFailed && json.length >= 2500000) { persistFailed = true; toast('Could not save your levels on this device (storage blocked or full).', 'bad'); } });
+  }, 150);
+  return true;
 }
+// after boot: pull the authoritative list from IndexedDB (or migrate the localStorage list into it)
+MyLevelsDB.get('myLevels').then(arr => {
+  if (localStorage.getItem(IDB_FLAG) === '1' && Array.isArray(arr)) { myLevels.splice(0, myLevels.length, ...arr); if (typeof onMyLevelsReloaded === 'function') onMyLevelsReloaded(); }
+  else persistMyLevels();
+}).catch(() => {});
 function persistProfiles() { return persistMyLevels(); } // kept for older call sites
 
 function refreshProfileButton() {
@@ -126,6 +148,18 @@ function difficultyBadgeClass(diff) {
 
 function makeLevelId() { return 'lvl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
 
+function prunedDecor() {
+  const d = JSON.parse(JSON.stringify({ objects: decorData.objects, presets: decorData.presets }));
+  const used = new Set(d.objects.filter(o => o.kind === 'image').map(o => o.img)), images = {};
+  used.forEach(id => { if (decorData.images[id]) images[id] = decorData.images[id]; });
+  d.images = images;
+  return d;
+}
+// what makes a level "the same level" for verification: the notes + the effects that change how it plays
+function levelHashOf(data, effects) {
+  return hashString(JSON.stringify([(data || []).map(t => [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0]),
+    (effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])]));
+}
 function buildLevelObject(name) {
   return {
     id: currentEditingId || makeLevelId(),
@@ -134,6 +168,10 @@ function buildLevelObject(name) {
     icon: currentLevelIcon || null,
     data: JSON.parse(JSON.stringify(recordedTiles)),
     effects: JSON.parse(JSON.stringify(recordedEffects)),
+    decor: prunedDecor(),
+    description: String((document.getElementById('edit-description') || {}).value || '').trim().slice(0, 400),
+    songId: currentSongId || null,
+    thumb: makeLevelThumb(recordedTiles, document.getElementById('edit-bg-color')?.value || '#202738'),
     lives: parseInt(document.getElementById('edit-lives').value) || 3,
     fps: parseInt(document.getElementById('edit-fps').value) || 60,
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
@@ -163,7 +201,7 @@ async function saveCustomLevel() {
   if (idx !== -1) { level.plays = myLevels[idx].plays || 0; level.createdAt = myLevels[idx].createdAt || level.createdAt; myLevels[idx] = level; }
   else myLevels.push(level);
   currentEditingId = level.id; persistLevelAudio(level.id);
-  if (persistMyLevels()) { closeCreatorMenu(); toast(idx !== -1 ? 'Level updated.' : 'Saved to My Levels.', 'good'); }
+  if (persistMyLevels()) { closeCreatorMenu(); toast(idx !== -1 ? 'Level updated.' : 'Saved to My Levels.', 'good'); if (typeof cloudSyncLevel === 'function') cloudSyncLevel(level); }
 }
 
 function startLevelVerification() {
@@ -300,8 +338,8 @@ function dataUrlToBlob(url) {
 }
 const blobToDataUrl = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
 async function audioDataUrl(quiet) {
-  if (!currentAudioBlob) return null;
-  if (currentAudioBlob.size > 4.5 * 1024 * 1024) { if (!quiet) toast('Your song is over 4.5 MB, so it is published without music.', 'bad'); return null; }
+  if (!currentAudioBlob || currentSongId) return null;      // library songs are referenced by id, not uploaded
+  if (currentAudioBlob.size > 6 * 1024 * 1024) { if (!quiet) toast('Your song is over 6 MB, so it is published without music.', 'bad'); return null; }
   return blobToDataUrl(currentAudioBlob);
 }
 async function withAudio(level, quiet) { level.audio = await audioDataUrl(quiet); return level; }
@@ -311,14 +349,14 @@ async function attachLocalAudio(level) {
   const b = await LevelAudio.get(level.id);
   if (b) Object.defineProperty(level, '_audioUrl', { value: URL.createObjectURL(b), enumerable: false, writable: true, configurable: true });
 }
-const levelDataHash = () => hashString(JSON.stringify(buildLevelObject('x').data));
+const levelDataHash = () => levelHashOf(recordedTiles, recordedEffects);
 
 function loadAudioFile(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (file.size > 10 * 1024 * 1024) { toast("That song is too large - pick one under 10MB.", 'bad'); event.target.value = ""; return; }
   setEditorAudio(file);
-  toast('Song loaded: ' + file.name + (file.size > 4.5 * 1024 * 1024 ? ' (over 4.5 MB: saved with the level on this device, but it won\'t upload when publishing)' : ''), 'good');
+  toast('Song loaded: ' + file.name + (file.size > 6 * 1024 * 1024 ? ' (over 6 MB: saved with the level on this device, but it won\'t upload when publishing)' : ''), 'good');
   event.target.value = "";
 }
 
@@ -354,6 +392,7 @@ function autosaveEditorLevel() {
   else myLevels.push(level);
   currentEditingId = level.id; persistLevelAudio(level.id);
   persistMyLevels();
+  if (typeof cloudSyncLevel === 'function') cloudSyncLevel(level);
   toast('Level auto-saved to My Levels.', 'good');
   if (currentDraft && currentDraft.role !== 'verifier') draftSave(true);
 }
