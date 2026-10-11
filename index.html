@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#2a1070">
 <title>06 Tiles</title>
-<link rel="stylesheet" href="style.css?v=20261005-3">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&family=Bebas+Neue&family=Orbitron:wght@400;700&family=Press+Start+2P&family=Pacifico&family=Permanent+Marker&family=Righteous&family=Fredoka:wght@400;700&family=Lobster&family=Audiowide&family=Caveat:wght@400;700&family=Monoton&display=swap">
+<link rel="stylesheet" href="style.css?v=20261010-1">
+<link rel="stylesheet" href="extras.css?v=20261010-1">
 </head>
 <body>
 
@@ -23,6 +26,7 @@
   <div id="fps-display">60 FPS</div>
   <div id="progress-display">0%</div>
 </div>
+<div id="progress-bar" class="hidden"><div id="progress-fill"></div><div id="progress-best"></div></div>
 <button id="pause-btn" class="hidden" onclick="pauseGame()" aria-label="Pause">❚❚</button>
 
 <div id="battle-race-hud" class="hidden">
@@ -88,6 +92,12 @@
       <div class="settings-row"><span>Hide death screen</span><input type="checkbox" id="setting-hide-death"></div>
       <div class="settings-row"><span>Auto retry after 2s</span><input type="checkbox" id="setting-auto-retry"></div>
       <div class="settings-row"><span>Globe (see other players on the same level)</span><input type="checkbox" id="setting-globe"></div>
+      <div class="section-title">PROGRESS &amp; PRACTICE</div>
+      <div class="settings-row"><span>Progress bar + % <small>(with a marker at your best)</small></span><input type="checkbox" id="setting-progress-bar"></div>
+      <div class="settings-row"><span>Practice: auto checkpoints</span><input type="checkbox" id="setting-auto-cp"></div>
+      <div class="settings-row"><span>…every (seconds)</span><input type="number" id="setting-auto-cp-sec" min="1" max="30" step="0.5" class="num-in"></div>
+      <div class="section-title">EDITOR</div>
+      <div class="settings-row"><span>Turn off snapping <small>(editor starts in free placement)</small></span><input type="checkbox" id="setting-no-snap"></div>
       <div class="section-title">KEYBINDS</div>
       <div class="keybind-grid">
         <label>Lane 1 <input id="keybind-0" maxlength="1" value="r"></label><label>Lane 2 <input id="keybind-1" maxlength="1" value="t"></label>
@@ -155,46 +165,44 @@
 
 <!-- ============ EDITOR ============ -->
 <div id="editor-ui" class="hidden">
-  <div class="editor-topbar">
-    <div class="editor-topbar-group">
-      <button class="icon-btn" onclick="openCreatorMenu()" title="Menu">☰</button>
-      <button class="icon-btn" onclick="toggleDrawer('left')" title="Tools">🛠</button>
-      <button class="icon-btn" onclick="openEffectsMenu()" title="Effects">✨</button>
-      <button class="icon-btn" onclick="openEditorSettingsMenu()" title="Level settings">⚙</button>
-      <button id="btn-delete-mode" class="icon-btn" onclick="toggleDeleteMode()" title="Delete tiles">🗑️</button>
-      <button id="btn-start-pos" class="icon-btn" onclick="toggleStartPos()" title="Start position: playtests begin at the playhead">🚩</button>
-      <button class="icon-btn" onclick="editorUndo()" title="Undo (Ctrl+Z)">↶</button>
-      <button class="icon-btn" onclick="editorRedo()" title="Redo (Ctrl+Y)">↷</button>
-      <button class="icon-btn" onclick="deleteAllEditor()" title="Delete everything">🧹</button>
+  <div class="ed-top">
+    <button class="ed-btn" onclick="openCreatorMenu()" title="Menu">☰</button>
+    <div class="ed-tabs">
+      <button class="ed-tab active" data-mode="tiles" onclick="setEdMode('tiles')">TILES</button>
+      <button class="ed-tab" data-mode="decor" onclick="setEdMode('decor')">DECOR</button>
+      <button class="ed-tab" data-mode="trig" onclick="setEdMode('trig')">TRIGGERS</button>
     </div>
-    <div class="editor-topbar-group"><div class="pill" id="editor-tile-count">0 tiles</div><div class="pill" id="editor-timer-panel">0.00s</div></div>
+    <button class="ed-btn play" onclick="startPlaytest()" title="Play test">▶ TEST</button>
+    <button class="ed-btn" onclick="openEditorSettingsMenu()" title="Level settings">⚙</button>
+  </div>
+  <div class="ed-tools">
+    <button id="tool-place" class="ed-btn active" onclick="setEdTool('place')">✚ Place</button>
+    <button id="tool-select" class="ed-btn" onclick="setEdTool('select')">⬚ Select</button>
+    <button id="tool-erase" class="ed-btn" onclick="setEdTool('erase')">🗑 Erase</button>
+    <span class="ed-sep"></span>
+    <button class="ed-btn sq" onclick="editorUndo()" title="Undo (Ctrl+Z)">↶</button>
+    <button class="ed-btn sq" onclick="editorRedo()" title="Redo (Ctrl+Y)">↷</button>
+    <button class="ed-btn sq" onclick="edCopy()" title="Copy (Ctrl+C)">⧉</button>
+    <button class="ed-btn sq" onclick="edPaste(1)" title="Paste at playhead (Ctrl+V)">📋</button>
+    <button class="ed-btn sq" onclick="edPasteMany()" title="Paste several copies in a row">×N</button>
+    <span class="ed-sep"></span>
+    <button id="eye-tiles" class="ed-btn sq active" onclick="toggleEye('tiles')" title="Show / hide tiles">T</button>
+    <button id="eye-decor" class="ed-btn sq active" onclick="toggleEye('decor')" title="Show / hide objects">D</button>
+    <button id="eye-fx" class="ed-btn sq active" onclick="toggleEye('fx')" title="Show / hide trigger markers">F</button>
+    <span class="ed-sep"></span>
+    <button class="ed-btn sq" onclick="toggleDrawer('left')" title="Palette">🧰</button>
+    <button class="ed-btn sq" onclick="toggleDrawer('right')" title="Inspector">🎛</button>
+    <div class="ed-pills"><span class="pill" id="ed-count">0 tiles</span><span class="pill" id="editor-timer-panel">0.00s</span></div>
   </div>
 
   <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>
   <div class="drawer drawer-left" id="drawer-left">
-    <div class="drawer-header"><b>TOOLS</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
-    <div class="tool-drawer-section"><div class="tool-drawer-label">SONG</div>
-      <div class="tool-grid"><button class="tool-btn" onclick="document.getElementById('audio-upload').click()"><span class="tool-icon">🎵</span>Load Song</button>
-      <button id="btn-song-test" class="tool-btn" onclick="toggleSongTester()"><span class="tool-icon">🎧</span>Tester</button></div></div>
-    <div class="tool-drawer-section"><div class="tool-drawer-label">PLACEMENT</div>
-      <div class="note">Tap the board where you want a tile — it snaps to the grid. Or hit Record and tap R/T/Y/U along with the song. Mouse wheel / ↑↓ move the playhead.</div>
-      <div class="tool-grid"><button id="btn-create-tiles" class="tool-btn" onclick="toggleRecording()"><span class="tool-icon">⏺</span>Record</button>
-      <button id="btn-delete-mode-2" class="tool-btn danger" onclick="toggleDeleteMode()"><span class="tool-icon">🗑️</span>Delete</button>
-      <button class="tool-btn" onclick="snapAllTiles()"><span class="tool-icon">🧲</span>Snap all</button>
-      <button class="tool-btn" onclick="jumpEditorEnd()"><span class="tool-icon">⏭</span>To end</button></div></div>
-    <div class="tool-drawer-section"><div class="tool-drawer-label">PLAYTEST</div>
-      <div class="field-row"><label>Starting hearts</label><input type="number" id="edit-lives" value="3" min="1" max="10"></div>
-      <div class="switch-container"><label>NoClip</label><input type="checkbox" id="edit-noclip"></div>
-      <button class="btn btn-play" onclick="startPlaytest()">🎮 Play test</button></div>
+    <div class="drawer-header"><b id="ed-palette-title">TILES</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
+    <div id="ed-palette"></div>
   </div>
   <div class="drawer drawer-right" id="drawer-right">
-    <div class="drawer-header"><b>SELECTED</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
-    <div class="selected-empty" id="selected-effect-empty"><span class="selected-icon">✦</span><div><b>No effect selected</b><br><small>Open Effects, add one, or tap a marker on the timeline.</small></div></div>
-    <div id="selected-effect-editor" class="hidden">
-      <div class="selected-effect-title"><div><span id="selected-effect-kind">EFFECT</span><b id="selected-effect-time">0.00s</b></div></div>
-      <div id="selected-effect-fields"></div>
-      <div class="selected-effect-actions"><button class="btn small" onclick="setSelectedEffectToPlayhead()">Move to playhead</button><button class="btn small btn-danger" onclick="deleteSelectedEffect()">Delete</button></div>
-    </div>
+    <div class="drawer-header"><b>INSPECTOR</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
+    <div id="ed-inspector"></div>
   </div>
 
   <div class="timeline-dock" id="timeline-dock">
@@ -205,9 +213,10 @@
           <button class="mini-btn" onclick="nudgeEditorTime(-0.10)">−.1</button>
           <button class="mini-btn play-toggle-btn" onclick="toggleEditorTransport()" id="editor-transport-btn">▶</button>
           <button class="mini-btn" onclick="nudgeEditorTime(0.10)">+.1</button>
+          <button id="btn-start-pos" class="mini-btn" onclick="toggleStartPos()" title="Start position flag at the playhead">🚩</button>
         </div></div>
       <div class="editor-grid-controls">
-        <button id="btn-snap" class="grid-btn active" onclick="toggleEditorSnap()">🧲 Snap ON</button>
+        <button id="btn-snap" class="grid-btn active" onclick="toggleEditorSnap()">🧲 Snap: beat</button>
         <button class="grid-btn" data-grid="1" onclick="setEditorGrid(1)">1/1</button><button class="grid-btn active" data-grid="2" onclick="setEditorGrid(2)">1/2</button>
         <button class="grid-btn" data-grid="3" onclick="setEditorGrid(3)">1/3</button><button class="grid-btn" data-grid="4" onclick="setEditorGrid(4)">1/4</button>
         <button class="grid-btn" data-grid="8" onclick="setEditorGrid(8)">1/8</button>
@@ -217,6 +226,14 @@
     <div class="timeline-track-wrap" id="editor-marker-track"><div id="editor-playhead"></div><div id="editor-marker-layer"></div></div>
     <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.01" oninput="scrubTimeline(this.value)">
   </div>
+  <input type="file" id="decor-image-upload" accept="image/*" style="display:none">
+  <input type="file" id="fx-sfx-upload" accept="audio/*" style="display:none">
+  <input type="checkbox" id="edit-noclip" style="display:none">
+</div>
+
+<div id="preset-editor" class="overlay overlay-dim hidden" style="z-index:70">
+  <div class="center-panel preset-panel"><h2>TILE STYLE</h2><div id="preset-body"></div>
+    <div class="row-btns"><button class="btn btn-ghost" id="preset-cancel">Cancel</button><button class="btn btn-play" id="preset-save">Save style</button></div></div>
 </div>
 
 <div id="editor-level-settings" class="overlay hidden">
@@ -226,7 +243,10 @@
     <div class="settings-row"><span>BPM</span><input type="number" id="edit-bpm" value="120" min="30" max="500" step="0.5" oninput="onBpmChanged(this.value)" class="num-in"></div>
     <div class="settings-row"><span>Grid offset (s)</span><input type="number" id="edit-grid-offset" value="0" step="0.01" oninput="onGridOffsetChanged(this.value)" class="num-in"></div>
     <div class="note">Grid step: <b id="grid-readout">0.250s</b> · <b id="bpm-readout">120 BPM</b>. Set BPM + offset to match your song so tiles snap to the beat. Pick the subdivision (1/1 … 1/8) on the timeline.</div>
+    <div class="settings-row"><span>Description <small>(shown on the level card)</small></span></div>
+    <textarea id="edit-description" class="form-input" rows="3" maxlength="400" placeholder="What is this level about?"></textarea>
     <div class="section-title">PLAY SETTINGS</div>
+    <div class="settings-row"><span>Starting hearts</span><input type="number" id="edit-lives" value="3" min="1" max="10" class="num-in"></div>
     <div class="settings-row"><span>Target FPS</span><input type="number" id="edit-fps" value="60" min="10" max="240" class="num-in"></div>
     <div class="settings-row"><span>Music offset (ms) <small>+ = song plays earlier · − = song plays later</small></span><input type="number" id="edit-audio-offset" value="0" class="num-in"></div>
     <div class="settings-row"><span>Disable hold tiles</span><input type="checkbox" id="edit-disable-holds"></div>
@@ -234,6 +254,8 @@
     <div class="settings-row"><span>Strict mode <small>(hit tile 1 before tile 2 - no skipping)</small></span><input type="checkbox" id="edit-strict"></div>
     <div class="settings-row"><span>Tags <small>(speed, chords, holds, memory, tech, long, short, jumps, streams, strict, beginner)</small></span><input type="text" id="edit-tags" class="num-in wide" placeholder="speed, chords"></div>
     <div class="settings-row"><span>Difficulty</span><select id="edit-difficulty" class="num-in"><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Insane</option><option>Extreme</option></select></div>
+    <div class="section-title">SONG</div>
+    <div class="settings-row"><span>Song <small id="edit-song-label">No song</small></span><span class="btn-row"><button class="btn small btn-ghost" onclick="document.getElementById('audio-upload').click()">Upload</button><button class="btn small btn-ghost" onclick="pickLibrarySong()">📚 Library</button></span></div>
     <div class="section-title">APPEARANCE</div>
     <div class="settings-row"><span>Background</span><input type="color" id="edit-bg-color" value="#202738"></div>
     <div class="settings-row"><span>Brightness</span><input type="range" id="edit-bg-brightness" min="70" max="140" value="100" oninput="updateEditorBackgroundBrightness(this.value)"><b id="edit-bg-brightness-value">100%</b></div>
@@ -255,58 +277,6 @@
   </div>
 </div>
 
-<!-- ============ EFFECTS STUDIO ============ -->
-<div id="effects-menu" class="overlay hidden">
-  <div class="effects-studio">
-    <div class="effects-studio-header">
-      <div><span class="eyebrow">EDITOR</span><h2>Effects</h2></div>
-      <div class="effects-studio-header-actions"><div class="pill">PLAYHEAD <strong id="effect-time-display">0.00s</strong></div><button class="btn small btn-play" onclick="closeEffectsMenu()">DONE</button></div>
-    </div>
-    <div class="effects-studio-body">
-      <aside class="effect-library-panel">
-        <div class="effect-category-tabs">
-          <button class="effect-tab active" data-cat="visual" onclick="switchEffectCategory('visual')">VISUAL</button><button class="effect-tab" data-cat="speed" onclick="switchEffectCategory('speed')">SPEED</button>
-          <button class="effect-tab" data-cat="image" onclick="switchEffectCategory('image')">IMAGE</button><button class="effect-tab" data-cat="audio" onclick="switchEffectCategory('audio')">AUDIO</button><button class="effect-tab" data-cat="advanced" onclick="switchEffectCategory('advanced')">ADVANCED</button>
-        </div>
-        <div class="effect-library-list" id="effect-library-visual">
-          <button class="effect-library-card" onclick="addPulseEffect()"><span class="effect-library-icon">✦</span><span><b>Pulse</b><small>Timed flash / color</small></span><strong>+</strong></button>
-          <button class="effect-library-card" onclick="addTileStyleEffect()"><span class="effect-library-icon">■</span><span><b>Tile Style</b><small>Change tile colors</small></span><strong>+</strong></button>
-        </div>
-        <div class="effect-library-list hidden" id="effect-library-speed">
-          <button class="effect-library-card" onclick="setSpeedPreset(0.5)"><span class="effect-library-icon">½</span><span><b>0.5× Slow</b></span><strong>+</strong></button>
-          <button class="effect-library-card" onclick="setSpeedPreset(1)"><span class="effect-library-icon">1×</span><span><b>1× Normal</b></span><strong>+</strong></button>
-          <button class="effect-library-card" onclick="setSpeedPreset(1.5)"><span class="effect-library-icon">1.5×</span><span><b>1.5× Fast</b></span><strong>+</strong></button>
-          <button class="effect-library-card" onclick="setSpeedPreset(2)"><span class="effect-library-icon">2×</span><span><b>2× Extreme</b></span><strong>+</strong></button>
-          <div class="effect-library-form"><label>Target speed<input id="fx-speed-target" type="number" value="25" min="5" max="50"></label><label>Transition<input id="fx-speed-trans" type="number" value="0.50" min="0" step="0.05"></label><button class="btn small btn-play" onclick="addSpeedEffect()">ADD SPEED</button></div>
-        </div>
-        <div class="effect-library-list hidden" id="effect-library-image">
-          <div class="effect-library-form"><div class="form-block-title">BACKGROUND IMAGE</div><input type="file" id="fx-img-upload" accept="image/*">
-            <div class="two-col-effect"><label>Opacity<input type="number" id="fx-img-alpha" value="0.5" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-img-dur" value="2" min="0.1" step="0.1"></label><label>Fade in<input type="number" id="fx-img-in" value="0.3" min="0" step="0.05"></label><label>Fade out<input type="number" id="fx-img-out" value="0.3" min="0" step="0.05"></label></div>
-            <button class="btn small btn-play" onclick="addImageEffect()">ADD IMAGE</button></div>
-          <div class="effect-library-form"><div class="form-block-title">EXTRA IMAGE</div><input type="file" id="fx-extra-upload" accept="image/*">
-            <div class="two-col-effect"><label>Width<input type="number" id="fx-extra-w" value="150"></label><label>Height<input type="number" id="fx-extra-h" value="150"></label><label>Opacity<input type="number" id="fx-extra-alpha" value="1" min="0" max="1" step="0.05"></label><label>Duration<input type="number" id="fx-extra-dur" value="2" min="0.1" step="0.1"></label></div>
-            <div class="quick-position-row"><button onclick="setExtraImagePosition('center')">CENTER</button><button onclick="setExtraImagePosition('top')">TOP</button><button onclick="setExtraImagePosition('bottom')">BOTTOM</button></div>
-            <button class="btn small btn-play" onclick="addExtraImageEffect()">ADD EXTRA IMAGE</button></div>
-        </div>
-        <div class="effect-library-list hidden" id="effect-library-advanced"><div class="effect-library-form">
-          <div class="form-block-title">HITBOX EDITOR</div><div class="muted-note">Move or resize where taps count (and how tall each tile counts) from this moment on. Add another one set to "Off" to go back to normal. Select it to preview the zone on the board.</div>
-          <button class="btn small btn-play" onclick="addHitboxEffect()">ADD HITBOX CHANGE</button>
-          <div class="form-block-title">TILE MOVE</div><button class="btn small btn-play" onclick="addTileMoveEffect()">ADD TILE MOVE</button>
-          <div class="form-block-title">TILE HIDE (MEMORY)</div><button class="btn small btn-play" onclick="addTileHideEffect()">ADD TILE HIDE</button>
-          <div class="form-block-title">VIDEO BACKGROUND</div><input type="text" id="fx-video-url" class="form-input" placeholder="https://…/clip.mp4 (direct link)"><button class="btn small btn-play" onclick="addVideoEffect()">ADD VIDEO</button>
-        </div></div>
-        <div class="effect-library-list hidden" id="effect-library-audio"><div class="effect-library-form"><div class="form-block-title">EXTRA SFX</div><input type="file" id="fx-sfx-upload" accept="audio/*"><button class="btn small btn-play" onclick="addSfxEffect()">ADD SFX</button></div></div>
-      </aside>
-      <main class="effect-editor-main">
-        <div class="effect-timeline-toolbar"><b>EVENT TIMELINE</b><div class="effect-toolbar-actions"><button class="mini-btn" onclick="nudgeSelectedEffect(-0.10)">−0.1s</button><button class="mini-btn" onclick="nudgeSelectedEffect(0.10)">+0.1s</button><button class="mini-btn" onclick="setSelectedEffectToPlayhead()">To playhead</button><button class="mini-btn danger" onclick="deleteSelectedEffect()">Delete</button></div></div>
-        <div class="effect-timeline-wrap" id="effect-timeline-wrap"><div class="effect-time-ruler" id="effect-time-ruler"></div><div class="effect-tracks" id="effect-tracks"></div><div class="effect-timeline-playhead" id="effect-timeline-playhead"></div></div>
-        <div class="effect-timeline-footer"><span id="effect-selection-summary">Nothing selected</span><span>Shift = free drag · click timeline to move playhead</span></div>
-      </main>
-      <aside class="effect-inspector"><div class="effect-panel-heading"><span>INSPECTOR</span><small id="effect-inspector-subtitle">Select an effect</small></div><div id="effect-inspector-content"></div></aside>
-    </div>
-  </div>
-</div>
-
 <div id="shared-menu" class="overlay hidden"></div>
 <div id="spectate-menu" class="overlay hidden"></div>
 <div id="friends-menu" class="overlay hidden"></div>
@@ -319,15 +289,17 @@
 <div id="announcement-bar" class="hidden"></div>
 <div id="warning-screen" class="hidden"></div>
 
-<script src="js/config.js?v=20261005-3"></script>
-<script src="js/state.js?v=20261005-3"></script>
-<script src="js/ui.js?v=20261005-3"></script>
-<script src="js/storage.js?v=20261005-3"></script>
-<script src="js/auth.js?v=20261005-3"></script>
-<script src="js/game.js?v=20261005-3"></script>
-<script src="js/editor.js?v=20261005-3"></script>
-<script src="js/browse.js?v=20261005-3"></script>
-<script src="js/battle.js?v=20261005-3"></script>
-<script src="js/main.js?v=20261005-3"></script>
+<script src="js/config.js?v=20261010-1"></script>
+<script src="js/state.js?v=20261010-1"></script>
+<script src="js/ui.js?v=20261010-1"></script>
+<script src="js/storage.js?v=20261010-1"></script>
+<script src="js/auth.js?v=20261010-1"></script>
+<script src="js/decor.js?v=20261010-1"></script>
+<script src="js/game.js?v=20261010-1"></script>
+<script src="js/editor.js?v=20261010-1"></script>
+<script src="js/browse.js?v=20261010-1"></script>
+<script src="js/battle.js?v=20261010-1"></script>
+<script src="js/main.js?v=20261010-1"></script>
+<script src="js/extras.js?v=20261010-1"></script>
 </body>
 </html>
