@@ -257,3 +257,40 @@ input:focus{border-color:var(--blue)}
 .shortcut-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.shortcut-grid label{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:13px}
 .shortcut-grid input{width:42px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--line);background:rgba(0,0,0,.35);color:#fff;font-weight:800;text-transform:uppercase}
 .admin-tabs .tab{padding:8px 10px;font-size:12px}
+
+/* ===== v6 editor ===== */
+.ed-top{position:fixed;top:calc(6px + env(safe-area-inset-top));left:8px;right:8px;z-index:50;display:flex;align-items:center;gap:6px;pointer-events:auto}
+.ed-tabs{flex:1;display:flex;gap:3px;background:rgba(0,0,0,.45);border:1px solid var(--line);border-radius:10px;padding:3px;min-width:0}
+.ed-tab{flex:1;border:0;background:transparent;color:var(--text-mid);font-size:11px;font-weight:800;letter-spacing:.06em;padding:8px 2px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.ed-tab.active{background:var(--blue);color:#fff}
+.ed-btn{height:34px;min-width:34px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:rgba(0,0,0,.45);color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;flex:0 0 auto}
+.ed-btn.sq{padding:0;width:34px}.ed-btn.active{background:var(--blue);border-color:var(--blue)}.ed-btn.off{opacity:.4;text-decoration:line-through}
+.ed-btn.play{background:#1fa971;border-color:#1fa971}
+.ed-tools{position:fixed;top:calc(46px + env(safe-area-inset-top));left:8px;right:8px;z-index:49;display:flex;flex-wrap:wrap;align-items:center;gap:4px;pointer-events:auto}
+.ed-sep{width:1px;height:20px;background:var(--line);margin:0 2px}
+.ed-pills{margin-left:auto;display:flex;gap:4px}.ed-pills .pill{padding:5px 8px;font-size:11px}
+.btn-row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.btn-row .btn{flex:1 1 auto}
+.drawer-right,.drawer-left{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
+.preset-list{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.preset-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:#fff;font-size:11px;font-weight:700;cursor:pointer;text-align:left;min-width:0}
+.preset-item.active{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan) inset}
+.preset-swatch{width:22px;height:30px;flex:0 0 22px;border-radius:4px}.preset-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.layer-list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto}
+.layer-item{display:flex;align-items:center;gap:4px;padding:5px 6px;border-radius:8px;background:var(--panel);border:1px solid transparent;cursor:pointer;font-size:11px}
+.layer-item.sel{border-color:#ffd23f}.layer-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.layer-name small{opacity:.6}
+.layer-item .mini-btn{padding:3px 6px}
+.timeline-marker.sel{width:4px;background:#fff!important;box-shadow:0 0 6px #fff;z-index:3}
+.timeline-marker.obj{background:#37d6a0;top:auto;bottom:2px;height:10px;width:3px}
+.timeline-marker.fx{cursor:pointer}
+.preset-panel{width:min(92vw,360px);max-height:92vh;overflow-y:auto;gap:8px}.preset-preview{width:100%;border-radius:10px;border:1px solid var(--line)}
+.selected-effect-title small{font-size:10px;opacity:.6;font-weight:600}
+.inspector-field input[type=checkbox]{width:auto}
+#progress-bar{position:fixed;left:50%;transform:translateX(-50%);top:calc(30px + env(safe-area-inset-top));width:min(220px,50vw);height:6px;border-radius:4px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.25);z-index:30;pointer-events:none}
+#progress-fill{height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,var(--cyan),var(--blue))}
+#progress-best{position:absolute;top:-4px;width:2px;height:14px;background:#ffd23f;box-shadow:0 0 4px #ffd23f}
+#progress-bar.hidden{display:none}
+@media(min-width:1000px){
+  .drawer{transform:none!important;top:98px;bottom:150px;padding-bottom:16px;border-radius:12px}
+  .drawer-left{left:12px}.drawer-right{right:12px}
+  .drawer-backdrop,.drawer-close{display:none!important}
+}
