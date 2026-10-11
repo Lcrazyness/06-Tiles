@@ -1,0 +1,20 @@
+/* extras.css — announcements, song library, admin additions, impersonation bar */
+.news-btn{position:relative;margin-top:2px}
+.news-badge{display:inline-block;min-width:18px;padding:1px 6px;margin-left:6px;border-radius:10px;background:#ff2e88;color:#fff;font-size:11px;font-weight:800;line-height:16px;text-align:center}
+.news-badge.hidden{display:none}
+.news-post{display:flex;flex-direction:column;gap:8px}
+.news-title{font-size:17px;font-weight:800}.news-meta{font-size:11px;color:var(--text-low)}
+.news-img{width:100%;max-height:260px;object-fit:cover;border-radius:10px}
+.news-body{font-size:13px;line-height:1.55;color:var(--text-mid);word-break:break-word}
+.song-actions{display:flex;gap:6px;flex:0 0 auto}
+.form-check{display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0}.form-check input{width:auto}
+#imp-bar{position:fixed;top:0;left:0;right:0;height:28px;z-index:200;background:#ff2e88;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px}
+#imp-bar button{border:0;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:800;background:#fff;color:#c2185b;cursor:pointer}
+body.imp-bar .overlay,body.imp-bar #editor-ui,body.imp-bar #pause-btn{top:28px}
+body.imp-bar .editor-topbar{top:34px}
+/* admin panel tidy-up */
+.admin-tabs{display:flex;flex-wrap:wrap;gap:6px}
+.admin-row{flex-wrap:wrap;gap:8px}
+.admin-row .row-btns,.admin-actions{display:flex;flex-wrap:wrap;gap:6px}
+.level-thumb{width:44px;height:78px;object-fit:cover;border-radius:6px;flex:0 0 44px;background:#111}
+.level-desc{font-size:11px;color:var(--text-mid);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
