@@ -15,7 +15,7 @@ const bgAudio = document.getElementById("bg-audio");
 // stuck on screen after you left it.)
 const overlays = [
   'main-menu', 'settings-menu', 'death-screen', 'pause-menu', 'my-levels-menu',
-  'creator-menu', 'effects-menu', 'browse-levels-menu', 'editor-level-settings',
+  'creator-menu', 'news-menu', 'songs-menu', 'browse-levels-menu', 'editor-level-settings',
   'profile-modal', 'stats-modal', 'admin-panel', 'level-detail-menu', 'battle-menu', 'battle-level-picker',
   'battle-waiting-menu', 'battle-incoming-menu', 'battle-result-menu', 'shared-menu', 'spectate-menu', 'friends-menu'
 ];
