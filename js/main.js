@@ -23,6 +23,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const cbf = document.getElementById('setting-cbf');
   if (cbf) { cbf.checked = localStorage.getItem('et_cbf') !== 'false'; cbf.addEventListener('change', () => localStorage.setItem('et_cbf', String(cbf.checked))); }
+  { // progress bar / practice / editor settings
+    const pb = document.getElementById('setting-progress-bar'), ac = document.getElementById('setting-auto-cp'), acs = document.getElementById('setting-auto-cp-sec'), ns = document.getElementById('setting-no-snap');
+    if (pb) { pb.checked = showProgressBar; pb.addEventListener('change', () => { showProgressBar = pb.checked; localStorage.setItem('et_progBar', String(pb.checked)); }); }
+    if (ac) { ac.checked = autoCheckpoints; ac.addEventListener('change', () => { autoCheckpoints = ac.checked; localStorage.setItem('et_autoCP', String(ac.checked)); }); }
+    if (acs) { acs.value = autoCheckpointSec; acs.addEventListener('change', () => { autoCheckpointSec = Math.max(1, Math.min(30, Number(acs.value) || 3)); acs.value = autoCheckpointSec; localStorage.setItem('et_autoCPSec', String(autoCheckpointSec)); }); }
+    if (ns) { ns.checked = localStorage.getItem('et_noSnap') === 'true'; ns.addEventListener('change', () => localStorage.setItem('et_noSnap', String(ns.checked))); }
+  }
   document.querySelectorAll('[id^="keybind-"]').forEach((el, i) => { if (keyMap[i]) el.value = keyMap[i]; });
   const levelBg = document.getElementById('edit-bg-color');
   if (levelBg) levelBg.addEventListener('input', e => { currentLevelBackground = e.target.value; if (inEditor) applyEditorBackground(); });
