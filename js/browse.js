@@ -855,13 +855,13 @@ function updateNewsBadge() {
 }
 function injectNewsButton() {
   if (document.getElementById('news-btn')) return;
-  const col = document.querySelector('#main-menu .home-col'); if (!col) return;
+  const col = document.querySelector('#main-menu'); if (!col) return;
+  let rail = document.getElementById('menu-rail');
+  if (!rail) { rail = document.createElement('div'); rail.id = 'menu-rail'; col.appendChild(rail); }
   const b = document.createElement('button');
-  b.id = 'news-btn'; b.className = 'btn btn-ghost news-btn';
-  b.innerHTML = '📣 Announcements <span id="news-badge" class="news-badge hidden">0</span>';
-  b.onclick = openNews;
-  const admin = document.getElementById('admin-btn');
-  col.insertBefore(b, admin || null);
+  b.id = 'news-btn'; b.className = 'icon-btn rail-btn'; b.setAttribute('aria-label', 'Announcements');
+  b.innerHTML = '📣<span id="news-badge" class="news-badge hidden">0</span>';
+  b.onclick = openNews; rail.appendChild(b);
 }
 async function openNews() {
   const host = ensureOverlay('news-menu');
@@ -871,17 +871,68 @@ async function openNews() {
   renderNews();
   if (newsCache.length) { localStorage.setItem('et_news_seen', String(Math.max(...newsCache.map(n => n.id)))); updateNewsBadge(); }
 }
+const newsOpen = new Set();
+// "Browse/(Level name)" (or Browse/(level-id)) in a post becomes a link that opens that level
+function newsBodyHtml(text) {
+  return escapeHtml(text).replace(/Browse\/\(([^)\n]{1,80})\)/g, (m, n) => '<a class="level-link" data-lvl="' + n + '">🌐 ' + n + '</a>').replace(/\n/g, '<br>');
+}
+async function openLevelLink(name) {
+  name = String(name).trim();
+  try {
+    let level = null;
+    if (/^[0-9a-f-]{36}$/i.test(name)) level = await apiRequest('/api/levels/' + name);
+    else {
+      const list = await apiRequest('/api/levels?search=' + encodeURIComponent(name));
+      level = (list || []).find(l => String(l.name).toLowerCase() === name.toLowerCase()) || (list || [])[0];
+    }
+    if (!level || !level.id) { toast('Level not found.', 'bad'); return; }
+    openLevelDetail(level, 'community');
+  } catch (e) { toast(e.message || 'Level not found.', 'bad'); }
+}
 function renderNews() {
-  const host = ensureOverlay('news-menu'), admin = isAdminUser();
-  const posts = newsCache.map(n => `<div class="panel news-post">
+  const host = ensureOverlay('news-menu'), admin = isAdminUser(), me = getAuthUser();
+  const posts = newsCache.map(n => `<div class="panel news-post" data-nid="${n.id}">
       <div class="news-title">${escapeHtml(n.title)}</div><div class="news-meta">${fmtDate(n.createdAt)} · ${escapeHtml(n.author)}</div>
       ${n.image ? '<img class="news-img" src="' + escapeHtml(n.image) + '" alt="">' : ''}
-      <div class="news-body">${escapeHtml(n.body).replace(/\n/g, '<br>')}</div>
-      ${admin ? '<div class="btn-row"><button class="btn small btn-ghost" onclick="editNews(' + n.id + ')">✎ Edit</button><button class="btn small btn-danger" onclick="deleteNews(' + n.id + ')">🗑 Delete</button></div>' : ''}
+      <div class="news-body">${newsBodyHtml(n.body)}</div>
+      <div class="news-actions"><button class="c-btn${n.liked ? ' on' : ''}" data-nlike="${n.id}">${n.liked ? '❤️' : '🤍'} ${n.likes || ''}</button>
+        <button class="c-btn" data-nthread="${n.id}">💬 ${n.comments || 'Reply'}</button>
+        ${admin ? '<button class="c-btn" onclick="editNews(' + n.id + ')">✎ Edit</button><button class="c-btn del" onclick="deleteNews(' + n.id + ')">🗑 Delete</button>' : ''}</div>
+      <div class="news-thread hidden" id="nthread-${n.id}"></div>
     </div>`).join('');
   host.innerHTML = screenHtml('ANNOUNCEMENTS', "toggleMenu('main-menu')",
     (admin ? '<button class="btn btn-play" onclick="editNews(0)">＋ New post</button>' : '') + (posts || (newsError ? errorBox(newsError, 'openNews()') : '<div class="empty">No announcements yet.</div>')));
   host.querySelectorAll('.news-img').forEach(i => { i.onclick = () => viewNewsImage(i.src); });
+  host.querySelectorAll('.level-link').forEach(a => { a.onclick = () => openLevelLink(a.dataset.lvl); });
+  host.querySelectorAll('[data-nlike]').forEach(b => b.onclick = async () => {
+    if (!me) { toast('Log in to like.', 'bad'); return; }
+    try { const d = await apiRequest('/api/news/' + b.dataset.nlike + '/like', { method: 'POST', auth: true, body: {} }); const n = newsCache.find(x => String(x.id) === b.dataset.nlike); if (n) { n.liked = d.liked; n.likes = d.likes; } b.className = 'c-btn' + (d.liked ? ' on' : ''); b.textContent = (d.liked ? '❤️ ' : '🤍 ') + (d.likes || ''); } catch (e) { toast(e.message, 'bad'); }
+  });
+  host.querySelectorAll('[data-nthread]').forEach(b => b.onclick = () => {
+    const id = Number(b.dataset.nthread), box = document.getElementById('nthread-' + id);
+    if (newsOpen.has(id)) { newsOpen.delete(id); box.classList.add('hidden'); } else { newsOpen.add(id); box.classList.remove('hidden'); loadNewsThread(id); }
+  });
+  newsOpen.forEach(id => { const box = document.getElementById('nthread-' + id); if (box) { box.classList.remove('hidden'); loadNewsThread(id); } });
+}
+async function loadNewsThread(id, replyTo) {
+  const box = document.getElementById('nthread-' + id); if (!box) return;
+  const me = getAuthUser(), admin = isAdminUser();
+  const prev = box.querySelector('textarea'); const draft = prev ? prev.value : '';
+  let list = []; try { list = (await apiRequest('/api/news/' + id + '/comments')).comments || []; } catch (e) { box.innerHTML = '<div class="note">Could not load replies.</div>'; return; }
+  const tops = list.filter(c => !c.parentId), kids = {};
+  list.filter(c => c.parentId).forEach(c => (kids[c.parentId] = kids[c.parentId] || []).push(c));
+  const row = (c, isReply) => `<div class="comment${isReply ? ' reply' : ''}"><div class="c-avatar" style="background:${artGradient(c.username)}">${escapeHtml(c.username.slice(0, 1).toUpperCase())}</div>
+    <div class="c-main"><div class="c-head"><b>${escapeHtml(c.username)}</b>${c.isAdmin ? '<span class="cbadge admin">ADMIN</span>' : ''}<small>${timeAgo(c.createdAt)}</small></div><div class="c-text">${escapeHtml(c.text)}</div>
+    <div class="c-actions">${me && !isReply ? '<button class="c-btn" data-nr="' + c.id + '">↩ Reply</button>' : ''}${me && (admin || me.id === c.userId) ? '<button class="c-btn del" data-nd="' + c.id + '">🗑</button>' : ''}</div></div></div>`;
+  box.innerHTML = (tops.length ? tops.map(c => row(c, false) + (kids[c.id] || []).map(k => row(k, true)).join('')).join('') : '<div class="note">No replies yet.</div>') +
+    (me ? (replyTo ? '<div class="reply-banner">Replying to <b>' + escapeHtml(replyTo.username) + '</b> <button class="c-btn" data-ncancel>✕</button></div>' : '') +
+      '<div class="stream-compose"><input id="nin-' + id + '" maxlength="300" placeholder="' + (replyTo ? 'Write a reply…' : 'Reply to this post…') + '"><button class="btn small btn-play" data-nsend>Send</button></div>' : '<div class="note">Log in to reply.</div>');
+  const inp = document.getElementById('nin-' + id); if (inp) { inp.value = draft; if (replyTo) inp.focus(); }
+  const send = async () => { const t = inp.value.trim(); if (!t) return; try { await apiRequest('/api/news/' + id + '/comments', { method: 'POST', auth: true, body: { text: t, parentId: replyTo ? replyTo.id : undefined } }); const n = newsCache.find(x => x.id === id); if (n) n.comments = (n.comments || 0) + 1; inp.value = ''; loadNewsThread(id); } catch (e) { toast(e.message, 'bad'); } };
+  if (inp) { inp.onkeydown = e => { if (e.key === 'Enter') send(); }; box.querySelector('[data-nsend]').onclick = send; }
+  const cancel = box.querySelector('[data-ncancel]'); if (cancel) cancel.onclick = () => loadNewsThread(id);
+  box.querySelectorAll('[data-nr]').forEach(b => b.onclick = () => loadNewsThread(id, list.find(c => String(c.id) === b.dataset.nr)));
+  box.querySelectorAll('[data-nd]').forEach(b => b.onclick = async () => { if (!(await uiConfirm('Delete this reply?', 'Delete', true))) return; try { await apiRequest('/api/news/comments/' + b.dataset.nd, { method: 'DELETE', auth: true }); loadNewsThread(id); } catch (e) { toast(e.message, 'bad'); } });
 }
 function viewNewsImage(src) {
   const d = document.createElement('div'); d.className = 'img-lightbox'; d.innerHTML = '<img alt="">'; d.firstChild.src = src;
@@ -889,7 +940,7 @@ function viewNewsImage(src) {
 }
 async function editNews(id) {
   const old = newsCache.find(n => n.id === id) || { title: '', body: '' };
-  const r = await openFormDialog({ title: id ? 'Edit post' : 'New announcement', fields: [{ id: 'title', label: 'Title', value: old.title, maxlength: 120 }, { id: 'body', label: 'Text', type: 'textarea', value: old.body, rows: 7, maxlength: 5000 }, { id: 'image', label: 'Image (optional)', type: 'file' }].concat(id ? (old.image ? [{ id: 'dropImg', label: 'Remove current image', type: 'checkbox' }] : []) : [{ id: 'banner', label: 'Also show a banner to everyone', type: 'checkbox' }]), okText: id ? 'Save' : 'Post' });
+  const r = await openFormDialog({ title: id ? 'Edit post' : 'New announcement', fields: [{ id: 'title', label: 'Title', value: old.title, maxlength: 120 }, { id: 'body', label: 'Text (link a level with Browse/(Level name))', type: 'textarea', value: old.body, rows: 7, maxlength: 5000 }, { id: 'image', label: 'Image (optional)', type: 'file' }].concat(id ? (old.image ? [{ id: 'dropImg', label: 'Remove current image', type: 'checkbox' }] : []) : [{ id: 'banner', label: 'Also show a banner to everyone', type: 'checkbox' }]), okText: id ? 'Save' : 'Post' });
   if (!r) return;
   if (!String(r.title || '').trim()) { toast('Add a title.', 'bad'); return; }
   let image = null, keepImage = !!id && !r.dropImg;
