@@ -31,8 +31,8 @@ let dGS = {};                                                // group states { d
 let dTween = [];
 let dCam = { shakeT0: 0, shakeDur: 0, shakeStr: 0, zoom: 1 };
 let dBg = null;                                              // { from,to,t0,dur,cur } background colour tween
-let dFlips = [];                                             // [{time,on}]
-let dFlipOnStart = false;
+let dFlips = [], dFlipsV = [];                                             // [{time,on}]
+let dFlipOnStart = false, dVFlip = false;
 
 function newDecorData() { return { objects: [], images: {}, presets: [] }; }
 function normalizeDecor(d) {
@@ -54,9 +54,11 @@ function gs(g) { return dGS[g] || (dGS[g] = { dx: 0, dy: 0, rot: 0, sc: 1, a: 1,
 
 function decorReset(effects) {
   dGS = {}; dTween = []; dCam = { shakeT0: 0, shakeDur: 0, shakeStr: 0, zoom: 1 }; dBg = null;
-  dFlips = (effects || []).filter(e => e.type === 'laneflip').map(e => ({ time: Number(e.time) || 0, on: Number(e.on) !== 0 })).sort((a, b) => a.time - b.time);
+  const fl = (effects || []).filter(e => e.type === 'laneflip').map(e => ({ time: Number(e.time) || 0, on: Number(e.on) !== 0, v: e.axis === 'v' })).sort((a, b) => a.time - b.time);
+  dFlips = fl.filter(f => !f.v); dFlipsV = fl.filter(f => f.v);
 }
 // is a tile with chart time `t` mirrored (lane flip)?
+function vFlipAt(t) { let on = false; for (const f of dFlipsV) { if (f.time <= t + 1e-6) on = f.on; else break; } return on; }
 function laneFlipAt(t) { let on = false; for (const f of dFlips) { if (f.time <= t + 1e-6) on = f.on; else break; } return on; }
 
 function addTween(obj, prop, to, t0, dur, easing) {
@@ -942,7 +944,9 @@ function gameLoop(ts) {
   { const ct = inEditor ? editorTimer : customPlayTime;
     if (inEditor) editorDecorSync();
     decorCameraBegin(ctx, ct);
-    if (!inEditor || edShow.decor) drawDecorLayer(ctx, 'bg', ct, inEditor ? { ghost: true } : {}); }
+    if (!inEditor || edShow.decor) drawDecorLayer(ctx, 'bg', ct, inEditor ? { ghost: true } : {});
+    dVFlip = vFlipAt(ct); }
+  if (dVFlip) ctx.transform(1, 0, 0, -1, 0, GH);   // upside-down board: tiles rise from the bottom
   drawBoard();
 
   if (!isCustomGame && !inEditor && gameActive) {
@@ -1023,10 +1027,13 @@ function gameLoop(ts) {
     ctx.globalAlpha = 1.0;
   }
   if (showHitboxes && gameActive && isCustomGame) drawHitboxOverlay();
+  if (dVFlip) ctx.transform(1, 0, 0, -1, 0, GH);
   if (!inEditor || edShow.decor) drawDecorLayer(ctx, 'fg', inEditor ? editorTimer : customPlayTime, inEditor ? { ghost: true } : {});
+  if (dVFlip) { decorCameraEnd(ctx); }
   decorCameraEnd(ctx);
   if (globeOn && typeof globeLevelId !== 'undefined' && globeLevelId && gameActive) drawGlobeHud();
 
+  if (dVFlip) ctx.transform(1, 0, 0, -1, 0, GH);
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.update(dt);
@@ -1036,6 +1043,7 @@ function gameLoop(ts) {
     ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1.0;
+  if (dVFlip) ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
 }
 
 // ---------------------------------------------------------------------------
