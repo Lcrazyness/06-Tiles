@@ -531,19 +531,63 @@ async function openLevelBoard(level) {
   } catch (e) { screen(errorBox(e.message, 'void 0')); }
 }
 
+let commentSort = 'top';
 async function openComments(level) {
-  const render = async () => {
+  let replyTo = null, draft = '';
+  const lvId = encodeURIComponent(level.id);
+  const render = async (keepScroll) => {
     const me = getAuthUser();
     const el = document.getElementById('level-detail-menu');
-    let list = [];
-    try { list = (await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/comments')).comments; } catch (e) {}
+    const oldBody = el.querySelector('.screen-body'), scrollTop = oldBody && keepScroll ? oldBody.scrollTop : 0;
+    const prev = document.getElementById('comment-input'); if (prev) draft = prev.value;
+    let list = [], authorId = null;
+    try { const d = await apiRequest('/api/levels/' + lvId + '/comments', { auth: !!me }); list = d.comments || []; authorId = d.levelAuthorId; } catch (e) {}
+    const canManage = !!me && (me.isAdmin || (authorId && me.id === authorId));
+    const tops = list.filter(c => !c.parentId);
+    const kids = {}; list.filter(c => c.parentId).forEach(c => (kids[c.parentId] = kids[c.parentId] || []).push(c));
+    Object.values(kids).forEach(a => a.sort((x, y) => new Date(x.createdAt) - new Date(y.createdAt)));
+    tops.sort((x, y) => (y.pinned - x.pinned) || (commentSort === 'top' ? (y.likes - x.likes) || (new Date(y.createdAt) - new Date(x.createdAt)) : new Date(y.createdAt) - new Date(x.createdAt)));
+    const row = (c, isReply) => {
+      const badges = (c.isAuthor ? '<span class="cbadge creator">CREATOR</span>' : '') + (c.isAdmin ? '<span class="cbadge admin">ADMIN</span>' : '') + (c.pinned ? '<span class="cbadge pin">📌 PINNED</span>' : '');
+      const mine = me && (me.isAdmin || me.id === c.userId || (authorId && me.id === authorId));
+      return `<div class="comment${isReply ? ' reply' : ''}${c.pinned ? ' pinned' : ''}">
+        <div class="c-avatar" style="background:${artGradient(c.username)}">${escapeHtml(c.username.slice(0, 1).toUpperCase())}</div>
+        <div class="c-main">
+          <div class="c-head"><b>${escapeHtml(c.username)}</b>${badges}<small>${timeAgo(c.createdAt)}</small></div>
+          <div class="c-text">${escapeHtml(c.text)}</div>
+          <div class="c-actions">
+            <button class="c-btn${c.liked ? ' on' : ''}" data-like="${c.id}">${c.liked ? '❤️' : '🤍'} ${c.likes || ''}</button>
+            ${me && !isReply ? '<button class="c-btn" data-reply="' + c.id + '">↩ Reply</button>' : ''}
+            ${canManage && !isReply ? '<button class="c-btn" data-pin="' + c.id + '">' + (c.pinned ? 'Unpin' : '📌 Pin') + '</button>' : ''}
+            ${mine ? '<button class="c-btn del" data-del="' + c.id + '">🗑</button>' : ''}
+          </div>
+        </div></div>`;
+    };
+    const replyBanner = replyTo ? `<div class="reply-banner">Replying to <b>${escapeHtml(replyTo.username)}</b> <button class="c-btn" id="reply-cancel">✕</button></div>` : '';
     el.innerHTML = screenHtml('COMMENTS', null, `<div class="hero-name">${escapeHtml(level.name)}</div>
-      ${me ? '<div class="searchbar"><input id="comment-input" maxlength="300" placeholder="Write a comment…" onkeydown="if(event.key===\'Enter\')document.getElementById(\'comment-post\').click()"><button class="btn small btn-play" id="comment-post">Post</button></div>' : '<div class="note center">Log in to comment.</div>'}
-      <div class="comment-list">${list.length ? list.map(c => `<div class="comment"><div><b>${escapeHtml(c.username)}</b> <small>${timeAgo(c.createdAt)}</small></div><div>${escapeHtml(c.text)}</div>${me && (me.isAdmin || me.id === c.userId) ? '<button class="btn small btn-danger" data-del="' + c.id + '">Delete</button>' : ''}</div>`).join('') : '<div class="empty">No comments yet.</div>'}</div>`);
+      <div class="comment-bar"><span class="note">${list.length} comment${list.length === 1 ? '' : 's'}</span>
+        <div class="seg"><button class="${commentSort === 'top' ? 'on' : ''}" data-sort="top">Top</button><button class="${commentSort === 'new' ? 'on' : ''}" data-sort="new">Newest</button></div></div>
+      ${me ? replyBanner + '<div class="comment-compose"><div class="c-avatar" style="background:' + artGradient(me.username) + '">' + escapeHtml(me.username.slice(0, 1).toUpperCase()) + '</div><div class="compose-main"><textarea id="comment-input" maxlength="300" rows="2" placeholder="' + (replyTo ? 'Write a reply…' : 'Say something about this level…') + '"></textarea><div class="compose-foot"><span id="comment-count" class="note">0/300</span><button class="btn small btn-play" id="comment-post">Post</button></div></div></div>' : '<div class="note center">Log in to comment.</div>'}
+      <div class="comment-list">${tops.length ? tops.map(c => row(c, false) + (kids[c.id] || []).map(k => row(k, true)).join('')).join('') : '<div class="empty">No comments yet. Be the first!</div>'}</div>`);
+    const ni = document.getElementById('comment-input');
+    const upd = () => { const cc = document.getElementById('comment-count'); if (cc) cc.textContent = ni.value.length + '/300'; };
+    if (ni) { ni.value = draft; upd(); ni.oninput = () => { draft = ni.value; upd(); }; ni.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('comment-post').click(); } }; if (replyTo) ni.focus(); }
+    const body = el.querySelector('.screen-body'); if (body && keepScroll) body.scrollTop = scrollTop;
     el.querySelector('.back-btn').onclick = () => openLevelDetail(level, 'community', levelDetailReturnTo === 'admin-panel');
+    const act = async (fn) => { try { await fn(); } catch (e) { toast(e.message, 'bad'); } };
     const post = document.getElementById('comment-post');
-    if (post) post.onclick = async () => { const t = document.getElementById('comment-input').value.trim(); if (!t) return; try { await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/comments', { method: 'POST', auth: true, body: { text: t } }); render(); } catch (e) { toast(e.message, 'bad'); } };
-    el.querySelectorAll('[data-del]').forEach(b => { b.onclick = async () => { try { await apiRequest('/api/comments/' + b.dataset.del, { method: 'DELETE', auth: true }); render(); } catch (e) { toast(e.message, 'bad'); } }; });
+    if (post) post.onclick = () => act(async () => {
+      const t = (ni.value || '').trim(); if (!t) return;
+      post.disabled = true;
+      await apiRequest('/api/levels/' + lvId + '/comments', { method: 'POST', auth: true, body: { text: t, parentId: replyTo ? replyTo.id : undefined } });
+      draft = ''; replyTo = null; await render(true);
+    }).then(() => { const p = document.getElementById('comment-post'); if (p) p.disabled = false; });
+    const rc = document.getElementById('reply-cancel'); if (rc) rc.onclick = () => { replyTo = null; render(true); };
+    el.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => { commentSort = b.dataset.sort; render(); });
+    el.querySelectorAll('[data-like]').forEach(b => b.onclick = () => act(async () => { if (!me) { toast('Log in to like.', 'bad'); return; } await apiRequest('/api/comments/' + b.dataset.like + '/like', { method: 'POST', auth: true, body: {} }); render(true); }));
+    el.querySelectorAll('[data-reply]').forEach(b => b.onclick = () => { replyTo = list.find(c => String(c.id) === b.dataset.reply) || null; render(true); });
+    el.querySelectorAll('[data-pin]').forEach(b => b.onclick = () => act(async () => { await apiRequest('/api/comments/' + b.dataset.pin + '/pin', { method: 'POST', auth: true, body: {} }); render(true); }));
+    el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => act(async () => { if (!(await uiConfirm('Delete this comment?', 'Delete', true))) return; await apiRequest('/api/comments/' + b.dataset.del, { method: 'DELETE', auth: true }); render(true); }));
   };
   toggleMenu('level-detail-menu'); render();
 }
@@ -761,3 +805,237 @@ async function adminRemoveStats(p) {
   if (!picked.length && !r.levelId) { toast('Nothing ticked.'); return; }
   try { await apiRequest('/api/admin/players/' + p.id + '/remove-stats', { method: 'POST', auth: true, body: { fields: picked, levelId: r.levelId || undefined } }); toast('Removed.', 'good'); loadAdminPanel('players'); } catch (e) { toast(e.message, 'bad'); }
 }
+
+
+// ============================================================================
+// extras.js — announcements, song library, cloud copies of My Levels (so admins can
+// publish unpublished levels), "log in as player" (impersonation) bar.
+// Loaded last. Injects the DOM it needs.
+// ============================================================================
+function ensureOverlay(id) {
+  let e = document.getElementById(id);
+  if (!e) { e = document.createElement('div'); e.id = id; e.className = 'overlay hidden'; document.body.appendChild(e); }
+  return e;
+}
+const fmtDate = iso => { try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
+const fileToDataUrl = file => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
+// shrink any image to a JPEG/PNG data url (keeps transparency for png)
+async function shrinkImageFile(file, maxSize, quality) {
+  const keep = /png|gif|webp/.test(file.type);
+  const url = URL.createObjectURL(file);
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not read that image.')); i.src = url; });
+  const r = Math.min(1, maxSize / Math.max(img.width, img.height)), c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.width * r)); c.height = Math.max(1, Math.round(img.height * r));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+  let out = c.toDataURL(keep ? 'image/png' : 'image/jpeg', quality || 0.8);
+  if (out.length > 1400000) out = c.toDataURL('image/jpeg', 0.6);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Announcements
+// ---------------------------------------------------------------------------
+let newsCache = [];
+const newsSeen = () => Number(localStorage.getItem('et_news_seen') || 0);
+let newsError = '';
+async function fetchNews() {
+  try { const d = await apiRequest('/api/news'); newsCache = d.news || []; newsError = ''; } catch (e) { newsError = e.message || 'Could not load.'; }
+  updateNewsBadge();
+  return newsCache;
+}
+// live: an admin just posted something
+function onNewsPosted(d) {
+  fetchNews().then(() => { if (!document.getElementById('news-menu').classList.contains('hidden')) renderNews(); });
+  showAnnouncement('New: ' + (d && d.title ? d.title : 'announcement'), true);
+}
+function updateNewsBadge() {
+  const b = document.getElementById('news-badge'); if (!b) return;
+  const unread = newsCache.filter(n => n.id > newsSeen()).length;
+  b.textContent = unread > 9 ? '9+' : String(unread); b.classList.toggle('hidden', !unread);
+}
+function injectNewsButton() {
+  if (document.getElementById('news-btn')) return;
+  const col = document.querySelector('#main-menu .home-col'); if (!col) return;
+  const b = document.createElement('button');
+  b.id = 'news-btn'; b.className = 'btn btn-ghost news-btn';
+  b.innerHTML = '📣 Announcements <span id="news-badge" class="news-badge hidden">0</span>';
+  b.onclick = openNews;
+  const admin = document.getElementById('admin-btn');
+  col.insertBefore(b, admin || null);
+}
+async function openNews() {
+  const host = ensureOverlay('news-menu');
+  toggleMenu('news-menu');
+  host.innerHTML = screenHtml('ANNOUNCEMENTS', "toggleMenu('main-menu')", '<div class="empty">Loading…</div>');
+  await fetchNews();
+  renderNews();
+  if (newsCache.length) { localStorage.setItem('et_news_seen', String(Math.max(...newsCache.map(n => n.id)))); updateNewsBadge(); }
+}
+function renderNews() {
+  const host = ensureOverlay('news-menu'), admin = isAdminUser();
+  const posts = newsCache.map(n => `<div class="panel news-post">
+      <div class="news-title">${escapeHtml(n.title)}</div><div class="news-meta">${fmtDate(n.createdAt)} · ${escapeHtml(n.author)}</div>
+      ${n.image ? '<img class="news-img" src="' + escapeHtml(n.image) + '" alt="">' : ''}
+      <div class="news-body">${escapeHtml(n.body).replace(/\n/g, '<br>')}</div>
+      ${admin ? '<div class="btn-row"><button class="btn small btn-ghost" onclick="editNews(' + n.id + ')">✎ Edit</button><button class="btn small btn-danger" onclick="deleteNews(' + n.id + ')">🗑 Delete</button></div>' : ''}
+    </div>`).join('');
+  host.innerHTML = screenHtml('ANNOUNCEMENTS', "toggleMenu('main-menu')",
+    (admin ? '<button class="btn btn-play" onclick="editNews(0)">＋ New post</button>' : '') + (posts || (newsError ? errorBox(newsError, 'openNews()') : '<div class="empty">No announcements yet.</div>')));
+  host.querySelectorAll('.news-img').forEach(i => { i.onclick = () => viewNewsImage(i.src); });
+}
+function viewNewsImage(src) {
+  const d = document.createElement('div'); d.className = 'img-lightbox'; d.innerHTML = '<img alt="">'; d.firstChild.src = src;
+  d.onclick = () => d.remove(); document.body.appendChild(d);
+}
+async function editNews(id) {
+  const old = newsCache.find(n => n.id === id) || { title: '', body: '' };
+  const r = await openFormDialog({ title: id ? 'Edit post' : 'New announcement', fields: [{ id: 'title', label: 'Title', value: old.title, maxlength: 120 }, { id: 'body', label: 'Text', type: 'textarea', value: old.body, rows: 7, maxlength: 5000 }, { id: 'image', label: 'Image (optional)', type: 'file' }].concat(id ? (old.image ? [{ id: 'dropImg', label: 'Remove current image', type: 'checkbox' }] : []) : [{ id: 'banner', label: 'Also show a banner to everyone', type: 'checkbox' }]), okText: id ? 'Save' : 'Post' });
+  if (!r) return;
+  if (!String(r.title || '').trim()) { toast('Add a title.', 'bad'); return; }
+  let image = null, keepImage = !!id && !r.dropImg;
+  const fi = r.imageFile;
+  if (fi) { try { image = await shrinkImageFile(fi, 900, 0.78); keepImage = false; } catch (e) { toast(e.message, 'bad'); return; } }
+  try {
+    if (id) await apiRequest('/api/admin/news/' + id, { method: 'PUT', auth: true, body: { title: r.title, body: r.body, image, keepImage } });
+    else await apiRequest('/api/admin/news', { method: 'POST', auth: true, body: { title: r.title, body: r.body, image } });
+    if (!id && r.banner) { try { await apiRequest('/api/admin/settings', { method: 'PUT', auth: true, body: { announcement: String(r.title).trim().slice(0, 300) } }); } catch (e) {} }
+    toast(id ? 'Saved.' : 'Posted!', 'good');
+    await fetchNews(); renderNews();
+  } catch (e) { toast(e.message, 'bad'); }
+}
+async function deleteNews(id) {
+  if (!(await uiConfirm('Delete this post?', 'Delete', true))) return;
+  try { await apiRequest('/api/admin/news/' + id, { method: 'DELETE', auth: true }); await fetchNews(); renderNews(); } catch (e) { toast(e.message, 'bad'); }
+}
+
+// ---------------------------------------------------------------------------
+// Song library
+// ---------------------------------------------------------------------------
+let songPickResolve = null, songPreview = null, songList = [];
+function openSongPicker() {
+  ensureOverlay('songs-menu');
+  return new Promise(resolve => { songPickResolve = resolve; toggleMenu('songs-menu'); document.body.classList.add('songs-over-editor'); loadSongs(); });
+}
+function closeSongPicker(song) {
+  stopSongPreview();
+  document.body.classList.remove('songs-over-editor');
+  const r = songPickResolve; songPickResolve = null;
+  document.getElementById('songs-menu').classList.add('hidden');
+  if (inEditor) { document.getElementById('editor-ui').classList.remove('hidden'); document.body.classList.remove('menus-open'); }
+  else toggleMenu('main-menu');
+  if (r) r(song || null);
+}
+function stopSongPreview() { if (songPreview) { songPreview.pause(); songPreview = null; } }
+async function loadSongs() {
+  const host = document.getElementById('songs-menu');
+  host.innerHTML = screenHtml('SONG LIBRARY', 'closeSongPicker()', '<div class="empty">Loading…</div>');
+  try { songList = (await apiRequest('/api/songs')).songs || []; } catch (e) { host.innerHTML = screenHtml('SONG LIBRARY', 'closeSongPicker()', errorBox(e.message, 'loadSongs()')); return; }
+  renderSongs();
+}
+function renderSongs(filter) {
+  const host = document.getElementById('songs-menu'), admin = isAdminUser(), q = String(filter || '').toLowerCase();
+  const rows = songList.filter(s => !q || (s.name + ' ' + s.artist).toLowerCase().includes(q)).map(s => `<div class="song-row admin-row">
+      <div class="song-art" style="background:${artGradient(s.name)}">♪</div>
+      <div class="song-info"><div class="song-title">${escapeHtml(s.name)}</div><div class="song-sub">${escapeHtml(s.artist || 'Unknown')} · ${(s.size / 1.37 / 1048576).toFixed(1)} MB${s.bpm ? ' · ' + s.bpm + ' BPM' : ''}</div></div>
+      <div class="song-actions"><button class="mini-btn" onclick="previewSong(${s.id})">▶</button><button class="mini-btn" onclick="useSong(${s.id})">Use</button>${admin ? '<button class="mini-btn danger" onclick="deleteSong(' + s.id + ')">🗑</button>' : ''}</div></div>`).join('');
+  host.innerHTML = screenHtml('SONG LIBRARY', 'closeSongPicker()',
+    `<input type="text" id="song-search" class="form-input" placeholder="Search songs…" value="${escapeHtml(filter || '')}" oninput="renderSongs(this.value);document.getElementById('song-search').focus()">
+     ${admin ? '<button class="btn btn-play" onclick="uploadSong()">＋ Upload a song (admin)</button>' : ''}
+     <div class="song-list">${rows || '<div class="empty">No songs yet.' + (admin ? '' : ' Admins can add free songs here.') + '</div>'}</div>`);
+}
+function previewSong(id) {
+  stopSongPreview(); bgAudio.pause();
+  songPreview = new Audio(API_BASE_URL + '/api/songs/' + id + '/audio'); songPreview.volume = 0.8; songPreview.play().catch(() => toast('Could not play the preview.', 'bad'));
+  setTimeout(() => { if (songPreview) songPreview.pause(); }, 20000);
+}
+function useSong(id) { const s = songList.find(x => x.id === id); closeSongPicker(s ? { id: s.id, name: s.name, artist: s.artist, bpm: s.bpm } : null); }
+async function uploadSong() {
+  const r = await openFormDialog({ title: 'Upload a free song', message: 'Audio file up to ~8 MB.', fields: [{ id: 'name', label: 'Song name', maxlength: 80 }, { id: 'artist', label: 'Artist', maxlength: 80 }, { id: 'bpm', label: 'BPM (optional)', type: 'number' }, { id: 'file', label: 'Audio file', type: 'file', accept: 'audio/*' }], okText: 'Upload' });
+  if (!r) return;
+  const f = r.fileFile;
+  if (!f || !r.name.trim()) { toast('Pick a file and give it a name.', 'bad'); return; }
+  if (f.size > 8 * 1048576) { toast('That file is over 8 MB.', 'bad'); return; }
+  try {
+    toast('Uploading…');
+    await apiRequest('/api/admin/songs', { method: 'POST', auth: true, timeout: 120000, body: { name: r.name.trim(), artist: r.artist.trim(), bpm: Number(r.bpm) || null, data: await fileToDataUrl(f) } });
+    toast('Song added.', 'good'); loadSongs();
+  } catch (e) { toast(e.message, 'bad'); }
+}
+async function deleteSong(id) {
+  if (!(await uiConfirm('Remove this song from the library? Levels using it will play without music.', 'Delete', true))) return;
+  try { await apiRequest('/api/admin/songs/' + id, { method: 'DELETE', auth: true }); loadSongs(); } catch (e) { toast(e.message, 'bad'); }
+}
+
+// ---------------------------------------------------------------------------
+// Cloud copies of My Levels (lets admins see + publish unpublished levels)
+// ---------------------------------------------------------------------------
+const syncHashes = new Map(), syncTimers = new Map();
+function levelForSync(level) { const c = Object.assign({}, level); delete c.audio; delete c.verifiedHash; return c; }
+function cloudSyncLevel(level) {
+  if (!level || !level.id || !getAuthToken() || !API_BASE_URL) return;
+  clearTimeout(syncTimers.get(level.id));
+  syncTimers.set(level.id, setTimeout(async () => {
+    try {
+      const body = levelForSync(level), json = JSON.stringify(body);
+      if (json.length > 3500000) return;
+      const h = hashString(json);
+      if (syncHashes.get(level.id) === h) return;
+      await apiRequest('/api/sync/levels/' + encodeURIComponent(level.id), { method: 'PUT', auth: true, body, timeout: 60000 });
+      syncHashes.set(level.id, h);
+    } catch (e) { /* silent */ }
+  }, 2500));
+}
+function cloudUnsyncLevel(localId) { if (getAuthToken()) apiRequest('/api/sync/levels/' + encodeURIComponent(localId), { method: 'DELETE', auth: true }).catch(() => {}); syncHashes.delete(localId); }
+async function cloudSyncAll() {
+  if (!getAuthToken() || !API_BASE_URL || getAuthUser() && localStorage.getItem('et_imp_backup')) return;
+  for (const l of myLevels.slice()) { if (!syncHashes.has(l.id)) { cloudSyncLevel(l); await new Promise(r => setTimeout(r, 700)); } }
+}
+
+// ---------------------------------------------------------------------------
+// Impersonation ("Log in as")
+// ---------------------------------------------------------------------------
+async function startImpersonation(userId, username) {
+  if (localStorage.getItem('et_imp_backup')) { toast('Return to your own account first.', 'bad'); return; }
+  if (!(await uiConfirm('Log in as ' + username + '? You will see the game exactly as they do. A bar at the top lets you return.', 'Log in as'))) return;
+  try {
+    const d = await apiRequest('/api/admin/players/' + encodeURIComponent(userId) + '/impersonate', { method: 'POST', auth: true, body: {} });
+    localStorage.setItem('et_imp_backup', JSON.stringify({ token: getAuthToken(), user: getAuthUser() }));
+    if (typeof disconnectBattle === 'function') disconnectBattle();
+    saveAuthSession(d.token, d.user);
+    renderImpBar();
+    toggleMenu('main-menu');
+    toast('Now viewing as ' + username + '.', 'good');
+  } catch (e) { toast(e.message, 'bad'); }
+}
+function returnFromImpersonation() {
+  let b = null; try { b = JSON.parse(localStorage.getItem('et_imp_backup') || 'null'); } catch (e) {}
+  localStorage.removeItem('et_imp_backup');
+  if (typeof disconnectBattle === 'function') disconnectBattle();
+  if (b && b.token) saveAuthSession(b.token, b.user); else clearAuthSession();
+  renderImpBar(); toggleMenu('main-menu');
+  if (b && b.token) restoreAuthSession();
+  toast('Back to your own account.', 'good');
+}
+function renderImpBar() {
+  let bar = document.getElementById('imp-bar');
+  const active = !!localStorage.getItem('et_imp_backup');
+  document.body.classList.toggle('imp-bar', active);
+  if (!active) { if (bar) bar.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'imp-bar'; document.body.appendChild(bar); }
+  const u = getAuthUser();
+  bar.innerHTML = '👁 Viewing as <b>' + escapeHtml(u ? u.username : '?') + '</b> <button onclick="returnFromImpersonation()">Return to admin</button>';
+}
+
+// ---------------------------------------------------------------------------
+// boot
+// ---------------------------------------------------------------------------
+function extrasBoot() {
+  ensureOverlay('news-menu'); ensureOverlay('songs-menu');
+  injectNewsButton(); if (typeof injectLiveButton === 'function') injectLiveButton(); if (typeof refreshLive === 'function') refreshLive(); renderImpBar();
+  fetchNews();
+  setInterval(() => { if (!document.getElementById('main-menu').classList.contains('hidden')) fetchNews(); }, 120000);
+  setTimeout(cloudSyncAll, 6000);
+  setTimeout(() => { if (API_BASE_URL && typeof connectBattle === 'function') connectBattle().catch(() => {}); }, 2500);   // stay connected for live announcements + streams
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', extrasBoot); else extrasBoot();
+function onMyLevelsReloaded() { setTimeout(cloudSyncAll, 4000); }
