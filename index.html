@@ -8,7 +8,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&family=Bebas+Neue&family=Orbitron:wght@400;700&family=Press+Start+2P&family=Pacifico&family=Permanent+Marker&family=Righteous&family=Fredoka:wght@400;700&family=Lobster&family=Audiowide&family=Caveat:wght@400;700&family=Monoton&display=swap">
 <link rel="stylesheet" href="style.css?v=20261010-1">
-<link rel="stylesheet" href="extras.css?v=20261010-1">
 </head>
 <body>
 
@@ -35,7 +34,7 @@
   <div class="race-player-row"><span class="race-name" id="race-name-opp">Opponent</span><div class="race-bar-track"><div class="race-bar-fill opp" id="race-bar-opp" style="width:0%"></div></div></div>
 </div>
 
-<audio id="bg-audio"></audio>
+<audio id="bg-audio" crossorigin="anonymous"></audio>
 <input type="file" id="audio-upload" accept="audio/*" style="display:none" onchange="loadAudioFile(event)">
 
 <div id="lives-display" class="hidden">❤️ <span id="lives-count">3</span></div>
@@ -97,7 +96,9 @@
       <div class="settings-row"><span>Practice: auto checkpoints</span><input type="checkbox" id="setting-auto-cp"></div>
       <div class="settings-row"><span>…every (seconds)</span><input type="number" id="setting-auto-cp-sec" min="1" max="30" step="0.5" class="num-in"></div>
       <div class="section-title">EDITOR</div>
+      <div class="settings-row"><span>Editor style</span><select id="setting-ed-style" class="num-in" style="width:130px!important"><option value="new">New</option><option value="legacy">Legacy</option></select></div>
       <div class="settings-row"><span>Turn off snapping <small>(editor starts in free placement)</small></span><input type="checkbox" id="setting-no-snap"></div>
+      <div class="settings-row"><span>Verify from start pos <small>(doesn't count as verified)</small></span><input type="checkbox" id="setting-verify-start"></div>
       <div class="section-title">KEYBINDS</div>
       <div class="keybind-grid">
         <label>Lane 1 <input id="keybind-0" maxlength="1" value="r"></label><label>Lane 2 <input id="keybind-1" maxlength="1" value="t"></label>
@@ -166,34 +167,29 @@
 <!-- ============ EDITOR ============ -->
 <div id="editor-ui" class="hidden">
   <div class="ed-top">
-    <button class="ed-btn" onclick="openCreatorMenu()" title="Menu">☰</button>
-    <div class="ed-tabs">
-      <button class="ed-tab active" data-mode="tiles" onclick="setEdMode('tiles')">TILES</button>
-      <button class="ed-tab" data-mode="decor" onclick="setEdMode('decor')">DECOR</button>
-      <button class="ed-tab" data-mode="trig" onclick="setEdMode('trig')">TRIGGERS</button>
+    <div class="ed-row">
+      <button class="ed-btn sq" onclick="openCreatorMenu()" title="Menu">☰</button>
+      <button class="ed-btn sq" onclick="toggleDrawer('left')" title="Tools">🧰</button>
+      <div class="ed-tabs">
+        <button class="ed-tab active" data-mode="tiles" onclick="setEdMode('tiles')">TILES</button>
+        <button class="ed-tab" data-mode="decor" onclick="setEdMode('decor')">DECOR</button>
+        <button class="ed-tab" data-mode="trig" onclick="setEdMode('trig')">FX</button>
+      </div>
+      <button class="ed-btn sq leg-only" id="leg-fx" onclick="legacyToggleFx()" title="Effects">✨</button>
+      <button class="ed-btn play" onclick="startPlaytest()">▶</button>
+      <button class="ed-btn sq" onclick="openEditorSettingsMenu()" title="Level settings">⚙</button>
     </div>
-    <button class="ed-btn play" onclick="startPlaytest()" title="Play test">▶ TEST</button>
-    <button class="ed-btn" onclick="openEditorSettingsMenu()" title="Level settings">⚙</button>
+    <div class="ed-row">
+      <button id="tool-select" class="ed-btn sq new-only" onclick="setEdTool(edTool==='select'?'place':'select')" title="Select">⬚</button>
+      <button id="tool-erase" class="ed-btn sq" onclick="setEdTool(edTool==='erase'?'place':'erase')" title="Erase">🗑</button>
+      <button id="btn-start-pos" class="ed-btn sq leg-only" onclick="toggleStartPos()" title="Start position">🚩</button>
+      <button class="ed-btn sq" onclick="editorUndo()" title="Undo">↶</button>
+      <button class="ed-btn sq" onclick="editorRedo()" title="Redo">↷</button>
+      <button class="ed-btn sq" onclick="toggleDrawer('right')" title="Selected">🎛</button>
+      <div class="ed-pills"><span class="pill" id="ed-count">0 tiles</span><span class="pill" id="editor-timer-panel">0.00s</span></div>
+    </div>
   </div>
-  <div class="ed-tools">
-    <button id="tool-place" class="ed-btn active" onclick="setEdTool('place')">✚ Place</button>
-    <button id="tool-select" class="ed-btn" onclick="setEdTool('select')">⬚ Select</button>
-    <button id="tool-erase" class="ed-btn" onclick="setEdTool('erase')">🗑 Erase</button>
-    <span class="ed-sep"></span>
-    <button class="ed-btn sq" onclick="editorUndo()" title="Undo (Ctrl+Z)">↶</button>
-    <button class="ed-btn sq" onclick="editorRedo()" title="Redo (Ctrl+Y)">↷</button>
-    <button class="ed-btn sq" onclick="edCopy()" title="Copy (Ctrl+C)">⧉</button>
-    <button class="ed-btn sq" onclick="edPaste(1)" title="Paste at playhead (Ctrl+V)">📋</button>
-    <button class="ed-btn sq" onclick="edPasteMany()" title="Paste several copies in a row">×N</button>
-    <span class="ed-sep"></span>
-    <button id="eye-tiles" class="ed-btn sq active" onclick="toggleEye('tiles')" title="Show / hide tiles">T</button>
-    <button id="eye-decor" class="ed-btn sq active" onclick="toggleEye('decor')" title="Show / hide objects">D</button>
-    <button id="eye-fx" class="ed-btn sq active" onclick="toggleEye('fx')" title="Show / hide trigger markers">F</button>
-    <span class="ed-sep"></span>
-    <button class="ed-btn sq" onclick="toggleDrawer('left')" title="Palette">🧰</button>
-    <button class="ed-btn sq" onclick="toggleDrawer('right')" title="Inspector">🎛</button>
-    <div class="ed-pills"><span class="pill" id="ed-count">0 tiles</span><span class="pill" id="editor-timer-panel">0.00s</span></div>
-  </div>
+  <span id="tool-place" style="display:none"></span>
 
   <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>
   <div class="drawer drawer-left" id="drawer-left">
@@ -294,12 +290,10 @@
 <script src="js/ui.js?v=20261010-1"></script>
 <script src="js/storage.js?v=20261010-1"></script>
 <script src="js/auth.js?v=20261010-1"></script>
-<script src="js/decor.js?v=20261010-1"></script>
 <script src="js/game.js?v=20261010-1"></script>
 <script src="js/editor.js?v=20261010-1"></script>
 <script src="js/browse.js?v=20261010-1"></script>
 <script src="js/battle.js?v=20261010-1"></script>
 <script src="js/main.js?v=20261010-1"></script>
-<script src="js/extras.js?v=20261010-1"></script>
 </body>
 </html>
