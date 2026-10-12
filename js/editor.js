@@ -361,6 +361,14 @@ function edDuplicate() { if (!edSelCount()) return; edCopy(); edPaste(1); }
 // ---------------------------------------------------------------------------
 // Mode / tool switching + eye toggles
 // ---------------------------------------------------------------------------
+function edLegacy() { return lsGet('et_edStyle') === 'legacy'; }
+function applyEditorStyle() {
+  const ui = document.getElementById('editor-ui'); if (ui) ui.classList.toggle('ed-legacy', edLegacy());
+  if (edLegacy() && edMode === 'decor') setEdMode('tiles', true);
+  if (edLegacy() && edTool === 'select') setEdTool('place');
+  renderPalette(); const lf = document.getElementById('leg-fx'); if (lf) lf.classList.toggle('active', edMode === 'trig');
+}
+function legacyToggleFx() { setEdMode(edMode === 'trig' ? 'tiles' : 'trig'); const lf = document.getElementById('leg-fx'); if (lf) lf.classList.toggle('active', edMode === 'trig'); }
 function setEdMode(m, quiet) {
   edMode = m;
   document.querySelectorAll('.ed-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
@@ -368,12 +376,12 @@ function setEdMode(m, quiet) {
   renderPalette();
   if (!quiet) { if (window.innerWidth < 1000) openDrawer('left'); }
   updateToolButtons();
+  { const lf = document.getElementById('leg-fx'); if (lf) lf.classList.toggle('active', m === 'trig'); }
 }
 function setEdTool(t) { edTool = t; deleteMode = t === 'erase'; canvas.classList.toggle('delete-cursor', deleteMode); updateToolButtons(); }
 function updateToolButtons() {
-  ['place', 'select', 'erase'].forEach(t => { const b = document.getElementById('tool-' + t); if (b) b.classList.toggle('active', edTool === t); });
-  const p = document.getElementById('tool-place'); if (p) p.textContent = edMode === 'tiles' ? '✚ Place' : '☝ Move';
-  ['tiles', 'decor', 'fx'].forEach(k => { const b = document.getElementById('eye-' + k); if (b) { b.classList.toggle('active', edShow[k]); b.classList.toggle('off', !edShow[k]); } });
+  ['select', 'erase'].forEach(t => { const b = document.getElementById('tool-' + t); if (b) b.classList.toggle('active', edTool === t); });
+  ['tiles', 'decor', 'fx'].forEach(k => { const b = document.getElementById('eye-' + k); if (b) b.classList.toggle('active', edShow[k]); });
 }
 function toggleEye(k) { edShow[k] = !edShow[k]; updateToolButtons(); refreshEditorTimeline(); }
 
@@ -418,7 +426,7 @@ function propRow(parent, def, holder, onChange) {
   }
   row.appendChild(input);
   parent.appendChild(row);
-  if (def.hint) parent.appendChild(el('div', 'muted-note', escapeHtml(def.hint)));
+  if (def.hint) row.title = def.hint;
   return input;
 }
 
@@ -428,9 +436,20 @@ function propRow(parent, def, holder, onChange) {
 function renderPalette(light) {
   const host = document.getElementById('ed-palette'); if (!host) return;
   host.innerHTML = '';
+  const LEG = edLegacy();
+  const bar = el('div', 'btn-row pal-bar'); if (!LEG) host.appendChild(bar);
+  [['tiles', 'Tiles'], ['decor', 'Decor'], ['fx', 'Triggers']].forEach(([k, n]) => { const b = el('button', 'btn small ' + (edShow[k] ? '' : 'btn-ghost'), '👁 ' + n); b.id = 'eye-' + k; b.onclick = () => { toggleEye(k); renderPalette(); }; bar.appendChild(b); });
+  const bar2 = el('div', 'btn-row pal-bar'); if (!LEG) host.appendChild(bar2);
+  btn(bar2, '⧉ Copy', edCopy); btn(bar2, '📋 Paste', () => edPaste(1)); btn(bar2, '×N', edPasteMany); btn(bar2, 'Snap: ' + (editorSnapEnabled ? 'beat' : 'free'), () => { toggleEditorSnap(); renderPalette(); });
   const title = document.getElementById('ed-palette-title');
   if (title) title.textContent = edMode === 'tiles' ? 'TILES' : edMode === 'decor' ? 'DECOR' : 'TRIGGERS';
-  if (edMode === 'tiles') {
+  if (edMode === 'tiles' && LEG) {
+    sectionTitle(host, 'PLACEMENT');
+    const g = el('div', 'tool-grid'); host.appendChild(g);
+    const tb = (icon, text, fn, id) => { const b = el('button', 'tool-btn', '<span class="tool-icon">' + icon + '</span>' + text); if (id) b.id = id; b.onclick = fn; g.appendChild(b); };
+    tb('⏺', 'Record', toggleRecording, 'btn-create-tiles'); tb('🗑', 'Delete', () => setEdTool(edTool === 'erase' ? 'place' : 'erase')); tb('🧲', 'Snap all', snapAllTiles); tb('⏭', 'To end', jumpEditorEnd);
+    tb('🧲', 'Snap: ' + (editorSnapEnabled ? 'beat' : 'free'), () => { toggleEditorSnap(); renderPalette(); }); tb('🧹', 'Clear all', deleteAllEditor);
+  } else if (edMode === 'tiles') {
     sectionTitle(host, 'TILE STYLE  (applied to new tiles)');
     const list = el('div', 'preset-list');
     const mk = (idx, name, p) => {
@@ -450,12 +469,9 @@ function renderPalette(light) {
       const r2 = el('div', 'btn-row'); host.appendChild(r2);
       btn(r2, 'Apply style to ' + edSelTiles.size + ' selected', () => { edSelTiles.forEach(t => { if (edPreset >= 0) t.preset = edPreset; else delete t.preset; }); edChanged(); });
     }
-    sectionTitle(host, 'PLACEMENT');
-    const hold = el('label', 'switch-container', '<span>New tiles are holds</span>'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = edHoldNew; ck.onchange = () => { edHoldNew = ck.checked; }; hold.appendChild(ck); host.appendChild(hold);
     const g = el('div', 'tool-grid'); host.appendChild(g);
     const tb = (icon, text, fn, id) => { const b = el('button', 'tool-btn', '<span class="tool-icon">' + icon + '</span>' + text); if (id) b.id = id; b.onclick = fn; g.appendChild(b); };
-    tb('⏺', 'Record', toggleRecording, 'btn-create-tiles'); tb('🧲', 'Snap all', snapAllTiles); tb('⏭', 'To end', jumpEditorEnd); tb('☑', 'Select from playhead', edSelectFrom);
-    host.appendChild(el('div', 'note', 'Tap the board to place a tile where you tap. Tap a tile to select it, drag to move it. <b>Select</b> tool = drag a box. Tile #N always has group id N (shown on selected tiles).'));
+    tb('⏺', 'Record', toggleRecording, 'btn-create-tiles'); tb('🧲', 'Snap all', snapAllTiles); tb('⏭', 'To end', jumpEditorEnd); tb('☑', 'Select →', edSelectFrom);
     sectionTitle(host, 'GROUPS');
     const gr = el('div', 'btn-row'); host.appendChild(gr);
     btn(gr, '＋ New group from selection', edNewGroupFromSelection);
@@ -477,12 +493,10 @@ function renderPalette(light) {
       r.onclick = () => { edSelectObj(o, false, true); setEditorTime(Math.max(editorTimer, o.time)); };
       lay.appendChild(r);
     });
-    host.appendChild(el('div', 'note', 'Drag an object to move it · corner dot = scale (Shift = stretch) · top knob = rotate · arrows nudge (Shift = ×10). Tiles draw above BG objects and below FG ones.'));
   } else {
     sectionTitle(host, 'CLICK TO ADD AT THE PLAYHEAD');
     const g = el('div', 'tool-grid'); host.appendChild(g);
     Object.keys(TRIG_DEFS).filter(k => !TRIG_DEFS[k].hidden).forEach(k => { const d = TRIG_DEFS[k]; const b = el('button', 'tool-btn', '<span class="tool-icon">' + d.icon + '</span>' + d.label); b.title = d.tip || ''; b.onclick = () => addTrigger(k); g.appendChild(b); });
-    host.appendChild(el('div', 'note', 'Targets: <b>0</b> = everything · <b>tile #N</b> = N · objects are 10000 + their id · or make your own group. Pick a marker on the timeline to edit it.'));
     sectionTitle(host, 'ALL TRIGGERS');
     const lst = el('div', 'layer-list'); host.appendChild(lst);
     if (!recordedEffects.length) lst.appendChild(el('div', 'muted-note', 'None yet.'));
@@ -493,7 +507,7 @@ function renderPalette(light) {
   const sg = el('div', 'tool-grid'); tail.appendChild(sg);
   const sb = (icon, text, fn, id) => { const b = el('button', 'tool-btn', '<span class="tool-icon">' + icon + '</span>' + text); if (id) b.id = id; b.onclick = fn; sg.appendChild(b); };
   sb('🎵', 'Load song', () => document.getElementById('audio-upload').click()); sb('📚', 'Song library', pickLibrarySong); sb('🎧', 'Tester', toggleSongTester, 'btn-song-test');
-  sb('▶', 'Test from playhead', () => startPlaytest(editorTimer));
+  if (!LEG) sb('▶', 'Test from playhead', () => startPlaytest(editorTimer));
   const pt = el('div', 'tool-drawer-section'); host.appendChild(pt);
   sectionTitle(pt, 'PLAYTEST');
   const f1 = el('div', 'field-row', '<label>Starting hearts</label>'); const hearts = el('input'); hearts.type = 'number'; hearts.min = 1; hearts.max = 10; hearts.value = document.getElementById('edit-lives').value; hearts.oninput = () => { document.getElementById('edit-lives').value = hearts.value; }; f1.appendChild(hearts); pt.appendChild(f1);
@@ -613,8 +627,6 @@ function renderInspector() {
       host.appendChild(el('div', 'selected-effect-title', '<span>TILE</span><b>#' + gid + '  <small>group id ' + gid + '</small></b>'));
       propRow(host, { label: 'Lane', key: 'lane', kind: 'select', options: [0, 1, 2, 3].map(i => ({ v: i, l: 'Lane ' + (i + 1) })) }, t, () => { edDedupeTiles(); edChanged(true); });
       propRow(host, { label: 'Time (s)', key: 'time', kind: 'number', step: 0.01, min: 0 }, t, () => { edSortTiles(); edChanged(true); });
-      propRow(host, { label: 'Hold tile', key: 'isHold', kind: 'check' }, t, () => { if (t.isHold && !t.holdDuration) t.holdDuration = 0.5; edChanged(); });
-      if (t.isHold) propRow(host, { label: 'Hold length (s)', key: 'holdDuration', kind: 'number', step: 0.05, min: 0.05, max: 30 }, t);
     }
     const pr = el('div', 'inspector-field'); pr.appendChild(el('label', '', 'Style'));
     const ps = el('select'); const o0 = el('option', '', 'Classic'); o0.value = -1; ps.appendChild(o0);
@@ -637,7 +649,6 @@ function renderInspector() {
     propRow(host, { label: 'Time (s)', key: 'time', kind: 'number', step: 0.01, min: 0 }, fx, () => { recordedEffects.sort((a, b) => a.time - b.time); edChanged(true); });
     trigFields(fx).forEach(def => propRow(host, def, fx, () => { edChanged(true); if (def.rebuild) renderInspector(); }));
     if (fx.type === 'hitbox') {
-      host.appendChild(el('div', 'muted-note', 'Drag the cyan boxes on the board — one per lane. Drag a box to move it, drag its bottom bar to resize.'));
       const r = el('div', 'btn-row'); host.appendChild(r);
       btn(r, 'All lanes = lane 1', () => { for (let l = 1; l < 4; l++) { fx['z' + l + 't'] = fx.z0t; fx['z' + l + 'h'] = fx.z0h; } edChanged(true); });
       btn(r, 'Reset', () => { for (let l = 0; l < 4; l++) { fx['z' + l + 't'] = 400; fx['z' + l + 'h'] = 140; } edChanged(true); });
@@ -968,7 +979,7 @@ function editorResetSession(level) {
 }
 function editorAfterStart(level) {
   const d = document.getElementById('edit-description'); if (d) d.value = currentDescription;
-  updateSongLabel(); updateSnapButton(); setEdMode('tiles', true); setEdTool('place'); renderInspector();
+  applyEditorStyle(); updateSongLabel(); updateSnapButton(); setEdMode('tiles', true); setEdTool('place'); renderInspector();
   if (level && level.songId && !bgAudio.getAttribute('src')) loadLibrarySongAudio(level.songId);
   document.querySelectorAll('.ed-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === 'tiles'));
 }
