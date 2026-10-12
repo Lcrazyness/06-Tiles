@@ -361,13 +361,12 @@ function updateLiveBadge() {
 }
 function injectLiveButton() {
   if (document.getElementById('live-btn')) return;
-  const col = document.querySelector('#main-menu .home-col'); if (!col) return;
+  let rail = document.getElementById('menu-rail');
+  if (!rail) { const m = document.getElementById('main-menu'); if (!m) return; rail = document.createElement('div'); rail.id = 'menu-rail'; m.appendChild(rail); }
   const b = document.createElement('button');
-  b.id = 'live-btn'; b.className = 'btn btn-ghost news-btn';
-  b.innerHTML = '🔴 Live <span id="live-badge" class="news-badge live hidden">0</span>';
-  b.onclick = openLive;
-  const news = document.getElementById('news-btn');
-  col.insertBefore(b, news || document.getElementById('admin-btn') || null);
+  b.id = 'live-btn'; b.className = 'icon-btn rail-btn'; b.setAttribute('aria-label', 'Live');
+  b.innerHTML = '🔴<span id="live-badge" class="news-badge live hidden">0</span>';
+  b.onclick = openLive; rail.appendChild(b);
 }
 async function refreshLive() {
   try { const d = await apiRequest('/api/streams'); LIVE.streams = d.streams || []; } catch (e) {}
