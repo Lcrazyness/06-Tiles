@@ -127,6 +127,11 @@ async function finishStatsGame(completed) {
       saveAuthSession(getAuthToken(), data.user);
       const gained = Number(data.user.stars || 0) - Number((before && before.stars) || 0);
       if (completed && gained > 0) toast('+' + gained + ' ★ star' + (gained === 1 ? '' : 's') + ' earned!', 'good');
+      const gainedEP = Number(data.user.extremePoints || 0) - Number((before && before.extremePoints) || 0);
+      if (completed && gainedEP > 0) {
+        setTimeout(() => toast('+' + gainedEP + ' EP earned!', 'good'), gained > 0 ? 1600 : 0);
+        const di = document.getElementById('death-info'); if (di) di.textContent += '  ·  +' + gainedEP + ' EP';
+      }
     }
   } catch (e) { console.warn('Could not save game statistics.', e); }
 }
