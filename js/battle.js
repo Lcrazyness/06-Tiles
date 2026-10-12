@@ -562,9 +562,10 @@ function showStreamDone(blob, mins, reason) {
   host.innerHTML = `<div class="center-panel"><h2>Stream finished</h2><p>${escapeHtml(reason || '')}</p>
     ${blob ? '<p>' + mins + ' min · ' + (blob.size / 1048576).toFixed(1) + ' MB</p><video class="done-video" src="' + url + '" controls playsinline></video><a class="btn btn-play" id="stream-dl" download="06tiles-stream-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.' + ext + '">⬇ Download recording</a>' : '<p>No recording was kept.</p>'}
     <button class="btn btn-ghost" id="stream-done-close">Close</button></div>`;
-  const dl = document.getElementById('stream-dl'); if (dl) dl.href = url;
+  let saved = false;
+  const dl = document.getElementById('stream-dl'); if (dl) { dl.href = url; dl.addEventListener('click', () => { saved = true; }); }
   document.getElementById('stream-done-close').onclick = async () => {
-    if (blob && !(await uiConfirm('Close without downloading? The recording will be deleted.', 'Delete it', true))) return;
+    if (blob && !saved && !(await uiConfirm('Close without downloading? The recording will be deleted.', 'Delete it', true))) return;
     host.classList.add('hidden'); host.innerHTML = ''; if (url) URL.revokeObjectURL(url);
   };
 }
