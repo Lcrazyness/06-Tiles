@@ -340,3 +340,16 @@ a.btn{text-decoration:none}
 #imp-bar{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:400;display:flex;align-items:center;gap:10px;max-width:94vw;background:#b3123a;color:#fff;border:2px solid #fff;border-radius:30px;padding:8px 8px 8px 16px;font-size:13px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.6);white-space:nowrap}
 #imp-bar b{overflow:hidden;text-overflow:ellipsis;max-width:34vw}
 #imp-bar button{border:0;border-radius:20px;background:#fff;color:#b3123a;font-weight:900;font-size:13px;padding:8px 14px;cursor:pointer}
+
+/* announcements + rail buttons */
+#menu-rail{position:absolute;top:calc(64px + env(safe-area-inset-top));right:14px;z-index:3;display:flex;flex-direction:column;gap:10px}
+.rail-btn{position:relative}
+.news-badge{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--pink);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;font-style:normal}
+.news-post{display:flex;flex-direction:column;gap:8px}
+.news-title{font-size:18px;font-weight:800}.news-meta{font-size:11px;color:var(--text-low)}
+.news-img{width:100%;border-radius:10px;max-height:340px;object-fit:cover}
+.news-body{font-size:14px;line-height:1.5;color:var(--text-mid);word-break:break-word;user-select:text;-webkit-user-select:text}
+.news-actions{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.news-thread{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.level-link{display:inline-block;background:rgba(45,156,240,.25);color:#9bd4ff;border-radius:8px;padding:1px 8px;font-weight:700;cursor:pointer;text-decoration:underline}
+.stream-compose input{background:rgba(0,0,0,.3);border:1px solid var(--line);color:#fff;border-radius:10px;outline:none;min-width:0}
