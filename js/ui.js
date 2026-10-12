@@ -34,7 +34,7 @@ function layoutCanvas() {
   const vw = window.innerWidth, vh = window.innerHeight;
   let top = 0, availH = vh;
   if (inEditor) {
-    const bar = 98;
+    const bar = 82;
     const dock = document.getElementById('timeline-dock');
     const dockH = dock ? (dock.classList.contains('collapsed') ? 34 : dock.offsetHeight) : 0;
     top = bar;
@@ -321,11 +321,12 @@ async function loadAppSettings() {
     showAnnouncement(d.announcement);
   } catch (e) {}
 }
-function showAnnouncement(text) {
+function showAnnouncement(text, force) {
   const bar = document.getElementById('announcement-bar'); if (!bar) return;
-  if (!text || localStorage.getItem('et_annSeen') === text) { bar.classList.add('hidden'); return; }
-  bar.innerHTML = '<span></span><button onclick="dismissAnnouncement()" aria-label="Dismiss">×</button>';
+  if (!text || (!force && localStorage.getItem('et_annSeen') === text)) { bar.classList.add('hidden'); return; }
+  bar.innerHTML = '<span class="ann-text"></span><button onclick="event.stopPropagation();dismissAnnouncement()" aria-label="Dismiss">×</button>';
   bar.firstChild.textContent = '📢 ' + text; bar.dataset.text = text; bar.classList.remove('hidden');
+  bar.onclick = () => { if (!inEditor && !gameActive && typeof openNews === 'function') { dismissAnnouncement(); openNews(); } };
 }
 function dismissAnnouncement() { const bar = document.getElementById('announcement-bar'); if (bar) { localStorage.setItem('et_annSeen', bar.dataset.text || ''); bar.classList.add('hidden'); } }
 
