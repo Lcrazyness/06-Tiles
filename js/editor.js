@@ -21,7 +21,7 @@ const TRIG_DEFS = {
   pulse: { icon: '✦', label: 'Pulse', tip: 'Flash the screen', def: { layer: 0, color: '#0055ff', duration: 0.6, inTrans: 0.1, outTrans: 0.3 } },
   shake: { icon: '≋', label: 'Shake', tip: 'Shake the camera', def: { strength: 10, dur: 0.5 } },
   zoom: { icon: '🔍', label: 'Camera zoom', tip: 'Zoom the whole board', def: { zoom: 1.25, dur: 0.6, ease: 'inout' } },
-  laneflip: { icon: '↔', label: 'Lane flip', tip: 'Mirror the lanes from here', def: { on: 1 } },
+  laneflip: { icon: '⇅', label: 'Flip board', tip: 'Turn the board upside down (tiles rise from the bottom)', def: { on: 1, axis: 'v' } },
   speed: { icon: '⏩', label: 'Speed', tip: 'Change tile speed', def: { target: 25, transDuration: 0.5 } },
   hitbox: { icon: '▭', label: 'Hitbox', tip: 'Per-lane input boxes', def: { zoneOn: 1, z0t: 400, z0h: 140, z1t: 400, z1h: 140, z2t: 400, z2h: 140, z3t: 400, z3h: 140 } },
   sfx: { icon: '🔊', label: 'Audio', tip: 'Play a sound', def: { src: '', vol: 1, rate: 1 } },
@@ -116,7 +116,8 @@ function edChanged(skipInspector) {
 // ---------------------------------------------------------------------------
 function boardPoint(e) {
   const rect = canvas.getBoundingClientRect();
-  return { x: ((e.clientX - rect.left) / rect.width) * GW, y: ((e.clientY - rect.top) / rect.height) * GH };
+  const y = ((e.clientY - rect.top) / rect.height) * GH;
+  return { x: ((e.clientX - rect.left) / rect.width) * GW, y: (typeof vFlipAt === 'function' && vFlipAt(editorTimer)) ? GH - y : y };
 }
 const edTileH = () => TILE_H * editorZoom;
 function tileRect(t) {
@@ -588,7 +589,7 @@ function trigFields(fx) {
     case 'pulse': sel('Layer', 'layer', [{ v: 0, l: 'Background' }, { v: 1, l: 'Foreground' }]); col('Color', 'color'); num('Duration', 'duration', { step: 0.05, min: 0.05 }); num('Fade in', 'inTrans', { step: 0.05, min: 0 }); num('Fade out', 'outTrans', { step: 0.05, min: 0 }); break;
     case 'shake': num('Strength (px)', 'strength', { step: 1, min: 1, max: 60 }); num('Duration (s)', 'dur', { step: 0.1, min: 0.1 }); break;
     case 'zoom': num('Zoom (×)', 'zoom', { step: 0.05, min: 0.3, max: 3 }); num('Duration (s)', 'dur', { step: 0.1, min: 0 }); sel('Easing', 'ease', EASES, { str: true }); break;
-    case 'laneflip': sel('Lanes', 'on', [{ v: 1, l: 'Mirrored' }, { v: 0, l: 'Normal' }]); break;
+    case 'laneflip': if (!fx.axis) fx.axis = 'h'; sel('Flip', 'on', [{ v: 1, l: 'On' }, { v: 0, l: 'Off' }]); sel('Direction', 'axis', [{ v: 'v', l: 'Upside down' }, { v: 'h', l: 'Left-right' }], { str: true }); break;
     case 'speed': num('Target speed', 'target', { step: 1, min: 5, max: 60, hint: 'Normal = 18. 0.5× = 10 · 1.5× = 26 · 2× = 34' }); num('Transition (s, 0 = instant)', 'transDuration', { step: 0.05, min: 0 }); break;
     case 'hitbox': sel('Hitboxes', 'zoneOn', [{ v: 1, l: 'On (drag the boxes)' }, { v: 0, l: 'Off (tap anywhere)' }]); break;
     case 'sfx': num('Volume (0-1)', 'vol', { step: 0.05, min: 0, max: 1, def: 1 }); num('Pitch / speed (×)', 'rate', { step: 0.05, min: 0.25, max: 4, def: 1 }); break;
@@ -879,6 +880,12 @@ function editorDecorSync() {
   document.body.style.background = bg || (document.getElementById('edit-bg-color') || {}).value || '#202738';
 }
 function drawEditorLayer() {
+  if (!dVFlip) return drawEditorLayerRaw();
+  const ft = ctx.fillText;   // the board is upside down: keep labels readable
+  ctx.fillText = function (t, x, y, w) { ctx.save(); ctx.translate(x, y); ctx.scale(1, -1); ft.call(ctx, t, 0, 0, w); ctx.restore(); };
+  try { drawEditorLayerRaw(); } finally { delete ctx.fillText; }
+}
+function drawEditorLayerRaw() {
   const pps = getEditorPPS(), step = getEditorGridStep();
   const tMin = editorTimer - (GH - lineY) / pps, tMax = editorTimer + lineY / pps;
   const first = Math.ceil((tMin - editorGridOffset) / step), last = Math.floor((tMax - editorGridOffset) / step);
