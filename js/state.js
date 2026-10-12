@@ -15,7 +15,7 @@ const bgAudio = document.getElementById("bg-audio");
 // stuck on screen after you left it.)
 const overlays = [
   'main-menu', 'settings-menu', 'death-screen', 'pause-menu', 'my-levels-menu',
-  'creator-menu', 'news-menu', 'songs-menu', 'browse-levels-menu', 'editor-level-settings',
+  'creator-menu', 'news-menu', 'songs-menu', 'live-menu', 'watch-menu', 'browse-levels-menu', 'editor-level-settings',
   'profile-modal', 'stats-modal', 'admin-panel', 'level-detail-menu', 'battle-menu', 'battle-level-picker',
   'battle-waiting-menu', 'battle-incoming-menu', 'battle-result-menu', 'shared-menu', 'spectate-menu', 'friends-menu'
 ];
@@ -69,6 +69,7 @@ let currentLevelBrightness = 100;
 let currentLevelIcon = null;
 let autoRetryTimer = null;
 let levelVerified = false;
+let verifyPartial = false;   // verifying from a start position: finishing it does not count
 let pendingPublishAfterVerification = false;
 let verifyEndTime = 0;
 
@@ -124,3 +125,5 @@ const SHORTCUT_DEFAULTS = { pPlace: 'p', pRemove: 'o', sPrev: 'q', sNext: 'e', s
 let shortcuts = Object.assign({}, SHORTCUT_DEFAULTS, (() => { try { return JSON.parse(localStorage.getItem('et_shortcuts') || '{}'); } catch (e) { return {}; } })());
 function bumpAttempts(id) { let m = {}; try { m = JSON.parse(localStorage.getItem('et_attempts') || '{}'); } catch (e) {} m[id] = (m[id] || 0) + 1; try { localStorage.setItem('et_attempts', JSON.stringify(m)); } catch (e) {} return m[id]; }
 function getAttempts(id) { try { return (JSON.parse(localStorage.getItem('et_attempts') || '{}'))[id] || 0; } catch (e) { return 0; } }
+
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
