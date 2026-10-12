@@ -28,6 +28,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pb) { pb.checked = showProgressBar; pb.addEventListener('change', () => { showProgressBar = pb.checked; localStorage.setItem('et_progBar', String(pb.checked)); }); }
     if (ac) { ac.checked = autoCheckpoints; ac.addEventListener('change', () => { autoCheckpoints = ac.checked; localStorage.setItem('et_autoCP', String(ac.checked)); }); }
     if (acs) { acs.value = autoCheckpointSec; acs.addEventListener('change', () => { autoCheckpointSec = Math.max(1, Math.min(30, Number(acs.value) || 3)); acs.value = autoCheckpointSec; localStorage.setItem('et_autoCPSec', String(autoCheckpointSec)); }); }
+    const es = document.getElementById('setting-ed-style'), vs = document.getElementById('setting-verify-start');
+    if (es) { es.value = lsGet('et_edStyle') === 'legacy' ? 'legacy' : 'new'; es.addEventListener('change', () => { localStorage.setItem('et_edStyle', es.value); if (typeof applyEditorStyle === 'function') applyEditorStyle(); }); }
+    if (vs) { vs.checked = lsGet('et_verifyFromStart') === '1'; vs.addEventListener('change', () => localStorage.setItem('et_verifyFromStart', vs.checked ? '1' : '0')); }
     if (ns) { ns.checked = localStorage.getItem('et_noSnap') === 'true'; ns.addEventListener('change', () => localStorage.setItem('et_noSnap', String(ns.checked))); }
   }
   document.querySelectorAll('[id^="keybind-"]').forEach((el, i) => { if (keyMap[i]) el.value = keyMap[i]; });
