@@ -212,6 +212,11 @@ function startLevelVerification() {
   }
   levelVerified = false;
   isVerifying = true;
+  verifyPartial = false; startPosArmed = false; editorStartPos = null;
+  if (lsGet('et_verifyFromStart') === '1') {
+    const sp = activeStartIdx >= 0 && editorStartPositions[activeStartIdx] !== undefined ? editorStartPositions[activeStartIdx] : (editorTimer > 0.05 ? editorTimer : null);
+    if (sp !== null) { editorStartPos = Math.round(sp * 1000) / 1000; startPosArmed = true; verifyPartial = true; pendingPublishAfterVerification = false; }
+  }
   closeCreatorMenu();
   startGame('verify', true, -1, recordedTiles, recordedEffects, false, null);
 }
