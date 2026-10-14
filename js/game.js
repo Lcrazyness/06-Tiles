@@ -886,7 +886,7 @@ function handleEscape() {
     return;
   }
   if (inEditor && typeof closeAllDrawers === 'function') {
-    const open = ['drawer-left', 'drawer-right'].some(id => document.getElementById(id).classList.contains('open'));
+    const open = document.getElementById('drawer-left').classList.contains('open') && !document.getElementById('editor-ui').classList.contains('docked');
     if (open) closeAllDrawers(); else openCreatorMenu();
   }
 }
