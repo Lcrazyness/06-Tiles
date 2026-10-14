@@ -181,7 +181,7 @@
     </div>
     <div class="ed-row">
       <button id="tool-select" class="ed-btn sq new-only" onclick="setEdTool(edTool==='select'?'place':'select')" title="Select">⬚</button>
-      <button id="tool-erase" class="ed-btn sq" onclick="setEdTool(edTool==='erase'?'place':'erase')" title="Erase">🗑</button>
+      <button id="tool-erase" class="ed-btn sq" onclick="edTrashButton()" title="Delete selected / erase tool">🗑</button>
       <button id="btn-start-pos" class="ed-btn sq leg-only" onclick="toggleStartPos()" title="Start position">🚩</button>
       <button class="ed-btn sq" onclick="editorUndo()" title="Undo">↶</button>
       <button class="ed-btn sq" onclick="editorRedo()" title="Redo">↷</button>
@@ -194,11 +194,8 @@
   <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>
   <div class="drawer drawer-left" id="drawer-left">
     <div class="drawer-header"><b id="ed-palette-title">TILES</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
-    <div id="ed-palette"></div>
-  </div>
-  <div class="drawer drawer-right" id="drawer-right">
-    <div class="drawer-header"><b>INSPECTOR</b><button class="drawer-close" onclick="closeAllDrawers()">✕</button></div>
     <div id="ed-inspector"></div>
+    <div id="ed-palette"></div>
   </div>
 
   <div class="timeline-dock" id="timeline-dock">
