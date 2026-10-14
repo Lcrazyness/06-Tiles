@@ -353,3 +353,19 @@ a.btn{text-decoration:none}
 .news-thread{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
 .level-link{display:inline-block;background:rgba(45,156,240,.25);color:#9bd4ff;border-radius:8px;padding:1px 8px;font-weight:700;cursor:pointer;text-decoration:underline}
 .stream-compose input{background:rgba(0,0,0,.3);border:1px solid var(--line);color:#fff;border-radius:10px;outline:none;min-width:0}
+
+/* tools + inspector in one panel; docked beside the board on wide screens */
+.drawer-left{width:min(300px,88vw)}
+#ed-inspector:not(:empty){border-bottom:1px solid var(--line);margin-bottom:12px;padding-bottom:10px}
+.docked .drawer-left{transform:none;left:auto;right:0;width:300px;z-index:44}
+.docked .drawer-close{display:none}
+@media(max-width:899px){.docked .drawer-left{transform:translateX(-105%)}.docked .drawer-left.open{transform:none}}
+
+/* stream formats, chat on the left, tabs, voice */
+.watch-frame.fmt-wide{aspect-ratio:16/9;max-height:none;max-width:100%;width:100%}
+.watch-grid.no-chat .chat-part{display:none}
+@media(min-width:860px){.watch-side{order:-1}.watch-grid{grid-template-columns:320px 1fr}.watch-grid.fmt-wide .watch-frame{width:100%;height:auto;max-height:none}.watch-grid.fmt-short .watch-frame{width:auto;height:70vh}.screen-col:has(.watch-grid.fmt-wide){max-width:1200px}}
+.live-tabs{margin-bottom:10px;overflow-x:auto}.live-tabs button{white-space:nowrap}
+.vod-art{background:linear-gradient(135deg,#1e3a8a,#7c3aed);font-size:26px}.voice-art{font-size:20px;font-weight:800;background:linear-gradient(135deg,#0f766e,#2d9cf0)}
+.speak-dot{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.2);flex:0 0 12px;margin-right:6px}.speak-dot.on{background:#3ddc71;box-shadow:0 0 10px #3ddc71}
+.voice-row{min-height:60px}.voice-row .song-art{width:60px;height:60px;flex-basis:60px}
