@@ -40,10 +40,11 @@ function layoutCanvas() {
     top = bar;
     availH = Math.max(160, vh - bar - dockH - 4);
   }
-  const scale = Math.min(vw / GW, availH / GH);
+  const dockW = (inEditor && vw >= 900 && document.getElementById('editor-ui').classList.contains('docked')) ? 300 : 0;
+  const scale = Math.min((vw - dockW) / GW, availH / GH);
   const cssW = Math.max(120, Math.floor(GW * scale));
   const cssH = Math.max(214, Math.floor(GH * scale));
-  const left = Math.floor((vw - cssW) / 2);
+  const left = Math.floor((vw - dockW - cssW) / 2);
   const y = Math.floor(top + (availH - cssH) / 2);
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
