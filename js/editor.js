@@ -157,7 +157,7 @@ function objHandles(o) {   // screen positions of scale handle + rotate knob
 // ---------------------------------------------------------------------------
 function edClearSel() { edSelTiles.clear(); edSelObjs.clear(); selectedEffect = null; }
 function edSelCount() { return edSelTiles.size + edSelObjs.size + (selectedEffect ? 1 : 0); }
-function edSelectionChanged(open) { renderInspector(); renderPalette(true); refreshEditorTimeline(); if (open && window.innerWidth < 1000) openDrawer('right'); }
+function edSelectionChanged(open) { renderInspector(); renderPalette(true); refreshEditorTimeline(); if (open && window.innerWidth < 900) openDrawer('right'); }
 function edSelectTile(t, add) { if (!add) { edClearSel(); } if (edSelTiles.has(t) && add) edSelTiles.delete(t); else edSelTiles.add(t); edSelectionChanged(); }
 function edSelectObj(o, add, open) { if (!add) edClearSel(); if (edSelObjs.has(o) && add) edSelObjs.delete(o); else edSelObjs.add(o); edSelectionChanged(open); }
 function selectEffect(fx, open) { edClearSel(); selectedEffect = fx; if (fx) setEdMode('trig', true); edSelectionChanged(open); }
@@ -193,10 +193,12 @@ function handleEditorPointer(e) {
     if (Math.hypot(x - h.scale.x, y - h.scale.y) < 14) { const b = decorObjectBounds(o); edDrag = { type: 'scale', o, w0: o.w, h0: o.h, size0: o.size, d0: Math.hypot(x - h.center.x, y - h.center.y) || 1, ratio: b.w / Math.max(1, b.h) }; return; }
   }
   if (edTool === 'erase') {
-    const o = edMode !== 'tiles' && edShow.decor ? hitObject(x, y) : null;
+    const t = edShow.tiles && edMode !== 'decor' ? hitTile(x, y) : null;
+    if (t) { recordedTiles = recordedTiles.filter(q => q !== t); edSelTiles.delete(t); edChanged(); return; }
+    const o = edShow.decor ? hitObject(x, y) : null;
     if (o) { decorData.objects = decorData.objects.filter(q => q !== o); edSelObjs.delete(o); edChanged(); return; }
-    const t = edShow.tiles ? hitTile(x, y) : null;
-    if (t) { recordedTiles = recordedTiles.filter(q => q !== t); edSelTiles.delete(t); edChanged(); }
+    const t2 = edShow.tiles ? hitTile(x, y) : null;
+    if (t2) { recordedTiles = recordedTiles.filter(q => q !== t2); edSelTiles.delete(t2); edChanged(); }
     return;
   }
   if (edMode === 'decor' || (edTool === 'select' && edMode !== 'tiles')) {
@@ -375,7 +377,7 @@ function setEdMode(m, quiet) {
   document.querySelectorAll('.ed-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
   if (m !== 'tiles' && edTool === 'place') { /* place tool means "add where tapped" only in tiles mode */ }
   renderPalette();
-  if (!quiet) { if (window.innerWidth < 1000) openDrawer('left'); }
+  if (!quiet) { if (window.innerWidth < 900) openDrawer('left'); }
   updateToolButtons();
   { const lf = document.getElementById('leg-fx'); if (lf) lf.classList.toggle('active', m === 'trig'); }
 }
@@ -389,16 +391,29 @@ function toggleEye(k) { edShow[k] = !edShow[k]; updateToolButtons(); refreshEdit
 // ---------------------------------------------------------------------------
 // Drawers
 // ---------------------------------------------------------------------------
-function openDrawer(side) { const other = side === 'left' ? 'right' : 'left'; document.getElementById('drawer-' + other).classList.remove('open'); document.getElementById('drawer-' + side).classList.add('open'); updateDrawerBackdrop(); }
-function toggleDrawer(side) {
-  const el = document.getElementById('drawer-' + side);
-  if (el.classList.contains('open')) { el.classList.remove('open'); updateDrawerBackdrop(); } else openDrawer(side);
+// One panel holds the selection inspector (top) and the tools (below). Wide screens dock it beside the board.
+const edDocked = () => window.innerWidth >= 900 && document.getElementById('editor-ui').classList.contains('docked');
+function openDrawer(side) {
+  const d = document.getElementById('drawer-left'); d.classList.add('open');
+  if (side === 'right') { const i = document.getElementById('ed-inspector'); if (i) d.scrollTop = 0; }
+  updateDrawerBackdrop();
 }
-function closeAllDrawers() { document.getElementById('drawer-left').classList.remove('open'); document.getElementById('drawer-right').classList.remove('open'); updateDrawerBackdrop(); }
+function toggleDrawer(side) {
+  const d = document.getElementById('drawer-left'), ui = document.getElementById('editor-ui');
+  if (window.innerWidth >= 900) { ui.classList.toggle('docked'); d.classList.toggle('open', ui.classList.contains('docked')); layoutCanvas(); updateDrawerBackdrop(); return; }
+  if (d.classList.contains('open')) { d.classList.remove('open'); updateDrawerBackdrop(); } else openDrawer(side);
+}
+function closeAllDrawers() { if (edDocked()) return; document.getElementById('drawer-left').classList.remove('open'); updateDrawerBackdrop(); }
 function updateDrawerBackdrop() {
-  const anyOpen = document.getElementById('drawer-left').classList.contains('open') || document.getElementById('drawer-right').classList.contains('open');
+  const anyOpen = document.getElementById('drawer-left').classList.contains('open') && !edDocked();
   document.getElementById('drawer-backdrop').classList.toggle('show', anyOpen);
 }
+function edDockInit() {
+  const ui = document.getElementById('editor-ui'), wide = window.innerWidth >= 900;
+  ui.classList.toggle('docked', wide); document.getElementById('drawer-left').classList.toggle('open', wide); updateDrawerBackdrop(); layoutCanvas();
+}
+// 🗑: deletes what is selected; with nothing selected it toggles the erase tool
+function edTrashButton() { if (edSelCount()) { edDeleteSelection(); toast('Deleted.'); } else setEdTool(edTool === 'erase' ? 'place' : 'erase'); }
 
 // ---------------------------------------------------------------------------
 // Small DOM helpers for panels
@@ -612,7 +627,6 @@ function renderInspector() {
   const nT = edSelTiles.size, nO = edSelObjs.size, fx = selectedEffect;
   const total = nT + nO + (fx ? 1 : 0);
   if (!total) {
-    host.appendChild(el('div', 'selected-empty', '<span class="selected-icon">✦</span><div><b>Nothing selected</b><br><small>Tap a tile, object or trigger marker.<br>Select tool: drag a box to select many.</small></div>'));
     const r = el('div', 'btn-row'); host.appendChild(r);
     btn(r, 'Select all', edSelectAll); btn(r, 'Select from playhead', edSelectFrom);
     const paste = el('div', 'btn-row'); host.appendChild(paste);
@@ -793,7 +807,7 @@ function refreshEditorTimeline() {
     m.className = 'timeline-marker obj' + (edSelObjs.has(o) ? ' sel' : '');
     m.style.left = Math.min(100, (o.time / maxT) * 100) + '%';
     m.title = o.name || o.kind;
-    m.onclick = ev => { ev.stopPropagation(); setEdMode('decor', true); edSelectObj(o, false, true); setEditorTime(o.time); };
+    m.onclick = ev => { ev.stopPropagation(); if (edTool === 'erase') { decorData.objects = decorData.objects.filter(q => q !== o); edSelObjs.delete(o); edChanged(); return; } setEdMode('decor', true); edSelectObj(o, false, true); setEditorTime(o.time); };
     frag.appendChild(m);
   });
   if (edShow.fx) recordedEffects.forEach(fx => {
@@ -802,7 +816,7 @@ function refreshEditorTimeline() {
     m.style.left = Math.min(100, (fx.time / maxT) * 100) + '%';
     m.style.background = TRIG_COLORS[fx.type] || 'var(--pink)';
     m.title = (TRIG_DEFS[fx.type] || { label: fx.type }).label;
-    m.onclick = ev => { ev.stopPropagation(); selectEffect(fx, true); setEditorTime(fx.time); };
+    m.onclick = ev => { ev.stopPropagation(); if (edTool === 'erase') { recordedEffects = recordedEffects.filter(q => q !== fx); if (selectedEffect === fx) selectedEffect = null; edChanged(); return; } selectEffect(fx, true); setEditorTime(fx.time); };
     frag.appendChild(m);
   });
   layer.appendChild(frag);
@@ -986,7 +1000,7 @@ function editorResetSession(level) {
 }
 function editorAfterStart(level) {
   const d = document.getElementById('edit-description'); if (d) d.value = currentDescription;
-  applyEditorStyle(); updateSongLabel(); updateSnapButton(); setEdMode('tiles', true); setEdTool('place'); renderInspector();
+  edDockInit(); applyEditorStyle(); updateSongLabel(); updateSnapButton(); setEdMode('tiles', true); setEdTool('place'); renderInspector();
   if (level && level.songId && !bgAudio.getAttribute('src')) loadLibrarySongAudio(level.songId);
   document.querySelectorAll('.ed-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === 'tiles'));
 }
