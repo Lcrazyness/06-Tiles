@@ -779,32 +779,45 @@ async function adminUnpubHtml() {
 // ---- admin: every player's device levels + every saved version ----
 let adminDev = { owner: null, ownerName: '', local: null, localName: '', q: '' }, adminDevVers = {};
 async function adminDeviceHtml() {
-  const back = (to, label) => `<button class="btn small" onclick="adminDevGo(${to})">← ${label}</button>`;
+  try { return await adminDeviceInner(); }
+  catch (e) {
+    return '<div class="note">Could not load device levels: <b>' + escapeHtml(e.message || 'unknown error') + '</b><br>If this says "not found" or "failed", the backend on Render has not been updated to the newest server.js yet (check the Render dashboard for a finished deploy, then press ↻).</div>' +
+      '<button class="btn small" onclick="adminDev={owner:null,ownerName:\'\',local:null,localName:\'\',q:\'\'};loadAdminPanel(\'device\')">Back to start</button>';
+  }
+}
+async function adminDeviceInner() {
+  const back = (step, label) => `<button class="btn small" data-dev="${step}">← ${label}</button>`;
+  const wire = html => html;
   if (!adminDev.owner) {
     const d = await apiRequest('/api/admin/device-players', { auth: true }), q = adminDev.q.toLowerCase();
     const list = (d.players || []).filter(p => !q || p.owner.toLowerCase().includes(q));
     return '<div class="note">Levels saved from each player\'s device, with every version. Tap a player to open them. Copies stay here even if the player deletes the level.</div>' +
       '<input class="search" id="dev-search" placeholder="Search players…" value="' + escapeHtml(adminDev.q) + '" oninput="adminDev.q=this.value;clearTimeout(window._dvT);window._dvT=setTimeout(()=>loadAdminPanel(),350)"><div class="song-list">' +
-      (list.length ? list.map(p => `<div class="song-row admin-row" onclick="adminDevGo('player','${p.ownerId}','${escapeHtml(p.owner)}')"><div class="song-art" style="background:${artGradient(p.owner)}">${escapeHtml(p.owner.slice(0, 1).toUpperCase())}</div>
-        <div class="song-info"><div class="song-title">${escapeHtml(p.owner)}</div><div class="song-sub">${p.levels} levels · ${p.versions} versions · ${timeAgo(p.lastSaved)}</div></div></div>`).join('') : '<div class="empty">No saved levels yet.</div>') + '</div>';
+      (list.length ? list.map(p => `<div class="song-row admin-row" data-dev="player" data-id="${escapeHtml(p.ownerId)}" data-name="${escapeHtml(p.owner)}"><div class="song-art" style="background:${artGradient(p.owner)}">${escapeHtml(p.owner.slice(0, 1).toUpperCase())}</div>
+        <div class="song-info"><div class="song-title">${escapeHtml(p.owner)}</div><div class="song-sub">${p.levels} levels · ${p.versions} versions · ${timeAgo(p.lastSaved)}</div></div></div>`).join('')
+        : '<div class="empty">Nothing saved yet. A player\'s levels appear here after they open the game while logged in (it saves a few seconds after loading).<br><button class="btn small btn-play" onclick="adminDevSyncMine()">Save my own levels now</button></div>') + '</div>';
   }
   if (!adminDev.local) {
-    const d = await apiRequest('/api/admin/device-levels?owner=' + adminDev.owner, { auth: true });
-    return back("null", 'All players') + ' <b>' + escapeHtml(adminDev.ownerName) + '</b><div class="song-list">' + ((d.levels || []).length ? d.levels.map(l => `<div class="song-row admin-row" onclick="adminDevGo('level','${escapeHtml(l.localId)}','${escapeHtml(l.name)}')"><div class="song-art" style="background:${artGradient(l.name)}">♪</div>
+    const d = await apiRequest('/api/admin/device-levels?owner=' + encodeURIComponent(adminDev.owner), { auth: true });
+    return back('root', 'All players') + ' <b>' + escapeHtml(adminDev.ownerName) + '</b><div class="song-list">' + ((d.levels || []).length ? d.levels.map(l => `<div class="song-row admin-row" data-dev="level" data-id="${escapeHtml(l.localId)}" data-name="${escapeHtml(l.name)}"><div class="song-art" style="background:${artGradient(l.name)}">♪</div>
       <div class="song-info"><div class="song-title">${escapeHtml(l.name)}</div><div class="song-sub">${l.tiles} tiles · ${l.versions} version${l.versions === 1 ? '' : 's'} · ${timeAgo(l.lastSaved)}${l.published ? ' · published' : ''}${l.onDevice ? '' : ' · deleted by player'}</div></div></div>`).join('') : '<div class="empty">Nothing saved.</div>') + '</div>';
   }
-  const d = await apiRequest('/api/admin/device-versions?owner=' + adminDev.owner + '&local=' + encodeURIComponent(adminDev.local), { auth: true });
+  const d = await apiRequest('/api/admin/device-versions?owner=' + encodeURIComponent(adminDev.owner) + '&local=' + encodeURIComponent(adminDev.local), { auth: true });
   adminDevVers = {}; (d.versions || []).forEach(v => { adminDevVers[v.id] = v; });
-  return back("'player'", escapeHtml(adminDev.ownerName)) + ' <b>' + escapeHtml(adminDev.localName) + '</b><div class="song-list">' + (d.versions || []).map((v, i) => `<div class="song-row admin-row">
+  return back('player', escapeHtml(adminDev.ownerName)) + ' <b>' + escapeHtml(adminDev.localName) + '</b><div class="song-list">' + (d.versions || []).map((v, i) => `<div class="song-row admin-row">
     <div class="song-info"><div class="song-title">${i === 0 ? 'Latest' : 'Version ' + (d.versions.length - i)} · ${escapeHtml(v.name)}</div><div class="song-sub">${v.tiles} tiles · ${new Date(v.savedAt).toLocaleString()}</div></div>
     <div class="admin-actions"><button class="btn small" onclick="adminDevPlay(${v.id})">▶ Play</button><button class="btn small btn-play" onclick="adminDevDownload(${v.id})">⬇ .json</button></div></div>`).join('') + '</div>';
 }
-function adminDevGo(step, id, name) {
-  if (!step) adminDev = { owner: null, ownerName: '', local: null, localName: '', q: adminDev.q };
-  else if (step === 'player') { if (id) { adminDev.owner = id; adminDev.ownerName = name; } adminDev.local = null; }
-  else if (step === 'level') { adminDev.local = id; adminDev.localName = name; }
+// one delegated click handler for the Device tab (names with quotes can't break it)
+document.addEventListener('click', e => {
+  const t = e.target.closest && e.target.closest('[data-dev]'); if (!t || e.target.closest('button[onclick]')) return;
+  const step = t.dataset.dev;
+  if (step === 'root') adminDev = { owner: null, ownerName: '', local: null, localName: '', q: adminDev.q };
+  else if (step === 'player') { if (t.dataset.id) { adminDev.owner = t.dataset.id; adminDev.ownerName = t.dataset.name; } adminDev.local = null; }
+  else if (step === 'level') { adminDev.local = t.dataset.id; adminDev.localName = t.dataset.name; }
   loadAdminPanel('device');
-}
+});
+async function adminDevSyncMine() { syncHashes.clear(); toast('Saving your levels…'); await cloudSyncAll(); setTimeout(() => loadAdminPanel('device'), 1500); }
 async function adminDevPlay(id) {
   try { const d = await apiRequest('/api/admin/device-versions/' + id, { auth: true }); const lvl = Object.assign({}, d.level, { id: 'dev-' + id, author: d.owner }); startGame(lvl.name, true, -1, lvl.data, lvl.effects || [], true, lvl); }
   catch (e) { toast(e.message, 'bad'); }
