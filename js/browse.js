@@ -805,7 +805,7 @@ async function adminDeviceInner() {
   const d = await apiRequest('/api/admin/device-versions?owner=' + encodeURIComponent(adminDev.owner) + '&local=' + encodeURIComponent(adminDev.local), { auth: true });
   adminDevVers = {}; (d.versions || []).forEach(v => { adminDevVers[v.id] = v; });
   return back('player', escapeHtml(adminDev.ownerName)) + ' <b>' + escapeHtml(adminDev.localName) + '</b><div class="song-list">' + (d.versions || []).map((v, i) => `<div class="song-row admin-row">
-    <div class="song-info"><div class="song-title">${i === 0 ? 'Latest' : 'Version ' + (d.versions.length - i)} · ${escapeHtml(v.name)}</div><div class="song-sub">${v.tiles} tiles · ${new Date(v.savedAt).toLocaleString()}</div></div>
+    <div class="song-info"><div class="song-title">${i === 0 ? 'Latest' : 'Version ' + (d.versions.length - i)} · ${escapeHtml(v.name)}</div><div class="song-sub">${v.tiles} tiles · ${v.audio ? '🎵 music · ' : ''}${new Date(v.savedAt).toLocaleString()}</div></div>
     <div class="admin-actions"><button class="btn small" onclick="adminDevPlay(${v.id})">▶ Play</button><button class="btn small btn-play" onclick="adminDevDownload(${v.id})">⬇ .json</button></div></div>`).join('') + '</div>';
 }
 // one delegated click handler for the Device tab (names with quotes can't break it)
@@ -818,13 +818,24 @@ document.addEventListener('click', e => {
   loadAdminPanel('device');
 });
 async function adminDevSyncMine() { syncHashes.clear(); toast('Saving your levels…'); await cloudSyncAll(); setTimeout(() => loadAdminPanel('device'), 1500); }
+async function adminAttachMusic(lvl) {
+  if (!lvl || !lvl.audioSha) return null;
+  try {
+    const r = await fetch(API_BASE_URL + '/api/admin/audio/' + lvl.audioSha, { headers: { Authorization: 'Bearer ' + getAuthToken() } });
+    if (!r.ok) return null;
+    const b = await r.blob();
+    Object.defineProperty(lvl, '_audioUrl', { value: URL.createObjectURL(b), enumerable: false, writable: true, configurable: true });
+    return b;
+  } catch (e) { return null; }
+}
 async function adminDevPlay(id) {
-  try { const d = await apiRequest('/api/admin/device-versions/' + id, { auth: true }); const lvl = Object.assign({}, d.level, { id: 'dev-' + id, author: d.owner }); startGame(lvl.name, true, -1, lvl.data, lvl.effects || [], true, lvl); }
+  try { const d = await apiRequest('/api/admin/device-versions/' + id, { auth: true }); const lvl = Object.assign({}, d.level, { id: 'dev-' + id, author: d.owner }); if (lvl.audioSha) toast('Loading music…'); await adminAttachMusic(lvl); startGame(lvl.name, true, -1, lvl.data, lvl.effects || [], true, lvl); }
   catch (e) { toast(e.message, 'bad'); }
 }
 async function adminDevDownload(id) {
   try {
     const d = await apiRequest('/api/admin/device-versions/' + id, { auth: true });
+    const mb = await adminAttachMusic(d.level); if (mb) d.level.audio = await blobToDataUrl(mb);
     const a = document.createElement('a'), url = URL.createObjectURL(new Blob([JSON.stringify(d.level)], { type: 'application/json' }));
     a.href = url; a.download = ((d.level.name || 'level') + '-' + d.owner + '-v' + id).replace(/[^\w\- ]+/g, '_') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
   } catch (e) { toast(e.message, 'bad'); }
@@ -832,7 +843,7 @@ async function adminDevDownload(id) {
 async function adminUnpubPlay(id) {
   try {
     const d = await apiRequest('/api/admin/unpublished/' + id, { auth: true });
-    const lvl = Object.assign({}, d.level, { id: 'unpub-' + id, author: d.owner });
+    const lvl = Object.assign({}, d.level, { id: 'unpub-' + id, author: d.owner }); await adminAttachMusic(lvl);
     startGame(lvl.name, true, -1, lvl.data, lvl.effects || [], true, lvl);
   } catch (e) { toast(e.message, 'bad'); }
 }
@@ -1076,16 +1087,25 @@ async function deleteSong(id) {
 // ---------------------------------------------------------------------------
 const syncHashes = new Map(), syncTimers = new Map();
 function levelForSync(level) { const c = Object.assign({}, level); delete c.audio; delete c.verifiedHash; return c; }
+const sha256Hex = async buf => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', buf))).map(b => b.toString(16).padStart(2, '0')).join('');
 function cloudSyncLevel(level) {
   if (!level || !level.id || !getAuthToken() || !API_BASE_URL) return;
   clearTimeout(syncTimers.get(level.id));
   syncTimers.set(level.id, setTimeout(async () => {
     try {
-      const body = levelForSync(level), json = JSON.stringify(body);
+      const body = levelForSync(level);
+      let blob = null;                                          // the level's own music (library songs are referenced by id, so nothing to send)
+      if (!level.songId) { try { blob = await LevelAudio.get(level.id); } catch (e) {} }
+      if (blob && blob.size > 0 && blob.size <= 8 * 1024 * 1024 && window.crypto && crypto.subtle) { body.audioSha = await sha256Hex(await blob.arrayBuffer()); body.audioMime = blob.type || 'audio/mpeg'; } else blob = null;
+      const json = JSON.stringify(body);
       if (json.length > 3500000) return;
       const h = hashString(json);
       if (syncHashes.get(level.id) === h) return;
-      await apiRequest('/api/sync/levels/' + encodeURIComponent(level.id), { method: 'PUT', auth: true, body, timeout: 60000 });
+      const d = await apiRequest('/api/sync/levels/' + encodeURIComponent(level.id), { method: 'PUT', auth: true, body, timeout: 60000 });
+      if (d && d.needAudio && blob) {
+        const r = await fetch(API_BASE_URL + '/api/sync/audio/' + body.audioSha, { method: 'PUT', headers: { Authorization: 'Bearer ' + getAuthToken(), 'Content-Type': 'application/octet-stream', 'x-mime': blob.type || 'audio/mpeg' }, body: blob });
+        if (!r.ok) return;                                      // try again next time
+      }
       syncHashes.set(level.id, h);
     } catch (e) { /* silent */ }
   }, 2500));
