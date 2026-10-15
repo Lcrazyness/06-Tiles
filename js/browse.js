@@ -291,7 +291,7 @@ async function loadAdminPanel(tab) {
   const draw = (inner, overview) => {
     const unread = overview ? overview.unreadNotifications : 0;
     const tb = (id, label) => `<button class="tab ${adminTab === id ? 'active' : ''}" onclick="loadAdminPanel('${id}')">${label}</button>`;
-    modal.innerHTML = screenHtml('ADMIN', null, `<div class="tabs admin-tabs wrap">${tb('alerts', 'Alerts' + (unread ? ' (' + unread + ')' : ''))}${tb('reports', 'Reports' + (overview && overview.pendingReports ? ' (' + overview.pendingReports + ')' : ''))}${tb('levels', 'Levels')}${tb('unpub', 'Unpublished')}${tb('players', 'Players')}${tb('log', 'Log')}${tb('settings', 'Settings')}</div>` + inner, '<button class="btn small" onclick="loadAdminPanel()">↻</button>');
+    modal.innerHTML = screenHtml('ADMIN', null, `<div class="tabs admin-tabs wrap">${tb('alerts', 'Alerts' + (unread ? ' (' + unread + ')' : ''))}${tb('reports', 'Reports' + (overview && overview.pendingReports ? ' (' + overview.pendingReports + ')' : ''))}${tb('levels', 'Levels')}${tb('unpub', 'Unpublished')}${tb('device', 'Device')}${tb('players', 'Players')}${tb('log', 'Log')}${tb('settings', 'Settings')}</div>` + inner, '<button class="btn small" onclick="loadAdminPanel()">↻</button>');
   };
   toggleMenu('admin-panel');
   if (!getAuthToken()) { draw('<div class="empty">Log in as an admin first.</div>'); return; }
@@ -303,6 +303,7 @@ async function loadAdminPanel(tab) {
     else if (adminTab === 'players') draw(stats + await adminPlayersHtml(), overview);
     else if (adminTab === 'reports') draw(stats + await adminReportsHtml(), overview);
     else if (adminTab === 'unpub') draw(await adminUnpubHtml(), overview);
+    else if (adminTab === 'device') draw(await adminDeviceHtml(), overview);
     else if (adminTab === 'log') draw(await adminLogHtml(), overview);
     else if (adminTab === 'settings') draw(await adminSettingsHtml(), overview);
     else draw(stats + await adminLevelsHtml(), overview);
@@ -774,6 +775,46 @@ async function adminUnpubHtml() {
     <div class="song-row admin-row"><div class="song-art" style="background:${artGradient(l.name)}">♪</div>
       <div class="song-info"><div class="song-title">${escapeHtml(l.name)}</div><div class="song-sub">by ${escapeHtml(l.owner)} · ${l.tileCount} tiles · ${timeAgo(l.updatedAt)}</div></div>
       <div class="admin-actions"><button class="btn small" onclick="adminUnpubPlay(${l.id})">▶ Play</button><button class="btn small btn-play" onclick="adminUnpubPublish(${l.id})">Publish</button><button class="btn small btn-danger" onclick="adminUnpubDelete(${l.id})">🗑</button></div></div>`).join('') : '<div class="empty">Nothing waiting.</div>') + '</div>';
+}
+// ---- admin: every player's device levels + every saved version ----
+let adminDev = { owner: null, ownerName: '', local: null, localName: '', q: '' }, adminDevVers = {};
+async function adminDeviceHtml() {
+  const back = (to, label) => `<button class="btn small" onclick="adminDevGo(${to})">← ${label}</button>`;
+  if (!adminDev.owner) {
+    const d = await apiRequest('/api/admin/device-players', { auth: true }), q = adminDev.q.toLowerCase();
+    const list = (d.players || []).filter(p => !q || p.owner.toLowerCase().includes(q));
+    return '<div class="note">Levels saved from each player\'s device, with every version. Tap a player to open them. Copies stay here even if the player deletes the level.</div>' +
+      '<input class="search" id="dev-search" placeholder="Search players…" value="' + escapeHtml(adminDev.q) + '" oninput="adminDev.q=this.value;clearTimeout(window._dvT);window._dvT=setTimeout(()=>loadAdminPanel(),350)"><div class="song-list">' +
+      (list.length ? list.map(p => `<div class="song-row admin-row" onclick="adminDevGo('player','${p.ownerId}','${escapeHtml(p.owner)}')"><div class="song-art" style="background:${artGradient(p.owner)}">${escapeHtml(p.owner.slice(0, 1).toUpperCase())}</div>
+        <div class="song-info"><div class="song-title">${escapeHtml(p.owner)}</div><div class="song-sub">${p.levels} levels · ${p.versions} versions · ${timeAgo(p.lastSaved)}</div></div></div>`).join('') : '<div class="empty">No saved levels yet.</div>') + '</div>';
+  }
+  if (!adminDev.local) {
+    const d = await apiRequest('/api/admin/device-levels?owner=' + adminDev.owner, { auth: true });
+    return back("null", 'All players') + ' <b>' + escapeHtml(adminDev.ownerName) + '</b><div class="song-list">' + ((d.levels || []).length ? d.levels.map(l => `<div class="song-row admin-row" onclick="adminDevGo('level','${escapeHtml(l.localId)}','${escapeHtml(l.name)}')"><div class="song-art" style="background:${artGradient(l.name)}">♪</div>
+      <div class="song-info"><div class="song-title">${escapeHtml(l.name)}</div><div class="song-sub">${l.tiles} tiles · ${l.versions} version${l.versions === 1 ? '' : 's'} · ${timeAgo(l.lastSaved)}${l.published ? ' · published' : ''}${l.onDevice ? '' : ' · deleted by player'}</div></div></div>`).join('') : '<div class="empty">Nothing saved.</div>') + '</div>';
+  }
+  const d = await apiRequest('/api/admin/device-versions?owner=' + adminDev.owner + '&local=' + encodeURIComponent(adminDev.local), { auth: true });
+  adminDevVers = {}; (d.versions || []).forEach(v => { adminDevVers[v.id] = v; });
+  return back("'player'", escapeHtml(adminDev.ownerName)) + ' <b>' + escapeHtml(adminDev.localName) + '</b><div class="song-list">' + (d.versions || []).map((v, i) => `<div class="song-row admin-row">
+    <div class="song-info"><div class="song-title">${i === 0 ? 'Latest' : 'Version ' + (d.versions.length - i)} · ${escapeHtml(v.name)}</div><div class="song-sub">${v.tiles} tiles · ${new Date(v.savedAt).toLocaleString()}</div></div>
+    <div class="admin-actions"><button class="btn small" onclick="adminDevPlay(${v.id})">▶ Play</button><button class="btn small btn-play" onclick="adminDevDownload(${v.id})">⬇ .json</button></div></div>`).join('') + '</div>';
+}
+function adminDevGo(step, id, name) {
+  if (!step) adminDev = { owner: null, ownerName: '', local: null, localName: '', q: adminDev.q };
+  else if (step === 'player') { if (id) { adminDev.owner = id; adminDev.ownerName = name; } adminDev.local = null; }
+  else if (step === 'level') { adminDev.local = id; adminDev.localName = name; }
+  loadAdminPanel('device');
+}
+async function adminDevPlay(id) {
+  try { const d = await apiRequest('/api/admin/device-versions/' + id, { auth: true }); const lvl = Object.assign({}, d.level, { id: 'dev-' + id, author: d.owner }); startGame(lvl.name, true, -1, lvl.data, lvl.effects || [], true, lvl); }
+  catch (e) { toast(e.message, 'bad'); }
+}
+async function adminDevDownload(id) {
+  try {
+    const d = await apiRequest('/api/admin/device-versions/' + id, { auth: true });
+    const a = document.createElement('a'), url = URL.createObjectURL(new Blob([JSON.stringify(d.level)], { type: 'application/json' }));
+    a.href = url; a.download = ((d.level.name || 'level') + '-' + d.owner + '-v' + id).replace(/[^\w\- ]+/g, '_') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) { toast(e.message, 'bad'); }
 }
 async function adminUnpubPlay(id) {
   try {
