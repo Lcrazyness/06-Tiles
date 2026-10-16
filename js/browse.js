@@ -806,7 +806,7 @@ async function adminDeviceInner() {
   adminDevVers = {}; (d.versions || []).forEach(v => { adminDevVers[v.id] = v; });
   return back('player', escapeHtml(adminDev.ownerName)) + ' <b>' + escapeHtml(adminDev.localName) + '</b><div class="song-list">' + (d.versions || []).map((v, i) => `<div class="song-row admin-row">
     <div class="song-info"><div class="song-title">${i === 0 ? 'Latest' : 'Version ' + (d.versions.length - i)} · ${escapeHtml(v.name)}</div><div class="song-sub">${v.tiles} tiles · ${v.audio ? '🎵 music · ' : ''}${new Date(v.savedAt).toLocaleString()}</div></div>
-    <div class="admin-actions"><button class="btn small" onclick="adminDevPlay(${v.id})">▶ Play</button><button class="btn small btn-play" onclick="adminDevDownload(${v.id})">⬇ .json</button></div></div>`).join('') + '</div>';
+    <div class="admin-actions"><button class="btn small" onclick="adminDevPlay(${v.id})">▶ Play</button><button class="btn small btn-play" onclick="adminDevDownload(${v.id})">⬇ .json</button><button class="btn small btn-pink" onclick="adminDevPublish(${v.id})">Publish</button></div></div>`).join('') + '</div>';
 }
 // one delegated click handler for the Device tab (names with quotes can't break it)
 document.addEventListener('click', e => {
@@ -830,6 +830,12 @@ async function adminAttachMusic(lvl) {
 }
 async function adminDevPlay(id) {
   try { const d = await apiRequest('/api/admin/device-versions/' + id, { auth: true }); const lvl = Object.assign({}, d.level, { id: 'dev-' + id, author: d.owner }); if (lvl.audioSha) toast('Loading music…'); await adminAttachMusic(lvl); startGame(lvl.name, true, -1, lvl.data, lvl.effects || [], true, lvl); }
+  catch (e) { toast(e.message, 'bad'); }
+}
+async function adminDevPublish(id) {
+  const v = adminDevVers[id]; if (!v) return;
+  if (!(await uiConfirm('Publish "' + v.name + '" (' + v.tiles + ' tiles) as ' + adminDev.ownerName + '? It goes live under their name' + (v.audio ? ', with its music' : '') + '. If it was already published this makes a second copy.', 'Publish'))) return;
+  try { const d = await apiRequest('/api/admin/device-versions/' + id + '/publish', { method: 'POST', auth: true, body: {}, timeout: 60000 }); toast('Published' + (v.audio && !d.music ? ' (music was too large, so it has none)' : '') + '.', 'good'); loadAdminPanel('device'); }
   catch (e) { toast(e.message, 'bad'); }
 }
 async function adminDevDownload(id) {
