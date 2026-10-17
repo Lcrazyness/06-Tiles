@@ -110,6 +110,8 @@ function authFetch(url, options = {}) {
 
 function beginStatsGame() { statsGameFinalized = false; }
 async function finishStatsGame(completed) {
+  replaySave(!!completed);
+  if (replayPlay) return;
   if (statsGameFinalized || !getAuthToken() || !API_BASE_URL || isPlaytesting || isVerifying || isBattleMode || practiceMode) return;
   // Only levels played from Browse > Levels count - not the endless modes, loaded files or your own levels
   // (the server also refuses your own published levels).
