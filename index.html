@@ -53,8 +53,8 @@
   </div>
   <div class="screen-body home-body">
     <div class="home-col">
-      <div class="logo"><span class="logo-06">067</span><span class="logo-tiles">TILES</span></div>
-      <div class="logo-sub">TAP THE AB TILES 676767</div>
+      <div class="logo"><span class="logo-06">06</span><span class="logo-tiles">TILES</span></div>
+      <div class="logo-sub">TAP THE BLACK TILES</div>
       <button class="btn btn-play huge" onclick="openPlay()">▶ PLAY</button>
       <div class="home-grid">
         <button class="home-card" onclick="openBrowseLevels('levels')"><span>🌐</span>Browse</button>
@@ -99,6 +99,9 @@
       <div class="settings-row"><span>Editor style</span><select id="setting-ed-style" class="num-in" style="width:130px!important"><option value="new">New</option><option value="legacy">Legacy</option></select></div>
       <div class="settings-row"><span>Turn off snapping <small>(editor starts in free placement)</small></span><input type="checkbox" id="setting-no-snap"></div>
       <div class="settings-row"><span>Verify from start pos <small>(doesn't count as verified)</small></span><input type="checkbox" id="setting-verify-start"></div>
+      <div class="section-title">GHOSTS &amp; REPLAYS</div>
+      <div class="settings-row"><span>Show ghost <small>(race a see-through run)</small></span><input type="checkbox" id="setting-ghost"></div>
+      <div class="settings-row"><span>Ghost of</span><select id="setting-ghost-src" class="num-in" style="width:130px!important"><option value="mine">My best run</option><option value="top">Top player</option></select></div>
       <div class="section-title">KEYBINDS</div>
       <div class="keybind-grid">
         <label>Lane 1 <input id="keybind-0" maxlength="1" value="r"></label><label>Lane 2 <input id="keybind-1" maxlength="1" value="t"></label>
@@ -291,6 +294,7 @@
 <script src="js/editor.js?v=20261014-2"></script>
 <script src="js/browse.js?v=20261014-2"></script>
 <script src="js/battle.js?v=20261014-2"></script>
-<script src="js/main.js?v=20261014-2"></script>
+<script src="js/social.js?v=20261016-1"></script>
+  <script src="js/main.js?v=20261014-2"></script>
 </body>
 </html>
