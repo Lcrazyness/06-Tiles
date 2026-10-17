@@ -160,6 +160,16 @@ function levelHashOf(data, effects) {
   return hashString(JSON.stringify([(data || []).map(t => [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0]),
     (effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])]));
 }
+function tileKey(t) { return [t.lane, t.time, t.isHold ? 1 : 0, t.isHold ? (t.holdDuration || 0) : 0].join('|'); }
+function gameplayFx(effects) { return JSON.stringify((effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])); }
+// true when the new version only REMOVES tiles (music/decor may change) compared with the last published version
+function isNerfUpdate() {
+  if (!currentEditingOnlineId) return false;
+  const mine = myLevels.find(l => l.id === currentEditingId);
+  if (!mine || !mine.pubTiles) return false;
+  const have = new Set(mine.pubTiles);
+  return recordedTiles.every(t => have.has(tileKey(t))) && gameplayFx(recordedEffects) === mine.pubFx;
+}
 function buildLevelObject(name) {
   return {
     id: currentEditingId || makeLevelId(),
@@ -198,7 +208,7 @@ async function saveCustomLevel() {
   const level = buildLevelObject(currentEditingName);
   const idx = myLevels.findIndex(l => l.id === level.id);
   if (currentEditingOnlineId) { level.onlineId = currentEditingOnlineId; level.published = true; }
-  if (idx !== -1) { level.plays = myLevels[idx].plays || 0; level.createdAt = myLevels[idx].createdAt || level.createdAt; myLevels[idx] = level; }
+  if (idx !== -1) { level.plays = myLevels[idx].plays || 0; level.createdAt = myLevels[idx].createdAt || level.createdAt; if (myLevels[idx].pubTiles) { level.pubTiles = myLevels[idx].pubTiles; level.pubFx = myLevels[idx].pubFx; } if (myLevels[idx].verifiedHash) level.verifiedHash = myLevels[idx].verifiedHash; myLevels[idx] = level; }
   else myLevels.push(level);
   currentEditingId = level.id; persistLevelAudio(level.id);
   if (persistMyLevels()) { closeCreatorMenu(); toast(idx !== -1 ? 'Level updated.' : 'Saved to My Levels.', 'good'); if (typeof cloudSyncLevel === 'function') cloudSyncLevel(level); }
@@ -236,6 +246,7 @@ async function publishLevel() {
     return;
   }
   if (!levelVerified) { const mine = myLevels.find(l => l.id === currentEditingId); if (mine && mine.verifiedHash && mine.verifiedHash === levelDataHash()) levelVerified = true; }
+  if (!levelVerified && isNerfUpdate()) { levelVerified = true; nerfUpdate = true; toast('Only tiles removed / music changed - no need to beat it again.', 'good'); }
   if (!levelVerified) {
     pendingPublishAfterVerification = true;
     startLevelVerification();
@@ -244,6 +255,7 @@ async function publishLevel() {
   await publishVerifiedLevel();
 }
 let returnToEditorAfterAccount = false;
+let nerfUpdate = false;
 
 async function publishVerifiedLevel() {
   const updating = !!currentEditingOnlineId;
@@ -253,6 +265,8 @@ async function publishVerifiedLevel() {
   currentEditingName = name.trim().slice(0, 80);
   const level = buildLevelObject(currentEditingName);
   level.audio = await audioDataUrl();
+  if (nerfUpdate && updating) level.nerfOnly = true;
+  nerfUpdate = false;
   closeCreatorMenu();
   try {
     toast(updating ? 'Updating…' : 'Publishing…');
@@ -269,6 +283,8 @@ async function publishVerifiedLevel() {
       data = await apiRequest('/api/levels', { method: 'POST', body: level, auth: true });
     }
     level.published = true; level.onlineId = data.level && data.level.id;
+    delete level.nerfOnly; level.pubTiles = recordedTiles.map(tileKey); level.pubFx = gameplayFx(recordedEffects);
+    level.verifiedHash = levelHashOf(level.data, level.effects);
     currentEditingOnlineId = level.onlineId;
     // remember it locally too, so My Levels shows it as published
     const idx = myLevels.findIndex(l => l.id === level.id);
