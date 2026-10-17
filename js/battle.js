@@ -373,6 +373,7 @@ function registerLiveHandlers(s) {
     else if (LIVE.role === 'viewer' && LIVE.id) { LIVE.pcConnected = false; s.emit('stream_join', { id: LIVE.id }); }
     if (VOICE.on) s.emit('voice_join');
   });
+  s.on('notify', d => { if (typeof onNotifyPush === 'function') onNotifyPush(d); });
   s.on('streams_changed', list => { LIVE.streams = Array.isArray(list) ? list : LIVE.streams; updateLiveBadge(); const m = document.getElementById('live-menu'); if (m && !m.classList.contains('hidden') && LIVE.tab === 'live') renderLive(); });
   s.on('stream_started', d => liveHostStarted(d));
   s.on('stream_error', d => { toast(d.message || 'Stream problem.', 'bad'); if (LIVE.role === 'host' && (!LIVE.id || d.gone)) liveEnded(d.message); else if (LIVE.role === 'viewer' && /over/.test(d.message || '')) liveEnded(d.message); });
@@ -410,7 +411,7 @@ function renderLive() {
   const tabs = '<div class="seg live-tabs">' + LIVE_TABS.map(([k, n]) => '<button class="' + (LIVE.tab === k ? 'on' : '') + '" data-ltab="' + k + '">' + n + '</button>').join('') + '</div>';
   let body;
   if (LIVE.tab === 'live') {
-    const rows = LIVE.streams.map(st => `<div class="song-row live-row" data-watch="${st.id}"><div class="song-art live-art"><span>🔴</span></div>
+    const rows = LIVE.streams.map(st => `<div class="song-row live-row" data-watch="${st.id}"><div class="song-art live-art${st.thumb ? ' thumb' : ''}">${st.thumb ? '<img src="' + st.thumb + '" alt="">' : '<span>🔴</span>'}</div>
       <div class="song-info"><div class="song-title">${escapeHtml(st.title)}</div><div class="song-sub">${escapeHtml(st.username)}${st.levelName ? ' · ' + escapeHtml(st.levelName) : ''}</div>
       <div class="song-meta"><span>👁 ${st.viewers}</span><span>${st.format === 'wide' ? 'Wide' : 'Short'}</span><span>${timeAgo(new Date(st.startedAt).toISOString())}</span></div></div>
       <button class="play-btn">${LIVE.id === st.id ? 'OPEN' : 'WATCH'}</button></div>`).join('');
@@ -419,7 +420,7 @@ function renderLive() {
       (rows ? '<div class="song-list">' + rows + '</div>' : '<div class="empty">Nobody is live right now.</div>');
   } else {
     const list = LIVE.vods[LIVE.tab];
-    body = !list ? (LIVE.vodsErr ? errorBox(LIVE.vodsErr, "openLive('" + LIVE.tab + "')") : '<div class="empty">Loading…</div>') : list.length ? '<div class="song-list">' + list.map(v => `<div class="song-row live-row" data-vod="${v.id}"><div class="song-art vod-art"><span>🎬</span></div>
+    body = !list ? (LIVE.vodsErr ? errorBox(LIVE.vodsErr, "openLive('" + LIVE.tab + "')") : '<div class="empty">Loading…</div>') : list.length ? '<div class="song-list">' + list.map(v => `<div class="song-row live-row" data-vod="${v.id}"><div class="song-art vod-art${v.thumb ? ' thumb' : ''}">${v.thumb ? '<img src="' + apiUrl(v.thumb) + '" alt="">' : '<span>🎬</span>'}</div>
       <div class="song-info"><div class="song-title">${escapeHtml(v.title)}</div><div class="song-sub">${escapeHtml(v.username)}${v.levelLabel ? ' · ' + escapeHtml(v.levelLabel) : ''}</div>
       <div class="song-meta"><span>👁 ${v.views}</span><span>❤ ${v.likes}</span><span>${fmtDur(v.duration)}</span><span>${v.format === 'wide' ? 'Wide' : 'Short'}</span><span>${timeAgo(v.createdAt)}</span></div></div>
       <button class="play-btn">WATCH</button></div>`).join('') + '</div>' : '<div class="empty">No recordings yet.</div>';
@@ -510,7 +511,15 @@ async function startStreaming(o) {
   LIVE.out = new MediaStream(tracks);
   startRecorder();
   battleSocket.emit('stream_start', { title: o.title, levelName: liveLevelLabel(), format: o.format, chatOn: o.chat });
+  LIVE.lastThumb = null; LIVE.thumbTimer = setInterval(sendStreamThumb, 20000); setTimeout(sendStreamThumb, 3500);
   LIVE.labelTimer = setInterval(() => { if (LIVE.id) emitBattle('stream_update', { levelName: liveLevelLabel() }); }, 8000);
+}
+function sendStreamThumb(quiet) {
+  if (!LIVE.comp) return;
+  const u = typeof makeStreamThumb === 'function' ? makeStreamThumb(LIVE.comp, LIVE.fmt) : null;
+  if (!u || u.length > 65000) return;
+  LIVE.lastThumb = u;
+  if (!quiet && LIVE.id) emitBattle('stream_thumb', u);
 }
 function startRecorder() {
   try {
@@ -579,7 +588,7 @@ async function stopStreaming(ask) {
   liveEnded('You ended the stream.');
 }
 async function liveTeardown() {
-  clearInterval(LIVE.compTimer); clearInterval(LIVE.labelTimer); clearTimeout(LIVE.relayTimer); clearTimeout(LIVE.dropTimer); hostRelayStop();
+  clearInterval(LIVE.compTimer); clearInterval(LIVE.labelTimer); clearInterval(LIVE.thumbTimer); clearTimeout(LIVE.relayTimer); clearTimeout(LIVE.dropTimer); hostRelayStop();
   LIVE.peers.forEach(pc => { try { pc.close(); } catch (e) {} }); LIVE.peers.clear();
   if (LIVE.pc) { try { LIVE.pc.close(); } catch (e) {} LIVE.pc = null; }
   if (LIVE.mic) LIVE.mic.getTracks().forEach(t => t.stop());
@@ -593,7 +602,8 @@ async function liveTeardown() {
 async function liveEnded(reason) {
   if (!LIVE.role) return;
   const wasHost = LIVE.role === 'host', wasViewer = LIVE.role === 'viewer';
-  const info = { title: LIVE.title, fmt: LIVE.fmt, level: liveLevelLabel(), secs: Math.max(1, Math.round((Date.now() - LIVE.startedAt) / 1000)) };
+  if (LIVE.role === 'host') sendStreamThumb(true);
+  const info = { title: LIVE.title, fmt: LIVE.fmt, level: liveLevelLabel(), thumb: LIVE.role === 'host' ? LIVE.lastThumb : null, secs: Math.max(1, Math.round((Date.now() - LIVE.startedAt) / 1000)) };
   let blob = null;
   if (wasHost && LIVE.recorder && LIVE.recorder.state !== 'inactive') await new Promise(res => { LIVE.recorder.onstop = res; try { LIVE.recorder.stop(); } catch (e) { res(); } });
   if (wasHost && LIVE.chunks.length) blob = new Blob(LIVE.chunks, { type: LIVE.recMime || 'video/webm' });
@@ -620,7 +630,7 @@ function showStreamDone(blob, info, reason) {
     x.open('POST', apiUrl('/api/vods')); x.setRequestHeader('Authorization', 'Bearer ' + getAuthToken()); x.setRequestHeader('Content-Type', 'application/octet-stream');
     x.setRequestHeader('x-title', encodeURIComponent(info.title || '')); x.setRequestHeader('x-format', info.fmt); x.setRequestHeader('x-duration', String(info.secs)); x.setRequestHeader('x-level', encodeURIComponent(info.level || '')); x.setRequestHeader('x-mime', blob.type || 'video/webm');
     x.upload.onprogress = e => { if (e.lengthComputable) msg.textContent = 'Uploading… ' + Math.round(e.loaded / e.total * 100) + '%'; };
-    x.onload = () => { let d = {}; try { d = JSON.parse(x.responseText); } catch (e) {} if (x.status === 200 && d.success) { saved = true; toast('Published!', 'good'); host.classList.add('hidden'); host.innerHTML = ''; URL.revokeObjectURL(url); LIVE.vods = {}; openLive('recent'); } else { msg.textContent = d.message || 'Upload failed.'; pub.disabled = false; } };
+    x.onload = () => { let d = {}; try { d = JSON.parse(x.responseText); } catch (e) {} if (x.status === 200 && d.success) { saved = true; if (info.thumb && d.id) { const tb = dataUrlToJpegBlob(info.thumb); if (tb) fetch(apiUrl('/api/vods/' + d.id + '/thumb'), { method: 'PUT', headers: { Authorization: 'Bearer ' + getAuthToken(), 'Content-Type': 'image/jpeg' }, body: tb }).catch(() => {}); } toast('Published!', 'good'); host.classList.add('hidden'); host.innerHTML = ''; URL.revokeObjectURL(url); LIVE.vods = {}; openLive('recent'); } else { msg.textContent = d.message || 'Upload failed.'; pub.disabled = false; } };
     x.onerror = () => { msg.textContent = 'Upload failed. Check your connection and try again.'; pub.disabled = false; };
     x.send(blob);
   };
