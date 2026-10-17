@@ -369,3 +369,13 @@ a.btn{text-decoration:none}
 .vod-art{background:linear-gradient(135deg,#1e3a8a,#7c3aed);font-size:26px}.voice-art{font-size:20px;font-weight:800;background:linear-gradient(135deg,#0f766e,#2d9cf0)}
 .speak-dot{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.2);flex:0 0 12px;margin-right:6px}.speak-dot.on{background:#3ddc71;box-shadow:0 0 10px #3ddc71}
 .voice-row{min-height:60px}.voice-row .song-art{width:60px;height:60px;flex-basis:60px}
+
+/* hub, ghosts, replays, thumbnails */
+#replay-banner{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:60;background:rgba(10,14,24,.78);border:1px solid #8be9ff;color:#8be9ff;border-radius:999px;padding:5px 14px;font:700 12px system-ui,sans-serif;pointer-events:none}
+#replay-banner.hidden{display:none}
+.prog-track{height:6px;border-radius:99px;background:rgba(255,255,255,.12);margin-top:6px;overflow:hidden}.prog-fill{height:100%;background:linear-gradient(90deg,#00f0ff,#7cff6b);border-radius:99px}
+.challenge .song-row{margin-bottom:8px}.challenge small{opacity:.7;font-weight:600}
+.player-row.me{outline:2px solid #ffc93c;outline-offset:-2px}
+.alert-row.unread{background:rgba(0,240,255,.1)}.alert-row.unread .song-title{font-weight:800}.alert-row .song-art{font-size:22px}
+.song-art.thumb{overflow:hidden;padding:0}.song-art.thumb img{width:100%;height:100%;object-fit:cover;display:block}.song-art.live-art.thumb,.song-art.vod-art.thumb{width:96px;flex-basis:96px;border-radius:10px}
+#pack-picker .searchbar{margin:8px 0}
