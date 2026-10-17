@@ -83,6 +83,47 @@ function decorFire(fx, t, instant) {
       break;
     case 'shake': if (!instant) { dCam.shakeT0 = t; dCam.shakeDur = Math.max(0.05, Number(fx.dur) || 0.4); dCam.shakeStr = Number(fx.strength) || 8; } break;
     case 'zoom': addTween(dCam, 'zoom', Math.max(0.3, Math.min(3, Number(fx.zoom) || 1)), t, dur, ez); break;
+    case 'random': fireRandom(fx, t, dur, ez); break;
+  }
+}
+
+// ---- Randomize trigger: random move / spin / size / fade / colour / hide for the members of a group ----
+// Seeded, so the same trigger gives the same result every run (verification, replays and ghosts stay in sync).
+function rngFrom(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function hslHex(h, s, l) { s /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l), f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return '#' + [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join(''); }
+// every individual thing that belongs to group g: tiles (group = its number in time order, or any custom group) and objects (10000 + id)
+function randomMembers(g) {
+  const out = new Set();
+  const tl = (typeof inEditor !== 'undefined' && inEditor) ? recordedTiles : pendingTiles;
+  (tl || []).forEach((n, i) => { if (i + 1 === g || (n.groups || []).includes(g)) out.add(i + 1); });
+  (decorData.objects || []).forEach(o => { if (10000 + o.id === g || (o.groups || []).includes(g)) out.add(10000 + o.id); });
+  return [...out].slice(0, 600);
+}
+function fireRandom(fx, t, dur, ez) {
+  const target = Number(fx.target) || 0, each = Number(fx.each) !== 0 && target !== 0;
+  const members = each ? randomMembers(target) : [target];
+  const num = (k, d) => { const v = Number(fx[k]); return Number.isFinite(v) ? v : d; };
+  const mode = fx.mode === 'add' || fx.mode === 'reset' ? fx.mode : 'set', chance = num('chance', 100), base = ((num('seed', 1) | 0) * 7919 + Math.round(t * 1000) * 31) | 0;
+  const picks = [fx.c1, fx.c2, fx.c3].filter(c => /^#[0-9a-f]{6}$/i.test(String(c || '')));
+  for (const m of members) {
+    const r = rngFrom(base ^ Math.imul(m + 1, 2654435761)), v = []; for (let i = 0; i < 10; i++) v.push(r());   // fixed draw order: changing one setting never reshuffles the others
+    if (v[0] * 100 >= chance) continue;
+    const s = gs(m);
+    if (mode === 'reset') {
+      addTween(s, 'dx', 0, t, dur, ez); addTween(s, 'dy', 0, t, dur, ez); addTween(s, 'rot', 0, t, dur, ez); addTween(s, 'sc', 1, t, dur, ez); addTween(s, 'a', 1, t, dur, ez);
+      s.vis = 1; s.colTo = null; s.col = null; s.cp = 1; continue;
+    }
+    const add = mode === 'add';
+    if (num('mv', 0) === 1) { const dx = (v[1] * 2 - 1) * num('mx', 60), dy = (v[2] * 2 - 1) * num('my', 60); addTween(s, 'dx', add ? s.dx + dx : dx, t, dur, ez); addTween(s, 'dy', add ? s.dy + dy : dy, t, dur, ez); }
+    if (num('rt', 0) === 1) { const d = (v[3] * 2 - 1) * num('rd', 45); addTween(s, 'rot', add ? s.rot + d : d, t, dur, ez); }
+    if (num('sz', 0) === 1) { const lo = num('smin', 0.7), hi = num('smax', 1.4), k = Math.max(0.05, Math.min(10, lo + v[4] * (hi - lo))); addTween(s, 'sc', add ? s.sc * k : k, t, dur, ez); }
+    if (num('al', 0) === 1) { const lo = num('amin', 0.3), hi = num('amax', 1), a = Math.max(0, Math.min(1, lo + v[5] * (hi - lo))); addTween(s, 'a', add ? s.a * a : a, t, dur, ez); }
+    const cm = num('col', 0);
+    if (cm === 1 || (cm === 2 && picks.length)) {
+      const hex = cm === 1 ? hslHex(Math.floor(v[6] * 360), 85, 60) : picks[Math.floor(v[7] * picks.length) % picks.length];
+      s.colFrom = s.col || null; s.colTo = hex; s.cp = 0; addTween(s, 'cp', 1, t, dur, ez); if (!(dur > 0)) s.col = hex;
+    }
+    if (num('vis', 0) === 1) s.vis = v[8] * 100 < num('hide', 30) ? 0 : 1;
   }
 }
 function lerpColor(a, b, p) {
@@ -348,6 +389,101 @@ function resetState() {
   lastTime = performance.now();
 }
 
+// ============================================================================
+// REPLAYS + GHOSTS
+// A run is recorded as the list of tiles you hit (when, which tile, which lane) plus wrong taps and how it ended - tiny, and enough to
+// play it back exactly. A "ghost" is a recording drawn as translucent taps beside your own run; "Watch" plays it back on its own.
+// ============================================================================
+const ghostOn = () => lsGet('et_ghost') !== '0';
+const ghostSrcPref = () => lsGet('et_ghostSrc') === 'top' ? 'top' : 'mine';
+let rec = null, ghost = null, replayPlay = null, ghostPick = null;
+const isUuidStr = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+function replayLevelId() { const a = lastStartArgs; const l = a && a[5] ? a[6] : null; return l && isUuidStr(l.id) ? l.id : null; }
+function setReplayBanner(text) {
+  let b = document.getElementById('replay-banner');
+  if (!text) { if (b) b.classList.add('hidden'); return; }
+  if (!b) { b = document.createElement('div'); b.id = 'replay-banner'; document.body.appendChild(b); }
+  b.textContent = text; b.classList.remove('hidden');
+}
+function replayBegin() {
+  rec = null; ghost = null;
+  const id = replayLevelId();
+  if (replayPlay && replayPlay.levelId !== id) replayPlay = null;
+  if (replayPlay) { replayPlay.i = 0; replayPlay.wi = 0; setReplayBanner('▶ REPLAY · ' + replayPlay.username + (replayPlay.completed ? ' · ✔ 100%' : ' · ' + replayPlay.pct + '%')); return; }
+  setReplayBanner(null);
+  if (!id || isPlaytesting || isVerifying || isBattleMode || practiceMode) return;
+  rec = { h: [], w: [], end: 0, died: null };
+  if (ghostOn()) ghostLoad(id, customPlayTime);
+}
+async function ghostLoad(id, startedAt) {
+  let g = null;
+  try {
+    if (ghostPick && ghostPick.id === id) g = ghostPick.ghost;
+    else if (ghostSrcPref() === 'mine') { const o = JSON.parse(localStorage.getItem('et_rp_' + id) || 'null'); if (o && o.data) g = { username: 'You', pct: o.pct, completed: o.completed, data: o.data }; }
+    else g = (await apiRequest('/api/levels/' + encodeURIComponent(id) + '/ghost?who=top')).ghost;
+  } catch (e) { return; }
+  if (!g || !g.data || !Array.isArray(g.data.h) || replayLevelId() !== id || !rec) return;
+  ghost = { name: g.username, pct: g.pct, completed: !!g.completed, h: g.data.h, end: g.data.end || 0, i: 0, score: 0, flashes: [] };
+  const now = customPlayTime * 1000;
+  while (ghost.i < ghost.h.length && ghost.h[ghost.i][0] <= now) { ghost.i++; ghost.score += 10; }
+}
+function ghostTick() {
+  if (!ghost) return;
+  const now = customPlayTime * 1000;
+  while (ghost.i < ghost.h.length && ghost.h[ghost.i][0] <= now) { ghost.flashes.push({ lane: ghost.h[ghost.i][2], t0: customPlayTime }); ghost.i++; ghost.score += 10; }
+  ghost.flashes = ghost.flashes.filter(f => customPlayTime - f.t0 < 0.4);
+}
+function drawGhost() {
+  if (!ghost || !gameActive) return;
+  ctx.save();
+  for (const f of ghost.flashes) {
+    const k = 1 - (customPlayTime - f.t0) / 0.4;
+    ctx.globalAlpha = Math.max(0, k) * 0.5; ctx.fillStyle = '#8be9ff'; ctx.fillRect(f.lane * laneW + 4, lineY - TILE_H + (1 - k) * 18, laneW - 8, TILE_H);
+    ctx.globalAlpha = Math.max(0, k) * 0.9; ctx.strokeStyle = '#d6f6ff'; ctx.lineWidth = 2; ctx.strokeRect(f.lane * laneW + 4, lineY - TILE_H + (1 - k) * 18, laneW - 8, TILE_H);
+  }
+  const gp = ghost.completed && customPlayTime * 1000 >= ghost.end ? 100 : Math.min(ghost.pct, levelLastNoteTime > 0 ? Math.floor(Math.min(customPlayTime, ghost.end / 1000) / levelLastNoteTime * 100) : 0);
+  if (dVFlip) ctx.transform(1, 0, 0, -1, 0, GH);       // keep the label the right way up on a flipped board
+  ctx.globalAlpha = 0.85; ctx.fillStyle = '#8be9ff'; ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('👻 ' + ghost.name + ' · ' + gp + '% · ' + ghost.score, GW / 2, 8);
+  ctx.restore();
+}
+function replayInject() {
+  const d = replayPlay && replayPlay.data; if (!d) return;
+  const now = customPlayTime * 1000;
+  while (replayPlay.i < d.h.length && d.h[replayPlay.i][0] <= now) {
+    const e = d.h[replayPlay.i++], t = tiles.find(x => x.noteIdx === e[1] && !x.interacted);
+    if (!t) continue;
+    t.interacted = true; score += 10; notesHitThisGame++;
+    for (let k = 0; k < 8; k++) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY));
+    if (typeof playLaneSound === 'function') playLaneSound(t.lane);
+  }
+  while (replayPlay.wi < d.w.length && d.w[replayPlay.wi] <= now) { replayPlay.wi++; if (!handleHit()) { die('WRONG ORDER!'); return; } }
+  if (d.died && d.end && now >= d.end && !isDead) die(d.died);
+}
+function replaySave(completed) {
+  const r = rec; rec = null;
+  if (!r || replayPlay || !r.h.length) return;
+  const id = replayLevelId(); if (!id) return;
+  const pct = completed ? 100 : Math.max(0, Math.min(99, Math.floor(customPlayTime / Math.max(1, levelLastNoteTime) * 100))), sc = Math.floor(score);
+  if (!r.end) r.end = Math.round(customPlayTime * 1000);
+  const body = { pct, score: sc, completed: !!completed, data: r };
+  try {
+    const k = 'et_rp_' + id, old = JSON.parse(localStorage.getItem(k) || 'null');
+    const better = !old || (completed && !old.completed) || (!!completed === !!old.completed && (pct > old.pct || (pct === old.pct && sc > old.score)));
+    if (!better) return;
+    localStorage.setItem(k, JSON.stringify(body));
+    const idx = JSON.parse(localStorage.getItem('et_rp_index') || '[]').filter(x => x !== id); idx.push(id);
+    while (idx.length > 40) localStorage.removeItem('et_rp_' + idx.shift());
+    localStorage.setItem('et_rp_index', JSON.stringify(idx));
+  } catch (e) { return; }
+  if (getAuthToken() && API_BASE_URL && !localStorage.getItem('et_imp_backup')) apiRequest('/api/levels/' + encodeURIComponent(id) + '/replay', { method: 'POST', auth: true, body }).catch(() => {});
+}
+// watch someone's replay: plays the level by itself from their recording
+function startReplayWatch(level, g) {
+  replayPlay = { levelId: level.id, username: g.username, pct: g.pct, completed: !!g.completed, data: g.data, i: 0, wi: 0 };
+  startGame(level.name, true, -1, level.data, level.effects || [], true, level);
+}
+
 function triggerRedFlash() {
   const flash = document.getElementById('red-flash'); flash.style.opacity = 0.8;
   setTimeout(() => { flash.style.opacity = 0; }, 150);
@@ -458,6 +594,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     else if (startPosArmed && (isPlaytesting || isVerifying) && editorStartPos !== null) fastForwardTo(editorStartPos);
     startPosArmed = false;
     practiceNextAuto = (practiceMode ? Math.max(customPlayTime, practiceStartSec) : 0) + autoCheckpointSec;
+    replayBegin();
     decorUpdate(customPlayTime);
     updateProgressBar(0);
     globeGhosts.clear();
@@ -706,6 +843,8 @@ function updateCustomLevel(dtSec) {
     else if (fx.type === 'video') fireVideo(fx);
     else decorFire(fx, fx.time, false);
   }
+  if (replayPlay) replayInject();
+  if (ghost) ghostTick();
   decorUpdate(customPlayTime);
   { const bgc = decorBackground(); if (bgc) document.body.style.background = bgc; }
   if (practiceMode) maybeAutoCheckpoint();
@@ -750,7 +889,8 @@ function updateCustomLevel(dtSec) {
   } else if (isBattleMode) {
     if (typeof handleBattleFinish === 'function') handleBattleFinish(true, 'FINISHED');
   } else {
-    markVerifiedByPlay();
+    if (rec) { rec.end = Math.round(customPlayTime * 1000); rec.died = null; }
+    if (!replayPlay) markVerifiedByPlay();
     finishStatsGame(true);
     showCompletionScreen();
   }
@@ -792,7 +932,7 @@ function inInputZone(t) {
 }
 
 function pressLane(laneIndex) {
-  if (!gameActive || isDead || inEditor || isPaused) return;
+  if (!gameActive || isDead || inEditor || isPaused || replayPlay) return;
   let nearestAll = null;                         // the next tile in order, whatever the zone says
   for (const t of tiles) if (!t.interacted && (!nearestAll || t.y > nearestAll.y)) nearestAll = t;
   if (!nearestAll) return;
@@ -815,10 +955,12 @@ function pressLane(laneIndex) {
   else ok = !!target && (target === nearest || targetY >= nearestY - TILE_H * 0.85);
   if (ok) {
     target.interacted = true; score += 10; notesHitThisGame++;
+    if (rec) rec.h.push([Math.round(customPlayTime * 1000), target.noteIdx === undefined ? -1 : target.noteIdx, laneIndex]);
     for (let i = 0; i < 8; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
     if (typeof playLaneSound === 'function') playLaneSound(laneIndex);
     if (globeOn && typeof globeTap === 'function') globeTap(target.noteIdx, laneIndex);
   } else if (nearestY - TILE_H < GH && nearestY + TILE_H > 0) {
+    if (rec) rec.w.push(Math.round(customPlayTime * 1000));
     if (!handleHit()) die("WRONG ORDER!");
   }
 }
@@ -973,8 +1115,9 @@ function gameLoop(ts) {
 
     if (t.isHold && t.interacted && !t.failed) {
       if (tailTop < lineY - holdLength) {
-        if (!keys[keyMap[t.lane]]) {
+        if (!replayPlay && !keys[keyMap[t.lane]]) {
           t.failed = true;
+          if (rec) rec.w.push(Math.round(customPlayTime * 1000));
           if (!handleHit()) { die("RELEASED EARLY!"); return; }
         } else {
           score += 0.5 * dt;
@@ -1034,6 +1177,7 @@ function gameLoop(ts) {
   if (globeOn && typeof globeLevelId !== 'undefined' && globeLevelId && gameActive) drawGlobeHud();
 
   if (dVFlip) ctx.transform(1, 0, 0, -1, 0, GH);
+  drawGhost();
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.update(dt);
@@ -1092,6 +1236,7 @@ function die(reason) {
   gameActive = false;
   stopLoop();
   bgAudio.pause();
+  if (rec) { rec.end = Math.round(customPlayTime * 1000); rec.died = String(reason || 'FAILED').slice(0, 30); }
   if (isCustomGame) noteBestPct(livePct());
 
   if (isBattleMode) {
