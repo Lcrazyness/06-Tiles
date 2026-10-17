@@ -21,6 +21,7 @@ const TRIG_DEFS = {
   pulse: { icon: '✦', label: 'Pulse', tip: 'Flash the screen', def: { layer: 0, color: '#0055ff', duration: 0.6, inTrans: 0.1, outTrans: 0.3 } },
   shake: { icon: '≋', label: 'Shake', tip: 'Shake the camera', def: { strength: 10, dur: 0.5 } },
   zoom: { icon: '🔍', label: 'Camera zoom', tip: 'Zoom the whole board', def: { zoom: 1.25, dur: 0.6, ease: 'inout' } },
+  random: { icon: '🎲', label: 'Randomize', tip: 'Randomly move, spin, resize, fade, recolour or hide the members of a group', def: { target: 0, each: 1, chance: 100, seed: 1, mode: 'set', dur: 0.5, ease: 'out', mv: 1, mx: 60, my: 60, rt: 0, rd: 45, sz: 0, smin: 0.7, smax: 1.4, al: 0, amin: 0.3, amax: 1, col: 0, c1: '#ff2e88', c2: '#00f0ff', c3: '#ffc93c', vis: 0, hide: 30 } },
   laneflip: { icon: '⇅', label: 'Flip board', tip: 'Turn the board upside down (tiles rise from the bottom)', def: { on: 1, axis: 'v' } },
   speed: { icon: '⏩', label: 'Speed', tip: 'Change tile speed', def: { target: 25, transDuration: 0.5 } },
   hitbox: { icon: '▭', label: 'Hitbox', tip: 'Per-lane input boxes', def: { zoneOn: 1, z0t: 400, z0h: 140, z1t: 400, z1h: 140, z2t: 400, z2h: 140, z3t: 400, z3h: 140 } },
@@ -30,7 +31,7 @@ const TRIG_DEFS = {
   tilemove: { icon: '⇆', label: 'Tile sway (old)', def: {}, hidden: true }, tilehide: { icon: '◌', label: 'Tile hide (old)', def: {}, hidden: true },
   image: { icon: '🖼', label: 'Image (old)', def: {}, hidden: true }, extra_image: { icon: '🖼', label: 'Image (old)', def: {}, hidden: true }, video: { icon: '🎬', label: 'Video', def: { url: '', layer: 0, alpha: 0.6, duration: 5, loop: 1 }, hidden: true }
 };
-const TRIG_COLORS = { move: '#37b6ff', rotate: '#9d4edd', scale: '#7cff6b', alpha: '#aaaaaa', color: '#ff2e88', toggle: '#ffc93c', pulse: '#ff2e88', shake: '#ff8a3d', zoom: '#00f0ff', laneflip: '#ff5f5f', speed: '#ffc93c', hitbox: '#00f0ff', sfx: '#37b6ff' };
+const TRIG_COLORS = { move: '#37b6ff', rotate: '#9d4edd', scale: '#7cff6b', alpha: '#aaaaaa', color: '#ff2e88', toggle: '#ffc93c', pulse: '#ff2e88', shake: '#ff8a3d', zoom: '#00f0ff', laneflip: '#ff5f5f', random: '#c77dff', speed: '#ffc93c', hitbox: '#00f0ff', sfx: '#37b6ff' };
 
 let edMode = 'tiles', edTool = 'place';
 let edSelTiles = new Set(), edSelObjs = new Set();
@@ -604,6 +605,24 @@ function trigFields(fx) {
     case 'pulse': sel('Layer', 'layer', [{ v: 0, l: 'Background' }, { v: 1, l: 'Foreground' }]); col('Color', 'color'); num('Duration', 'duration', { step: 0.05, min: 0.05 }); num('Fade in', 'inTrans', { step: 0.05, min: 0 }); num('Fade out', 'outTrans', { step: 0.05, min: 0 }); break;
     case 'shake': num('Strength (px)', 'strength', { step: 1, min: 1, max: 60 }); num('Duration (s)', 'dur', { step: 0.1, min: 0.1 }); break;
     case 'zoom': num('Zoom (×)', 'zoom', { step: 0.05, min: 0.3, max: 3 }); num('Duration (s)', 'dur', { step: 0.1, min: 0 }); sel('Easing', 'ease', EASES, { str: true }); break;
+    case 'random': {
+      const on = [{ v: 1, l: 'On' }, { v: 0, l: 'Off' }], pc = (label, key, d) => num(label, key, { step: 5, min: 0, max: 100, def: d });
+      num('Group to randomize', 'target', { step: 1, min: 0, def: 0, hint: 'Pick the group: tile #N = N · object = 10000 + id · your own groups 20001+. For "each member" use a real group (not 0).' });
+      sel('Randomize', 'each', [{ v: 1, l: 'Each member separately' }, { v: 0, l: 'The whole group as one' }], { rebuild: false });
+      sel('What to do', 'mode', [{ v: 'set', l: 'Set random values' }, { v: 'add', l: 'Add to current values' }, { v: 'reset', l: 'Reset members to normal' }], { str: true, rebuild: true });
+      pc('Chance a member is affected (%)', 'chance', 100);
+      num('Seed', 'seed', { step: 1, min: 0, max: 99999, def: 1, hint: 'Same seed = same result every run. Change it for a different pattern.' });
+      num('Duration (s, 0 = instant)', 'dur', { step: 0.1, min: 0 }); sel('Easing', 'ease', EASES, { str: true });
+      if (fx.mode !== 'reset') {
+        sel('Move', 'mv', on, { rebuild: true }); if (Number(fx.mv) === 1) { num('  Max distance X (px)', 'mx', { step: 5, min: 0, max: 600 }); num('  Max distance Y (px)', 'my', { step: 5, min: 0, max: 600 }); }
+        sel('Spin', 'rt', on, { rebuild: true }); if (Number(fx.rt) === 1) num('  Max angle (±deg)', 'rd', { step: 15, min: 0, max: 720 });
+        sel('Size', 'sz', on, { rebuild: true }); if (Number(fx.sz) === 1) { num('  Smallest (×)', 'smin', { step: 0.1, min: 0.05, max: 10 }); num('  Biggest (×)', 'smax', { step: 0.1, min: 0.05, max: 10 }); }
+        sel('Fade', 'al', on, { rebuild: true }); if (Number(fx.al) === 1) { num('  Lowest opacity', 'amin', { step: 0.05, min: 0, max: 1 }); num('  Highest opacity', 'amax', { step: 0.05, min: 0, max: 1 }); }
+        sel('Colour', 'col', [{ v: 0, l: 'Off' }, { v: 1, l: 'Random colours' }, { v: 2, l: 'Pick from 3 colours' }], { rebuild: true }); if (Number(fx.col) === 2) { col('  Colour 1', 'c1'); col('  Colour 2', 'c2'); col('  Colour 3', 'c3'); }
+        sel('Hide some', 'vis', on, { rebuild: true }); if (Number(fx.vis) === 1) pc('  Chance to hide (%)', 'hide', 30);
+      }
+      break;
+    }
     case 'laneflip': if (!fx.axis) fx.axis = 'h'; sel('Flip', 'on', [{ v: 1, l: 'On' }, { v: 0, l: 'Off' }]); sel('Direction', 'axis', [{ v: 'v', l: 'Upside down' }, { v: 'h', l: 'Left-right' }], { str: true }); break;
     case 'speed': num('Target speed', 'target', { step: 1, min: 5, max: 60, hint: 'Normal = 18. 0.5× = 10 · 1.5× = 26 · 2× = 34' }); num('Transition (s, 0 = instant)', 'transDuration', { step: 0.05, min: 0 }); break;
     case 'hitbox': sel('Hitboxes', 'zoneOn', [{ v: 1, l: 'On (drag the boxes)' }, { v: 0, l: 'Off (tap anywhere)' }]); break;
