@@ -227,7 +227,7 @@ function openLevelDetail(level, source, fromAdmin = false) {
     ${source === 'community' ? '<div class="rate-row" id="rate-row">' + [1, 2, 3, 4, 5].map(i => '<span class="rate-star" data-v="' + i + '">★</span>').join('') + '</div><div class="note center">Tap a star to rate</div>' : ''}
     <div class="note center" id="detail-best"></div>
     <button class="btn btn-play" id="detail-play">▶ PLAY</button>
-    ${online ? '<button class="btn btn-ghost" id="detail-practice">🎯 Practice (checkpoints)</button><button class="btn btn-ghost" id="detail-board">🏆 Level leaderboard</button><button class="btn btn-ghost" id="detail-comments">💬 Comments</button><button class="btn btn-ghost" id="detail-report">⚑ Report</button>' : ''}
+    ${online ? '<button class="btn btn-ghost" id="detail-practice">🎯 Practice (checkpoints)</button><button class="btn btn-ghost" id="detail-board">🏆 Level leaderboard</button><button class="btn btn-ghost" id="detail-comments">💬 Comments</button><button class="btn btn-ghost" id="detail-addpack">＋ Playlist / pack</button><button class="btn btn-ghost" id="detail-report">⚑ Report</button>' : ''}
     ${source === 'mine-online' ? '<button class="btn btn-ghost" id="detail-versions">⏪ Versions / roll back</button>' : ''}
     ${source === 'local' && level.verifiedHash ? '<button class="btn btn-ghost" id="detail-unverify">✔ Verified - clear verification</button>' : ''}
     ${source === 'local' ? '<button class="btn btn-ghost" id="detail-edit">✎ Edit</button><button class="btn btn-danger" id="detail-del">Delete from device</button>' : ''}
@@ -246,6 +246,7 @@ function openLevelDetail(level, source, fromAdmin = false) {
   if (q('detail-practice')) q('detail-practice').onclick = () => practiceLevel(level);
   if (q('detail-board')) q('detail-board').onclick = () => openLevelBoard(level);
   if (q('detail-comments')) q('detail-comments').onclick = () => openComments(level);
+  if (q('detail-addpack')) q('detail-addpack').onclick = () => addToPackDialog(level);
   if (q('detail-report')) q('detail-report').onclick = () => reportDialog('level', level);
   if (q('detail-versions')) q('detail-versions').onclick = () => openVersions(level);
   if (q('detail-edit')) q('detail-edit').onclick = () => { currentEditingId = level.id; startEditor(level); };
@@ -528,7 +529,14 @@ async function openLevelBoard(level) {
   screen('<div class="empty">Loading…</div>');
   try {
     const d = await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/leaderboard');
-    screen('<div class="hero-name">' + escapeHtml(level.name) + '</div>' + (d.entries.length ? '<div class="song-list">' + d.entries.map((e, i) => `<div class="song-row player-row"><div class="song-art ${frameClass(e)}" style="${e.profileIcon ? '' : 'background:' + artGradient(e.username)}">${e.profileIcon ? '<img src="' + escapeHtml(e.profileIcon) + '" alt="">' : escapeHtml(e.username.slice(0, 1).toUpperCase())}</div><div class="song-info"><div class="song-title"><span class="rank">#${i + 1}</span> ${escapeHtml(e.username)}</div><div class="song-sub">Score ${Number(e.score).toLocaleString()}</div></div><div class="player-value">${e.completed ? '✔ 100%' : e.pct + '%'}</div></div>`).join('') + '</div>' : '<div class="empty">Nobody has played this yet.</div>'));
+    screen('<div class="hero-name">' + escapeHtml(level.name) + '</div>' + (d.entries.length ? '<div class="song-list">' + d.entries.map((e, i) => `<div class="song-row player-row"><div class="song-art ${frameClass(e)}" style="${e.profileIcon ? '' : 'background:' + artGradient(e.username)}">${e.profileIcon ? '<img src="' + escapeHtml(e.profileIcon) + '" alt="">' : escapeHtml(e.username.slice(0, 1).toUpperCase())}</div><div class="song-info"><div class="song-title"><span class="rank">#${i + 1}</span> ${escapeHtml(e.username)}</div><div class="song-sub">Score ${Number(e.score).toLocaleString()}</div></div><div class="player-value">${e.completed ? '✔ 100%' : e.pct + '%'}</div>${e.hasReplay ? '<div class="admin-actions"><button class="btn small" data-rp="watch" data-u="' + escapeHtml(e.username) + '" title="Watch their replay">▶</button><button class="btn small btn-play" data-rp="race" data-u="' + escapeHtml(e.username) + '" title="Race their ghost">👻</button></div>' : ''}</div>`).join('') + '</div>' : '<div class="empty">Nobody has played this yet.</div>'));
+    document.querySelectorAll('#level-detail-menu [data-rp]').forEach(b => b.onclick = async () => {
+      try {
+        const g = (await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/ghost?who=' + encodeURIComponent(b.dataset.u))).ghost;
+        if (b.dataset.rp === 'watch') { const full = level.data ? level : await getCommunityLevel(level.id); levelDetailReturnTo = 'browse-levels-menu'; startReplayWatch(full, g); }
+        else { ghostPick = { id: level.id, ghost: g }; toast('Racing ' + g.username + '\'s ghost. Press Play!', 'good'); }
+      } catch (e) { toast(e.message, 'bad'); }
+    });
   } catch (e) { screen(errorBox(e.message, 'void 0')); }
 }
 
