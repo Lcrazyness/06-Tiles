@@ -50,10 +50,11 @@ function decorImage(id) {
 // ---- trigger engine ----
 const easeFns = { linear: p => p, in: p => p * p, out: p => 1 - (1 - p) * (1 - p), inout: p => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2 };
 const ease = (name, p) => (easeFns[name] || easeFns.linear)(Math.max(0, Math.min(1, p)));
+let dLane = {};   // tile index -> lane chosen by a gameplay Randomize trigger
 function gs(g) { return dGS[g] || (dGS[g] = { dx: 0, dy: 0, rot: 0, sc: 1, a: 1, vis: 1, col: null, colFrom: null, cp: 1 }); }
 
 function decorReset(effects) {
-  dGS = {}; dTween = []; dCam = { shakeT0: 0, shakeDur: 0, shakeStr: 0, zoom: 1 }; dBg = null;
+  dLane = {}; dGS = {}; dTween = []; dCam = { shakeT0: 0, shakeDur: 0, shakeStr: 0, zoom: 1 }; dBg = null;
   const fl = (effects || []).filter(e => e.type === 'laneflip').map(e => ({ time: Number(e.time) || 0, on: Number(e.on) !== 0, v: e.axis === 'v' })).sort((a, b) => a.time - b.time);
   dFlips = fl.filter(f => !f.v); dFlipsV = fl.filter(f => f.v);
 }
@@ -99,15 +100,31 @@ function randomMembers(g) {
   (decorData.objects || []).forEach(o => { if (10000 + o.id === g || (o.groups || []).includes(g)) out.add(10000 + o.id); });
   return [...out].slice(0, 600);
 }
+// Gameplay randomize: move tile `m` (1-based, in time order) to a random lane that is free at its time.
+// Seeded like everything else, so verification, replays and ghosts get exactly the same lanes.
+function randomizeLane(m, roll) {
+  if (m >= 10000 || m < 1 || m > pendingTiles.length) return;
+  const i = m - 1, n = pendingTiles[i], dur = a => (levelDisableHolds ? 0 : (a.isHold ? (a.holdDuration || 0) : 0));
+  const laneOf = k => dLane[k] !== undefined ? dLane[k] : pendingTiles[k].lane;
+  const busy = new Array(4).fill(false);
+  for (let k = 0; k < pendingTiles.length; k++) {
+    if (k === i) continue; const o = pendingTiles[k];
+    if (o.time <= n.time + dur(n) + 0.09 && o.time + dur(o) >= n.time - 0.09) busy[laneOf(k)] = true;
+  }
+  const free = [0, 1, 2, 3].filter(l => !busy[l]);
+  if (free.length) dLane[i] = free[Math.floor(roll * free.length) % free.length];
+}
 function fireRandom(fx, t, dur, ez) {
   const target = Number(fx.target) || 0, each = Number(fx.each) !== 0 && target !== 0;
   const members = each ? randomMembers(target) : [target];
   const num = (k, d) => { const v = Number(fx[k]); return Number.isFinite(v) ? v : d; };
   const mode = fx.mode === 'add' || fx.mode === 'reset' ? fx.mode : 'set', chance = num('chance', 100), base = ((num('seed', 1) | 0) * 7919 + Math.round(t * 1000) * 31) | 0;
+  const gameplay = num('gp', 0) === 1 && mode !== 'reset' && !(typeof inEditor !== 'undefined' && inEditor);   // gameplay randomizing only happens in a real run
   const picks = [fx.c1, fx.c2, fx.c3].filter(c => /^#[0-9a-f]{6}$/i.test(String(c || '')));
   for (const m of members) {
     const r = rngFrom(base ^ Math.imul(m + 1, 2654435761)), v = []; for (let i = 0; i < 10; i++) v.push(r());   // fixed draw order: changing one setting never reshuffles the others
     if (v[0] * 100 >= chance) continue;
+    if (gameplay) { randomizeLane(m, v[9]); if (num('gponly', 0) === 1) continue; }
     const s = gs(m);
     if (mode === 'reset') {
       addTween(s, 'dx', 0, t, dur, ez); addTween(s, 'dy', 0, t, dur, ez); addTween(s, 'rot', 0, t, dur, ez); addTween(s, 'sc', 1, t, dur, ez); addTween(s, 'a', 1, t, dur, ez);
@@ -823,7 +840,8 @@ function updateCustomLevel(dtSec) {
     if (customPlayTime < spawnAt) break;
     // If a frame ran long, start the tile where it *should* be so arrival time stays exact.
     const y = -TILE_H + pxPerSec * (customPlayTime - spawnAt);
-    const nt = new Tile(laneFlipAt(n.time) ? 3 - n.lane : n.lane, y, levelDisableHolds ? false : n.isHold, n.holdDuration);
+    const bl = dLane[pendingTileIdx] !== undefined ? dLane[pendingTileIdx] : n.lane;
+    const nt = new Tile(laneFlipAt(n.time) ? 3 - bl : bl, y, levelDisableHolds ? false : n.isHold, n.holdDuration);
     nt.noteIdx = pendingTileIdx; nt.time = n.time; nt.preset = n.preset;
     nt.groups = [pendingTileIdx + 1].concat(n.groups || []);
     tiles.push(nt);
