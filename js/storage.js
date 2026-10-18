@@ -156,17 +156,20 @@ function prunedDecor() {
   return d;
 }
 // what makes a level "the same level" for verification: the notes + the effects that change how it plays
+function isGameplayRandom(e) { return e && e.type === 'random' && Number(e.gp) === 1 && e.mode !== 'reset'; }
 function levelHashOf(data, effects) {
   return hashString(JSON.stringify([(data || []).map(t => [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0]),
-    (effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])]));
+    (effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])
+      .concat((effects || []).filter(isGameplayRandom).map(e => ['random', e.time, e.target, e.each, e.seed, e.chance, e.mode]))]));
 }
 function tileKey(t) { return [t.lane, t.time, t.isHold ? 1 : 0, t.isHold ? (t.holdDuration || 0) : 0].join('|'); }
-function gameplayFx(effects) { return JSON.stringify((effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])); }
+function gameplayFx(effects) { return JSON.stringify((effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type) || isGameplayRandom(e)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])); }
 // true when the new version only REMOVES tiles (music/decor may change) compared with the last published version
 function isNerfUpdate() {
   if (!currentEditingOnlineId) return false;
   const mine = myLevels.find(l => l.id === currentEditingId);
   if (!mine || !mine.pubTiles) return false;
+  if ((recordedEffects || []).some(isGameplayRandom)) return false;   // removing a tile renumbers the tiles, which changes what a gameplay randomizer picks
   const have = new Set(mine.pubTiles);
   return recordedTiles.every(t => have.has(tileKey(t))) && gameplayFx(recordedEffects) === mine.pubFx;
 }
