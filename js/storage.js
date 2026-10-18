@@ -160,7 +160,7 @@ function isGameplayRandom(e) { return e && e.type === 'random' && Number(e.gp) =
 function levelHashOf(data, effects) {
   return hashString(JSON.stringify([(data || []).map(t => [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0]),
     (effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])
-      .concat((effects || []).filter(isGameplayRandom).map(e => ['random', e.time, e.target, e.each, e.seed, e.chance, e.mode]))]));
+      .concat((effects || []).filter(isGameplayRandom).map(e => ['random', e.time, e.target, e.each, e.seed, e.chance, e.mode, e.fixed]))]));
 }
 function tileKey(t) { return [t.lane, t.time, t.isHold ? 1 : 0, t.isHold ? (t.holdDuration || 0) : 0].join('|'); }
 function gameplayFx(effects) { return JSON.stringify((effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type) || isGameplayRandom(e)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])); }
