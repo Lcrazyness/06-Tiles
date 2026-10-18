@@ -16,6 +16,7 @@ function saveAuthSession(token, user) {
   cosmeticFx = (user.cosmetics && user.cosmetics.fx) || 'default';
   refreshProfileButton();
   updateAdminButton(user);
+  if (typeof restoreLostLevels === 'function') setTimeout(() => restoreLostLevels(false), 2500);
   if (user && user.warning && !warningShown && !warningAckPending) showWarning(user.warning);
 }
 function clearAuthSession() {
@@ -209,6 +210,7 @@ async function updateAdminButton(user) {
     const o = await apiRequest('/api/admin/overview', { auth: true });
     button.textContent = '🛡 ADMIN PANEL' + (o.unreadNotifications ? ' (' + o.unreadNotifications + ' new)' : '');
     button.classList.toggle('alert', !!o.unreadNotifications);
+    if (typeof bkAutoMaybe === 'function') setTimeout(bkAutoMaybe, 8000);
   } catch (e) {}
 }
 
