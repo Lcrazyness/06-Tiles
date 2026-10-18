@@ -27,7 +27,7 @@ async function renderMyLevels() {
   const list = document.getElementById('my-levels-list');
   if (currentMyTab === 'device') {
     const levels = getCustomLevels();
-    if (!levels.length) { list.innerHTML = '<div class="empty">No levels yet.<br>Tap <b>＋ New</b> to make one.</div>'; return; }
+    if (!levels.length) { list.innerHTML = '<div class="empty">No levels yet.<br>Tap <b>＋ New</b> to make one.' + (getAuthToken() ? '<br><br><button class="btn btn-ghost small" onclick="restoreLostLevels(true)">♻ Bring back my saved levels</button>' : '<br><br>Log in to bring back levels saved on your account.') + '</div>'; return; }
     levels.slice().reverse().forEach(l => list.appendChild(renderLevelCard(l, 'local')));
     return;
   }
@@ -292,7 +292,7 @@ async function loadAdminPanel(tab) {
   const draw = (inner, overview) => {
     const unread = overview ? overview.unreadNotifications : 0;
     const tb = (id, label) => `<button class="tab ${adminTab === id ? 'active' : ''}" onclick="loadAdminPanel('${id}')">${label}</button>`;
-    modal.innerHTML = screenHtml('ADMIN', null, `<div class="tabs admin-tabs wrap">${tb('alerts', 'Alerts' + (unread ? ' (' + unread + ')' : ''))}${tb('reports', 'Reports' + (overview && overview.pendingReports ? ' (' + overview.pendingReports + ')' : ''))}${tb('levels', 'Levels')}${tb('unpub', 'Unpublished')}${tb('device', 'Device')}${tb('players', 'Players')}${tb('log', 'Log')}${tb('settings', 'Settings')}</div>` + inner, '<button class="btn small" onclick="loadAdminPanel()">↻</button>');
+    modal.innerHTML = screenHtml('ADMIN', null, `<div class="tabs admin-tabs wrap">${tb('alerts', 'Alerts' + (unread ? ' (' + unread + ')' : ''))}${tb('reports', 'Reports' + (overview && overview.pendingReports ? ' (' + overview.pendingReports + ')' : ''))}${tb('levels', 'Levels')}${tb('unpub', 'Unpublished')}${tb('device', 'Device')}${tb('backup', 'Backup')}${tb('players', 'Players')}${tb('log', 'Log')}${tb('settings', 'Settings')}</div>` + inner, '<button class="btn small" onclick="loadAdminPanel()">↻</button>');
   };
   toggleMenu('admin-panel');
   if (!getAuthToken()) { draw('<div class="empty">Log in as an admin first.</div>'); return; }
@@ -305,6 +305,7 @@ async function loadAdminPanel(tab) {
     else if (adminTab === 'reports') draw(stats + await adminReportsHtml(), overview);
     else if (adminTab === 'unpub') draw(await adminUnpubHtml(), overview);
     else if (adminTab === 'device') draw(await adminDeviceHtml(), overview);
+    else if (adminTab === 'backup') draw(await adminBackupHtml(), overview);
     else if (adminTab === 'log') draw(await adminLogHtml(), overview);
     else if (adminTab === 'settings') draw(await adminSettingsHtml(), overview);
     else draw(stats + await adminLevelsHtml(), overview);
@@ -1130,6 +1131,43 @@ async function cloudSyncAll() {
   for (const l of myLevels.slice()) { if (!syncHashes.has(l.id)) { cloudSyncLevel(l); await new Promise(r => setTimeout(r, 700)); } }
 }
 
+// Levels saved on the account but missing on this device (browser data cleared, new device...) can be brought back.
+let restoreChecked = '';
+async function restoreLostLevels(force) {
+  const u = getAuthUser();
+  if (!u || !getAuthToken() || !API_BASE_URL || localStorage.getItem('et_imp_backup')) return;
+  if (!force && restoreChecked === u.id) return;
+  restoreChecked = u.id;
+  try {
+    const list = (await apiRequest('/api/sync/levels', { auth: true, timeout: 30000 })).levels || [];
+    let declined = []; try { declined = JSON.parse(lsGet('et_restore_declined') || '[]'); } catch (e) {}
+    const have = new Set(myLevels.map(l => l.id));
+    const missing = list.filter(c => !have.has(c.localId) && (force || !declined.includes(c.localId)));
+    if (!missing.length) { if (force) toast('Nothing missing - all your saved levels are on this device.'); return; }
+    const names = missing.slice(0, 6).map(c => '"' + c.name + '"').join(', ') + (missing.length > 6 ? ' and ' + (missing.length - 6) + ' more' : '');
+    if (!(await uiConfirm('Found ' + missing.length + ' level' + (missing.length > 1 ? 's' : '') + ' saved on your account that ' + (missing.length > 1 ? 'are' : 'is') + ' not on this device: ' + names + '. Bring ' + (missing.length > 1 ? 'them' : 'it') + ' back?', 'Bring back'))) {
+      try { localStorage.setItem('et_restore_declined', JSON.stringify(declined.concat(missing.map(c => c.localId)).slice(-300))); } catch (e) {}
+      return;
+    }
+    let ok = 0;
+    for (const c of missing) {
+      try {
+        const lv = (await apiRequest('/api/sync/levels/' + encodeURIComponent(c.localId), { auth: true, timeout: 60000 })).level;
+        if (!lv || !Array.isArray(lv.data)) continue;
+        lv.id = c.localId;
+        if (c.audioSha) {
+          try { const r = await fetch(API_BASE_URL + '/api/sync/audio/' + c.audioSha, { headers: { Authorization: 'Bearer ' + getAuthToken() } }); if (r.ok) await LevelAudio.put(c.localId, await r.blob()); } catch (e) {}
+        }
+        myLevels.push(lv); ok++;
+      } catch (e) {}
+    }
+    persistMyLevels();
+    if (typeof renderMyLevels === 'function' && !document.getElementById('my-levels-menu').classList.contains('hidden')) renderMyLevels();
+    toast(ok ? 'Brought back ' + ok + ' level' + (ok > 1 ? 's' : '') + '.' : 'Could not bring the levels back - try again later.', ok ? 'good' : 'bad');
+  } catch (e) { restoreChecked = ''; }
+}
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}   // ask the browser not to clear levels when space runs low
+
 // ---------------------------------------------------------------------------
 // Impersonation ("Log in as")
 // ---------------------------------------------------------------------------
@@ -1174,7 +1212,106 @@ function extrasBoot() {
   fetchNews();
   setInterval(() => { if (!document.getElementById('main-menu').classList.contains('hidden')) fetchNews(); }, 120000);
   setTimeout(cloudSyncAll, 6000);
+  setTimeout(() => restoreLostLevels(false), 3500);
   setTimeout(() => { if (API_BASE_URL && typeof connectBattle === 'function') connectBattle().catch(() => {}); }, 2500);   // stay connected for live announcements + streams
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', extrasBoot); else extrasBoot();
 function onMyLevelsReloaded() { setTimeout(cloudSyncAll, 4000); }
+
+
+// ---- admin: backup vault. The game keeps a full copy of everything on the admin's own device and refreshes it by itself. ----
+const BkDB = (() => {
+  let db = null;
+  const open = () => new Promise((res, rej) => { if (db) return res(db); if (!window.indexedDB) return rej(new Error('no idb')); const r = indexedDB.open('et_vault', 1); r.onupgradeneeded = () => r.result.createObjectStore('v'); r.onsuccess = () => { db = r.result; res(db); }; r.onerror = () => rej(r.error); });
+  const run = (mode, fn) => open().then(d => new Promise((res, rej) => { const tx = d.transaction('v', mode); const rq = fn(tx.objectStore('v')); tx.oncomplete = () => res(rq && rq.result); tx.onerror = () => rej(tx.error); }));
+  return { get: k => run('readonly', s => s.get(k)), set: (k, v) => run('readwrite', s => s.put(v, k)) };
+})();
+function bkStatus(t) { const e = document.getElementById('bk-status'); if (e) e.textContent = t; }
+async function bkCollect(progress) {
+  const parts = [];
+  const list = (await apiRequest('/api/admin/backup/tables', { auth: true, timeout: 60000 })).tables;
+  parts.push(JSON.stringify({ v: 1, at: new Date().toISOString(), tables: list.map(t => ({ name: t.name, count: t.count })) }) + '\n');
+  for (const t of list) {
+    const step = t.blob ? 3 : 400;
+    for (let off = 0; off < t.count; off += step) {
+      if (progress) progress('Saving ' + t.name + ' (' + off + '/' + t.count + ')…');
+      const d = await apiRequest('/api/admin/backup/table/' + encodeURIComponent(t.name) + '?limit=' + step + '&offset=' + off, { auth: true, timeout: 120000 });
+      if (!d.rows.length) break;
+      parts.push(JSON.stringify({ t: t.name, rows: d.rows }) + '\n');
+    }
+  }
+  return new Blob(parts, { type: 'application/x-ndjson' });
+}
+let bkRunning = false;
+async function bkRunSave(progress) {
+  if (bkRunning) return null;
+  bkRunning = true;
+  try {
+    const blob = await bkCollect(progress);
+    await BkDB.set('latest', { blob, at: Date.now(), size: blob.size });
+    try { localStorage.setItem('et_bk_last', String(Date.now())); } catch (e) {}
+    return blob;
+  } finally { bkRunning = false; }
+}
+// runs quietly when an admin opens the game (at most about once a day)
+async function bkAutoMaybe() {
+  try {
+    const last = Number(lsGet('et_bk_last') || 0);
+    if (Date.now() - last < 20 * 3600 * 1000) return;
+    await bkRunSave(null);
+  } catch (e) {}
+}
+async function adminBackupHtml() {
+  let saved = null; try { saved = await BkDB.get('latest'); } catch (e) {}
+  return `<div class="hub-note"><b>💾 Backup</b><br>While you are logged in as an admin, the game saves a full copy of everything (accounts, levels, scores, replays, comments, music…) on THIS device about once a day. If the server ever loses its data, press <b>Restore</b> and it all comes back.<br><br>
+    <span id="bk-saved">${saved ? 'Saved copy: ' + new Date(saved.at).toLocaleString() + ' · ' + Math.round(saved.size / 1024) + ' KB' : 'No saved copy yet - press "Save now".'}</span></div>
+    <div class="row-btns"><button class="btn primary" id="bk-save">💾 Save now</button>
+    <button class="btn" id="bk-restore" ${saved ? '' : 'disabled'}>♻ Restore saved copy</button></div>
+    <div class="row-btns" style="margin-top:8px"><button class="btn ghost" id="bk-download">⬇ Download a file</button>
+    <label class="btn ghost" style="cursor:pointer">⬆ Restore from file<input type="file" id="bk-file" accept=".jsonl,.json,.txt" style="display:none"></label></div>
+    <label class="check-row"><input type="checkbox" id="bk-replace" checked> If a brand-new account has the same name as a saved one, let the saved one win (only when the new one has no levels)</label>
+    <div id="bk-status" class="hub-note" style="margin-top:8px">Ready.</div>`;
+}
+async function adminBackupSave() {
+  try { bkStatus('Saving…'); await bkRunSave(bkStatus); const sv = await BkDB.get('latest'); bkStatus('Done. Saved copy on this device: ' + Math.round(sv.size / 1024) + ' KB.'); loadAdminPanel('backup'); }
+  catch (e) { bkStatus('Save failed: ' + (e.message || e)); }
+}
+async function adminBackupDownload() {
+  try {
+    let sv = await BkDB.get('latest'); let blob = sv && sv.blob;
+    if (!blob) { bkStatus('Saving…'); blob = await bkRunSave(bkStatus); }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = '06tiles-backup-' + new Date().toISOString().slice(0, 10) + '.jsonl'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    bkStatus('Downloaded. Keep that file private - it contains password hashes.');
+  } catch (e) { bkStatus('Failed: ' + (e.message || e)); }
+}
+async function adminBackupRestore(fileOrBlob, label) {
+  if (!fileOrBlob) return;
+  if (!await uiConfirm('Restore ' + (label || 'this backup') + ' into the server? Anything already there is kept; anything missing is added back.', 'Restore')) return;
+  const replaceUsers = !!(document.getElementById('bk-replace') || {}).checked;
+  let ins = 0, skip = 0;
+  try {
+    const lines = (await fileOrBlob.text()).split('\n').filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      const o = JSON.parse(lines[i]);
+      if (!o.t) continue;
+      const rows = o.rows, step = 20;
+      for (let k = 0; k < rows.length; k += step) {
+        bkStatus('Restoring ' + o.t + ' (' + (i + 1) + '/' + lines.length + ')…');
+        const r = await apiRequest('/api/admin/backup/import', { method: 'POST', auth: true, timeout: 120000, body: { table: o.t, rows: rows.slice(k, k + step), replaceUsers } });
+        ins += r.inserted; skip += r.skipped;
+      }
+    }
+    bkStatus('Finishing up…');
+    await apiRequest('/api/admin/backup/finish', { method: 'POST', auth: true, body: {}, timeout: 120000 });
+    bkStatus('Restore complete: ' + ins + ' rows added back, ' + skip + ' were already there or skipped.');
+  } catch (e) { bkStatus('Restore failed: ' + (e.message || e) + ' (' + ins + ' rows were added first; running it again is safe)'); }
+}
+document.addEventListener('click', async e => {
+  const id = e.target && e.target.id;
+  if (id === 'bk-save') adminBackupSave();
+  else if (id === 'bk-download') adminBackupDownload();
+  else if (id === 'bk-restore') { const sv = await BkDB.get('latest'); if (sv) adminBackupRestore(sv.blob, 'the copy saved on this device'); }
+});
+document.addEventListener('change', e => { if (e.target && e.target.id === 'bk-file') { const f = e.target.files[0]; adminBackupRestore(f, '"' + (f && f.name) + '"'); e.target.value = ''; } });
