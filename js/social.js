@@ -183,6 +183,9 @@ async function hubAlerts(draw, host) {
 function initGhostSettings() {
   const on = document.getElementById('setting-ghost'), src = document.getElementById('setting-ghost-src');
   if (on) { on.checked = lsGet('et_ghost') !== '0'; on.addEventListener('change', () => { try { localStorage.setItem('et_ghost', on.checked ? '1' : '0'); } catch (e) {} }); }
+  const ms = document.getElementById('setting-mousesnap'), mp = document.getElementById('setting-mousesnap-pos');
+  if (ms) { ms.checked = mouseSnapOn; ms.addEventListener('change', () => { try { localStorage.setItem('et_mouseSnap', ms.checked ? '1' : '0'); } catch (e) {} setMouseSnap(ms.checked, mp && mp.value); }); }
+  if (mp) { mp.value = mouseSnapPos; mp.addEventListener('change', () => { try { localStorage.setItem('et_mouseSnapPos', mp.value); } catch (e) {} setMouseSnap(ms ? ms.checked : true, mp.value); }); }
   if (src) { src.value = lsGet('et_ghostSrc') === 'top' ? 'top' : 'mine'; src.addEventListener('change', () => { try { localStorage.setItem('et_ghostSrc', src.value); } catch (e) {} }); }
 }
 // ---------------------------------------------------------------- stream thumbnails
