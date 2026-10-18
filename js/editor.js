@@ -614,6 +614,8 @@ function trigFields(fx) {
       num('Seed', 'seed', { step: 1, min: 0, max: 99999, def: 1, hint: 'Same seed = same result every run. Change it for a different pattern.' });
       num('Duration (s, 0 = instant)', 'dur', { step: 0.1, min: 0 }); sel('Easing', 'ease', EASES, { str: true });
       if (fx.mode !== 'reset') {
+        sel('Changes the game', 'gp', [{ v: 0, l: 'No - looks only' }, { v: 1, l: 'Yes - random lane for each tile' }], { rebuild: true, hint: 'Yes = the tiles in the group really switch to a random free lane (same every run, so it can be beaten and verified). Place the trigger 2+ seconds before them: tiles already falling do not change. Preview in the editor shows the original lanes; play-test to see them.' });
+        if (Number(fx.gp) === 1) sel('  Visual effects too', 'gponly', [{ v: 0, l: 'Yes (below apply as well)' }, { v: 1, l: 'No - lanes only' }]);
         sel('Move', 'mv', on, { rebuild: true }); if (Number(fx.mv) === 1) { num('  Max distance X (px)', 'mx', { step: 5, min: 0, max: 600 }); num('  Max distance Y (px)', 'my', { step: 5, min: 0, max: 600 }); }
         sel('Spin', 'rt', on, { rebuild: true }); if (Number(fx.rt) === 1) num('  Max angle (±deg)', 'rd', { step: 15, min: 0, max: 720 });
         sel('Size', 'sz', on, { rebuild: true }); if (Number(fx.sz) === 1) { num('  Smallest (×)', 'smin', { step: 0.1, min: 0.05, max: 10 }); num('  Biggest (×)', 'smax', { step: 0.1, min: 0.05, max: 10 }); }
