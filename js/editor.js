@@ -611,7 +611,8 @@ function trigFields(fx) {
       sel('Randomize', 'each', [{ v: 1, l: 'Each member separately' }, { v: 0, l: 'The whole group as one' }], { rebuild: false });
       sel('What to do', 'mode', [{ v: 'set', l: 'Set random values' }, { v: 'add', l: 'Add to current values' }, { v: 'reset', l: 'Reset members to normal' }], { str: true, rebuild: true });
       pc('Chance a member is affected (%)', 'chance', 100);
-      num('Seed', 'seed', { step: 1, min: 0, max: 99999, def: 1, hint: 'Same seed = same result every run. Change it for a different pattern.' });
+      sel('Each attempt', 'fixed', [{ v: 0, l: 'New random result every attempt' }, { v: 1, l: 'Same result every attempt (uses the seed)' }], { rebuild: true });
+      if (Number(fx.fixed) === 1) num('Seed', 'seed', { step: 1, min: 0, max: 99999, def: 1, hint: 'Same seed = same result every attempt. Change it for a different pattern.' });
       num('Duration (s, 0 = instant)', 'dur', { step: 0.1, min: 0 }); sel('Easing', 'ease', EASES, { str: true });
       if (fx.mode !== 'reset') {
         sel('Changes the game', 'gp', [{ v: 0, l: 'No - looks only' }, { v: 1, l: 'Yes - random lane for each tile' }], { rebuild: true, hint: 'Yes = the tiles in the group really switch to a random free lane (same every run, so it can be beaten and verified). Place the trigger 2+ seconds before them: tiles already falling do not change. Preview in the editor shows the original lanes; play-test to see them.' });
