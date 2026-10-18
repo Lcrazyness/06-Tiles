@@ -1028,6 +1028,27 @@ canvas.addEventListener('pointerdown', (e) => {
   keys[keyMap[lane]] = true;
   pressLane(lane);
 });
+// ---- PC mouse: a cursor that snaps to the lane you move into (setting: middle of the lane, or down by the hit line) ----
+let mouseSnapOn = lsGet('et_mouseSnap') !== '0', mouseSnapPos = lsGet('et_mouseSnapPos') === 'bottom' ? 'bottom' : 'mid';
+const mouseSnap = { x: 0, y: 0, in: false };
+function setMouseSnap(on, pos) { mouseSnapOn = !!on; mouseSnapPos = pos === 'bottom' ? 'bottom' : 'mid'; if (!mouseSnapOn) canvas.style.cursor = ''; }
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  const rect = canvas.getBoundingClientRect();
+  mouseSnap.x = (e.clientX - rect.left) / rect.width * GW; mouseSnap.y = (e.clientY - rect.top) / rect.height * GH; mouseSnap.in = true;
+  canvas.style.cursor = (mouseSnapOn && gameActive && !inEditor && !isPaused && !isDead) ? 'none' : '';
+});
+canvas.addEventListener('pointerleave', () => { mouseSnap.in = false; canvas.style.cursor = ''; });
+function drawMouseSnap() {
+  if (!mouseSnapOn || !mouseSnap.in || !gameActive || inEditor || isPaused || isDead) return;
+  const lane = Math.max(0, Math.min(3, Math.floor(mouseSnap.x / laneW)));
+  const cx = lane * laneW + laneW / 2, cy = mouseSnapPos === 'bottom' ? Math.min(GH - 28, lineY + 62) : Math.max(20, Math.min(GH - 20, mouseSnap.y));
+  ctx.save(); ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  ctx.fillStyle = 'rgba(0,255,255,0.08)'; ctx.fillRect(lane * laneW, 0, laneW, GH);          // the lane you are in
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(cx, cy, 13, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#00ffff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
 function releasePointer(e) {
   if (!activePointers.has(e.pointerId)) return;
   const lane = activePointers.get(e.pointerId);
@@ -1206,6 +1227,7 @@ function gameLoop(ts) {
   }
   ctx.globalAlpha = 1.0;
   if (dVFlip) ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  drawMouseSnap();
 }
 
 // ---------------------------------------------------------------------------
