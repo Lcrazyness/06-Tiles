@@ -100,6 +100,8 @@
       <div class="settings-row"><span>Turn off snapping <small>(editor starts in free placement)</small></span><input type="checkbox" id="setting-no-snap"></div>
       <div class="settings-row"><span>Verify from start pos <small>(doesn't count as verified)</small></span><input type="checkbox" id="setting-verify-start"></div>
       <div class="section-title">GHOSTS &amp; REPLAYS</div>
+      <div class="settings-row"><span>Mouse cursor snaps to lanes <small>(PC mouse)</small></span><input type="checkbox" id="setting-mousesnap"></div>
+      <div class="settings-row"><span>Snap position</span><select id="setting-mousesnap-pos" class="num-in" style="width:130px!important"><option value="mid">Middle of the lane</option><option value="bottom">Bottom, by the hit line</option></select></div>
       <div class="settings-row"><span>Show ghost <small>(race a see-through run)</small></span><input type="checkbox" id="setting-ghost"></div>
       <div class="settings-row"><span>Ghost of</span><select id="setting-ghost-src" class="num-in" style="width:130px!important"><option value="mine">My best run</option><option value="top">Top player</option></select></div>
       <div class="section-title">KEYBINDS</div>
@@ -290,11 +292,11 @@
 <script src="js/ui.js?v=20261014-2"></script>
 <script src="js/storage.js?v=20261014-2"></script>
 <script src="js/auth.js?v=20261014-2"></script>
-<script src="js/game.js?v=20261014-2"></script>
+<script src="js/game.js?v=20261017-1"></script>
 <script src="js/editor.js?v=20261014-2"></script>
 <script src="js/browse.js?v=20261014-2"></script>
 <script src="js/battle.js?v=20261014-2"></script>
-<script src="js/social.js?v=20261016-1"></script>
+<script src="js/social.js?v=20261017-1"></script>
   <script src="js/main.js?v=20261014-2"></script>
 </body>
 </html>
