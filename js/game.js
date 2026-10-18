@@ -50,6 +50,7 @@ function decorImage(id) {
 // ---- trigger engine ----
 const easeFns = { linear: p => p, in: p => p * p, out: p => 1 - (1 - p) * (1 - p), inout: p => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2 };
 const ease = (name, p) => (easeFns[name] || easeFns.linear)(Math.max(0, Math.min(1, p)));
+let dSalt = (Math.random() * 4294967296) >>> 0;   // rolled again for every attempt: this is what makes a Randomize trigger different each time
 let dLane = {};   // tile index -> lane chosen by a gameplay Randomize trigger
 function gs(g) { return dGS[g] || (dGS[g] = { dx: 0, dy: 0, rot: 0, sc: 1, a: 1, vis: 1, col: null, colFrom: null, cp: 1 }); }
 
@@ -118,7 +119,7 @@ function fireRandom(fx, t, dur, ez) {
   const target = Number(fx.target) || 0, each = Number(fx.each) !== 0 && target !== 0;
   const members = each ? randomMembers(target) : [target];
   const num = (k, d) => { const v = Number(fx[k]); return Number.isFinite(v) ? v : d; };
-  const mode = fx.mode === 'add' || fx.mode === 'reset' ? fx.mode : 'set', chance = num('chance', 100), base = ((num('seed', 1) | 0) * 7919 + Math.round(t * 1000) * 31) | 0;
+  const mode = fx.mode === 'add' || fx.mode === 'reset' ? fx.mode : 'set', chance = num('chance', 100), base = (((num('seed', 1) | 0) * 7919 + Math.round(t * 1000) * 31) ^ (num('fixed', 0) === 1 ? 0 : dSalt)) | 0;
   const gameplay = num('gp', 0) === 1 && mode !== 'reset' && !(typeof inEditor !== 'undefined' && inEditor);   // gameplay randomizing only happens in a real run
   const picks = [fx.c1, fx.c2, fx.c3].filter(c => /^#[0-9a-f]{6}$/i.test(String(c || '')));
   for (const m of members) {
@@ -429,7 +430,7 @@ function replayBegin() {
   if (replayPlay) { replayPlay.i = 0; replayPlay.wi = 0; setReplayBanner('▶ REPLAY · ' + replayPlay.username + (replayPlay.completed ? ' · ✔ 100%' : ' · ' + replayPlay.pct + '%')); return; }
   setReplayBanner(null);
   if (!id || isPlaytesting || isVerifying || isBattleMode || practiceMode) return;
-  rec = { h: [], w: [], end: 0, died: null };
+  rec = { h: [], w: [], end: 0, died: null, salt: dSalt };
   if (ghostOn()) ghostLoad(id, customPlayTime);
 }
 async function ghostLoad(id, startedAt) {
@@ -581,6 +582,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     pendingTileIdx = 0; pendingEffectIdx = 0;
     if (sourceLevel) decorData = normalizeDecor(sourceLevel.decor); else decorData = normalizeDecor(decorData);
     decorReset(pendingEffects);
+    dSalt = (replayPlay && replayPlay.data && Number.isFinite(replayPlay.data.salt)) ? replayPlay.data.salt >>> 0 : isBattleMode ? 0 : (Math.random() * 4294967296) >>> 0;   // replays reuse the recorded roll; battles share one fixed roll
 
     const allTimes = [0];
     pendingTiles.forEach(t => allTimes.push(t.time + (t.holdDuration || 0)));
