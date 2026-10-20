@@ -183,6 +183,13 @@ async function hubAlerts(draw, host) {
 function initGhostSettings() {
   const on = document.getElementById('setting-ghost'), src = document.getElementById('setting-ghost-src');
   if (on) { on.checked = lsGet('et_ghost') !== '0'; on.addEventListener('change', () => { try { localStorage.setItem('et_ghost', on.checked ? '1' : '0'); } catch (e) {} }); }
+  const cb = document.getElementById('setting-cb'), ol = document.getElementById('setting-outline'), calm = document.getElementById('setting-calm');
+  if (cb) { cb.checked = a11yCb; cb.addEventListener('change', () => { try { localStorage.setItem('et_cb', cb.checked ? '1' : '0'); } catch (e) {} setA11y('cb', cb.checked); }); setA11y('cb', a11yCb); }
+  if (ol) { ol.value = String(a11yOutline); ol.addEventListener('change', () => { try { localStorage.setItem('et_outline', ol.value); } catch (e) {} setA11y('outline', ol.value); }); }
+  if (calm) { calm.checked = a11yCalm; calm.addEventListener('change', () => { try { localStorage.setItem('et_calm', calm.checked ? '1' : '0'); } catch (e) {} setA11y('calm', calm.checked); }); }
+  const me = document.getElementById('setting-metronome'), tb = document.getElementById('setting-tbar');
+  if (me) { me.checked = metroOn; me.addEventListener('change', () => { try { localStorage.setItem('et_metro', me.checked ? '1' : '0'); } catch (e) {} setRhythm('metro', me.checked); }); }
+  if (tb) { tb.checked = timingBarOn; tb.addEventListener('change', () => { try { localStorage.setItem('et_tbar', tb.checked ? '1' : '0'); } catch (e) {} setRhythm('tbar', tb.checked); }); }
   const ms = document.getElementById('setting-mousesnap'), mp = document.getElementById('setting-mousesnap-pos');
   if (ms) { ms.checked = mouseSnapOn; ms.addEventListener('change', () => { try { localStorage.setItem('et_mouseSnap', ms.checked ? '1' : '0'); } catch (e) {} setMouseSnap(ms.checked, mp && mp.value); }); }
   if (mp) { mp.value = mouseSnapPos; mp.addEventListener('change', () => { try { localStorage.setItem('et_mouseSnapPos', mp.value); } catch (e) {} setMouseSnap(ms ? ms.checked : true, mp.value); }); }
