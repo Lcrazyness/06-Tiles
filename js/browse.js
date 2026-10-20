@@ -228,6 +228,7 @@ function openLevelDetail(level, source, fromAdmin = false) {
     <div class="note center" id="detail-best"></div>
     <button class="btn btn-play" id="detail-play">▶ PLAY</button>
     ${online ? '<button class="btn btn-ghost" id="detail-practice">🎯 Practice (checkpoints)</button><button class="btn btn-ghost" id="detail-board">🏆 Level leaderboard</button><button class="btn btn-ghost" id="detail-comments">💬 Comments</button><button class="btn btn-ghost" id="detail-addpack">＋ Playlist / pack</button><button class="btn btn-ghost" id="detail-report">⚑ Report</button>' : ''}
+    ${(source === 'mine-online' || (isAdminUser() && source !== 'local')) && level.id ? '<button class="btn btn-ghost" id="detail-stats">📊 Stats + death heatmap</button>' : ''}
     ${source === 'mine-online' ? '<button class="btn btn-ghost" id="detail-versions">⏪ Versions / roll back</button>' : ''}
     ${source === 'local' && level.verifiedHash ? '<button class="btn btn-ghost" id="detail-unverify">✔ Verified - clear verification</button>' : ''}
     ${source === 'local' ? '<button class="btn btn-ghost" id="detail-edit">✎ Edit</button><button class="btn btn-danger" id="detail-del">Delete from device</button>' : ''}
@@ -249,6 +250,7 @@ function openLevelDetail(level, source, fromAdmin = false) {
   if (q('detail-addpack')) q('detail-addpack').onclick = () => addToPackDialog(level);
   if (q('detail-report')) q('detail-report').onclick = () => reportDialog('level', level);
   if (q('detail-versions')) q('detail-versions').onclick = () => openVersions(level);
+  if (q('detail-stats')) q('detail-stats').onclick = () => openLevelStats(level);
   if (q('detail-edit')) q('detail-edit').onclick = () => { currentEditingId = level.id; startEditor(level); };
   if (q('detail-edit-online')) q('detail-edit-online').onclick = async () => {
     try {
@@ -1315,3 +1317,31 @@ document.addEventListener('click', async e => {
   else if (id === 'bk-restore') { const sv = await BkDB.get('latest'); if (sv) adminBackupRestore(sv.blob, 'the copy saved on this device'); }
 });
 document.addEventListener('change', e => { if (e.target && e.target.id === 'bk-file') { const f = e.target.files[0]; adminBackupRestore(f, '"' + (f && f.name) + '"'); e.target.value = ''; } });
+
+
+// ---- creator stats + death heatmap ----
+async function openLevelStats(level) {
+  const menu = ensureOverlay('level-stats-menu');
+  menu.innerHTML = screenHtml('LEVEL STATS', "toggleMenu('level-detail-menu')", '<div class="empty">Loading…</div>');
+  toggleMenu('level-stats-menu');
+  try {
+    const st = (await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/stats', { auth: true })).stats;
+    const max = Math.max(1, ...st.deaths), total = st.deaths.reduce((a, b) => a + b, 0);
+    let worst = 0; st.deaths.forEach((v, i) => { if (v > st.deaths[worst]) worst = i; });
+    const bars = st.deaths.map((v, i) => '<i title="' + (i * 2) + '-' + (i * 2 + 2) + '%: ' + v + ' deaths" style="height:' + Math.max(2, Math.round(v / max * 100)) + '%;background:hsl(' + Math.round(120 - 120 * (v / max)) + ',80%,55%)"></i>').join('');
+    const pct = v => Math.round(v * 100) + '%';
+    menu.innerHTML = screenHtml('LEVEL STATS', "toggleMenu('level-detail-menu')", `
+      <div class="panel"><div class="hero-name">${escapeHtml(level.name)}</div><div class="hero-sub">${st.since ? 'counting since ' + new Date(st.since).toLocaleDateString() : 'no attempts yet'}</div></div>
+      <div class="stats-grid three"><div class="stat-card"><span>PLAYERS</span><b>${st.players}</b></div><div class="stat-card"><span>ATTEMPTS</span><b>${st.attempts}</b></div><div class="stat-card"><span>CLEARS</span><b>${st.completions}</b></div></div>
+      <div class="stats-grid three"><div class="stat-card"><span>PASS RATE</span><b>${st.players ? pct(st.passRate) : '—'}</b></div><div class="stat-card"><span>ATTEMPTS TO CLEAR</span><b>${st.avgAttemptsToClear === null ? '—' : st.avgAttemptsToClear.toFixed(1)}</b></div><div class="stat-card"><span>CLEARED BY</span><b>${st.clearers}</b></div></div>
+      <div class="section-title">WHERE PLAYERS DIE</div>
+      <div class="heat-bars">${bars}</div>
+      <div class="heat-labels"><span>start</span><span>25%</span><span>50%</span><span>75%</span><span>end</span></div>
+      <div class="note center">${total ? 'Most deaths at about ' + (worst * 2) + '-' + (worst * 2 + 2) + '% of the level (' + st.deaths[worst] + ' of ' + total + ').' : 'Deaths will show up here once players have tried the level.'}</div>
+      <button class="btn btn-ghost" id="stats-reset">Reset these stats</button>`);
+    document.getElementById('stats-reset').onclick = async () => {
+      if (!(await uiConfirm('Reset all attempts, clears and the death heatmap for this level? Do this after you change the level.', 'Reset'))) return;
+      try { await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/stats', { method: 'DELETE', auth: true }); toast('Stats reset.', 'good'); openLevelStats(level); } catch (e) { toast(e.message, 'bad'); }
+    };
+  } catch (e) { menu.innerHTML = screenHtml('LEVEL STATS', "toggleMenu('level-detail-menu')", '<div class="empty">' + escapeHtml(e.message || 'Could not load stats.') + '</div>'); }
+}
