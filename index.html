@@ -100,6 +100,11 @@
       <div class="settings-row"><span>Turn off snapping <small>(editor starts in free placement)</small></span><input type="checkbox" id="setting-no-snap"></div>
       <div class="settings-row"><span>Verify from start pos <small>(doesn't count as verified)</small></span><input type="checkbox" id="setting-verify-start"></div>
       <div class="section-title">GHOSTS &amp; REPLAYS</div>
+      <div class="settings-row"><span>Colour-blind friendly <small>(orange hit line + hold spine)</small></span><input type="checkbox" id="setting-cb"></div>
+      <div class="settings-row"><span>Tile outlines</span><select id="setting-outline" class="num-in" style="width:130px!important"><option value="0">Off</option><option value="1">Thin</option><option value="2">Bold</option></select></div>
+      <div class="settings-row"><span>Calm mode <small>(no flashes or screen shake)</small></span><input type="checkbox" id="setting-calm"></div>
+      <div class="settings-row"><span>Metronome <small>(a click on every beat of the level's BPM)</small></span><input type="checkbox" id="setting-metronome"></div>
+      <div class="settings-row"><span>Timing bar after each run <small>(early / late)</small></span><input type="checkbox" id="setting-tbar"></div>
       <div class="settings-row"><span>Mouse cursor snaps to lanes <small>(PC mouse)</small></span><input type="checkbox" id="setting-mousesnap"></div>
       <div class="settings-row"><span>Snap position</span><select id="setting-mousesnap-pos" class="num-in" style="width:130px!important"><option value="mid">Middle of the lane</option><option value="bottom">Bottom, by the hit line</option></select></div>
       <div class="settings-row"><span>Show ghost <small>(race a see-through run)</small></span><input type="checkbox" id="setting-ghost"></div>
@@ -161,7 +166,7 @@
   </div>
 </div>
 <div id="death-screen" class="overlay overlay-dim hidden">
-  <div class="center-panel"><h1 id="death-title">FAILED</h1><div id="death-stars" class="stars"></div><p id="final-score" class="final-score">Score: 0</p><div id="death-info" class="death-info"></div>
+  <div class="center-panel"><h1 id="death-title">FAILED</h1><div id="death-stars" class="stars"></div><p id="final-score" class="final-score">Score: 0</p><div id="death-info" class="death-info"></div><div id="timing-bar"></div>
     <button id="death-retry-btn" class="btn btn-play" onclick="restartGame()">RETRY <kbd>Space</kbd></button>
     <button id="death-editor-btn" class="btn btn-ghost hidden" onclick="backToEditorFromDeath()">✎ Back to editor</button>
     <button id="death-quit-btn" class="btn btn-ghost" onclick="quitPlaytestOrGame()">Quit to menu</button>
@@ -238,6 +243,7 @@
   <div class="screen-header"><button class="back-btn" onclick="closeEditorSettingsMenu()">‹</button><h2>LEVEL SETTINGS</h2><div class="header-right"></div></div>
   <div class="screen-body"><div class="screen-col">
     <div class="section-title">TIMING &amp; SNAPPING</div>
+    <div class="settings-row"><span>Auto-fit grid to the music <small>(finds BPM + first beat)</small></span><button class="btn small btn-ghost" onclick="autoFitMusic()">✨ Auto-fit</button></div>
     <div class="settings-row"><span>BPM</span><input type="number" id="edit-bpm" value="120" min="30" max="500" step="0.5" oninput="onBpmChanged(this.value)" class="num-in"></div>
     <div class="settings-row"><span>Grid offset (s)</span><input type="number" id="edit-grid-offset" value="0" step="0.01" oninput="onGridOffsetChanged(this.value)" class="num-in"></div>
     <div class="note">Grid step: <b id="grid-readout">0.250s</b> · <b id="bpm-readout">120 BPM</b>. Set BPM + offset to match your song so tiles snap to the beat. Pick the subdivision (1/1 … 1/8) on the timeline.</div>
@@ -248,6 +254,8 @@
     <div class="settings-row"><span>Target FPS</span><input type="number" id="edit-fps" value="60" min="10" max="240" class="num-in"></div>
     <div class="settings-row"><span>Music offset (ms) <small>+ = song plays earlier · − = song plays later</small></span><input type="number" id="edit-audio-offset" value="0" class="num-in"></div>
     <div class="settings-row"><span>Disable hold tiles</span><input type="checkbox" id="edit-disable-holds"></div>
+    <div class="settings-row"><span>Hide hitboxes <small>(players can't show the hitbox overlay on this level)</small></span><input type="checkbox" id="edit-hide-hb"></div>
+    <div class="settings-row"><span>Show letters on tiles <small>(always show the lane key on every tile)</small></span><input type="checkbox" id="edit-show-letters"></div>
     <div class="settings-row"><span>Lock tile look <small>(ignore players' custom tile colors &amp; effects)</small></span><input type="checkbox" id="edit-lock-cos"></div>
     <div class="settings-row"><span>Strict mode <small>(hit tile 1 before tile 2 - no skipping)</small></span><input type="checkbox" id="edit-strict"></div>
     <div class="settings-row"><span>Tags <small>(speed, chords, holds, memory, tech, long, short, jumps, streams, strict, beginner)</small></span><input type="text" id="edit-tags" class="num-in wide" placeholder="speed, chords"></div>
@@ -292,11 +300,11 @@
 <script src="js/ui.js?v=20261014-2"></script>
 <script src="js/storage.js?v=20261014-2"></script>
 <script src="js/auth.js?v=20261014-2"></script>
-<script src="js/game.js?v=20261017-1"></script>
+<script src="js/game.js?v=20261018-2"></script>
 <script src="js/editor.js?v=20261014-2"></script>
 <script src="js/browse.js?v=20261014-2"></script>
 <script src="js/battle.js?v=20261014-2"></script>
-<script src="js/social.js?v=20261017-1"></script>
+<script src="js/social.js?v=20261018-2"></script>
   <script src="js/main.js?v=20261014-2"></script>
 </body>
 </html>
