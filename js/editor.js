@@ -671,6 +671,13 @@ function renderInspector() {
     ps.value = nT === 1 && Number.isInteger(ts[0].preset) ? ts[0].preset : (ts.every(t => t.preset === ts[0].preset) && Number.isInteger(ts[0].preset) ? ts[0].preset : -1);
     ps.onchange = () => { const v = Number(ps.value); ts.forEach(t => { if (v >= 0) t.preset = v; else delete t.preset; }); edChanged(true); };
     pr.appendChild(ps); host.appendChild(pr);
+    if (ts.every(t => !t.isHold)) {
+      const tp = el('div', 'inspector-field'); tp.appendChild(el('label', '', 'Taps needed'));
+      const tsel = el('select'); [1, 2, 3, 4, 5, 6].forEach(n => { const o = el('option', '', n === 1 ? 'Normal (1 tap)' : n + ' taps'); o.value = n; tsel.appendChild(o); });
+      tsel.value = ts.every(t => (t.taps || 1) === (ts[0].taps || 1)) ? (ts[0].taps || 1) : 1;
+      tsel.onchange = () => { const v = Number(tsel.value); ts.forEach(t => { if (v > 1) t.taps = v; else delete t.taps; }); edChanged(true); };
+      tp.appendChild(tsel); host.appendChild(tp);
+    }
     groupsRow(host, ts);
   }
   if (nO === 1) objectInspector(host, [...edSelObjs][0]);
@@ -948,6 +955,7 @@ function drawEditorLayerRaw() {
       if (pr) { ctx.globalAlpha = 1; drawPresetBox(ctx, r.x - 1, r.top, r.w + 2, r.h, Object.assign({}, pr, { wide: 1, tall: 1 }), 0.92); }
       else { ctx.globalAlpha = 0.85; ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.6)" : "rgba(0, 235, 255, 0.55)"; ctx.fillRect(r.x, r.top, r.w, r.h); }
       if (t.isHold) { ctx.globalAlpha = 0.55; ctx.fillStyle = '#ff8a3d'; ctx.fillRect(r.x + r.w * 0.3, r.top, r.w * 0.4, r.h - tileH); }
+      if ((t.taps || 1) > 1) { ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.font = '800 ' + Math.round(Math.min(34, tileH * 0.35)) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('×' + t.taps, r.x + r.w / 2, r.bottom - tileH / 2); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; }
       ctx.globalAlpha = 1; ctx.strokeStyle = sel ? '#ffffff' : "rgba(255,255,255,0.55)"; ctx.lineWidth = sel ? 2.5 : 1; if (sel) ctx.setLineDash([5, 3]);
       ctx.strokeRect(r.x + 0.5, r.top + 0.5, r.w - 1, r.h - 1);
       ctx.setLineDash([]);
@@ -1136,3 +1144,73 @@ canvas.addEventListener('pointermove', e => {
 const endHbDrag = () => { if (!hbDrag) return; hbDrag = null; edChanged(true); };
 canvas.addEventListener('pointerup', endHbDrag);
 canvas.addEventListener('pointercancel', endHbDrag);
+
+// ---------------------------------------------------------------------------
+// Auto-fit music: find the song's BPM and where the first beat lands, then set the grid
+// ---------------------------------------------------------------------------
+async function analyseTempo(arrayBuffer, onProgress) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ac = new AC();
+  let buf;
+  try { buf = await new Promise((res, rej) => ac.decodeAudioData(arrayBuffer, res, rej)); } finally { try { ac.close(); } catch (e) {} }
+  const sr = buf.sampleRate, maxSec = Math.min(buf.duration, 120), n = Math.floor(maxSec * sr);
+  const ch0 = buf.getChannelData(0), ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
+  const hop = Math.round(sr / 100), win = hop * 2, frames = Math.floor((n - win) / hop);       // 100 envelope frames per second
+  if (frames < 600) throw new Error('The song is too short to analyse.');
+  // energy of the bass-heavy part (simple one-pole low-pass) + the whole signal, frame by frame
+  const env = new Float32Array(frames); let lp = 0;
+  const a = 1 - Math.exp(-2 * Math.PI * 180 / sr);
+  for (let f = 0; f < frames; f++) {
+    let eLow = 0, eAll = 0; const s0 = f * hop;
+    for (let i = 0; i < win; i++) { const v = ch1 ? (ch0[s0 + i] + ch1[s0 + i]) * 0.5 : ch0[s0 + i]; lp += a * (v - lp); eLow += lp * lp; eAll += v * v; }
+    env[f] = Math.sqrt(eLow / win) * 0.7 + Math.sqrt(eAll / win) * 0.3;
+    if (onProgress && f % 4000 === 0) { onProgress(f / frames); await new Promise(r => setTimeout(r)); }
+  }
+  // onset strength = rise of the (log) envelope, with a moving average removed
+  const on = new Float32Array(frames), lg = env.map(v => Math.log(1 + 80 * v));
+  for (let f = 1; f < frames; f++) on[f] = Math.max(0, lg[f] - lg[f - 1]);
+  const mean = new Float32Array(frames); let acc = 0;
+  for (let f = 0; f < frames; f++) { acc += on[f]; if (f >= 50) acc -= on[f - 50]; mean[f] = acc / Math.min(50, f + 1); }
+  for (let f = 0; f < frames; f++) on[f] = Math.max(0, on[f] - mean[f] * 1.1);
+  const at = x => { const i = Math.floor(x); if (i < 0 || i >= frames - 1) return 0; const fr = x - i; return on[i] * (1 - fr) + on[i + 1] * fr; };
+  // tempo: how well do onsets repeat at each lag? (with a gentle preference for 90-160 BPM so we don't pick half/double time)
+  let best = { bpm: 120, score: -1 };
+  const lagScore = bpm => { const lag = 6000 / bpm; let s = 0, c = 0; for (let f = 0; f + lag < frames; f += 1) { s += on[f] * at(f + lag) + 0.5 * on[f] * at(f + 2 * lag); c++; } return s / Math.max(1, c); };
+  for (let bpm = 60; bpm <= 200; bpm += 0.5) {
+    const prior = Math.exp(-0.5 * Math.pow(Math.log2(bpm / 125) / 0.6, 2));
+    const sc = lagScore(bpm) * (0.55 + 0.45 * prior);
+    if (sc > best.score) best = { bpm, score: sc };
+  }
+  // refine tempo + find the first beat: a comb of beats, tried at fine tempos and every 10 ms phase
+  let fine = { bpm: best.bpm, phase: 0, score: -1 };
+  for (let bpm = best.bpm - 1.5; bpm <= best.bpm + 1.5; bpm += 0.05) {
+    const period = 6000 / bpm;
+    for (let ph = 0; ph < period; ph += 1) {
+      let s = 0; for (let t = ph; t < frames - 1; t += period) s += at(t) + 0.5 * at(t - 1) + 0.5 * at(t + 1);
+      if (s > fine.score) fine = { bpm, phase: ph, score: s };
+    }
+  }
+  let bpm = Math.round(fine.bpm * 10) / 10; if (Math.abs(bpm - Math.round(bpm)) < 0.15) bpm = Math.round(bpm);
+  const periodSec = 60 / bpm;
+  let offset = (fine.phase / 100 + 0.01) % periodSec;   // +10 ms: the envelope frame lands just before the beat
+  return { bpm, offset: Math.round(offset * 1000) / 1000, confidence: Math.min(1, fine.score / (frames / 6000 * 60 + 1e-6)) };
+}
+async function autoFitMusic() {
+  let buf = null;
+  try {
+    if (currentAudioBlob) buf = await currentAudioBlob.arrayBuffer();
+    else if (bgAudio && bgAudio.getAttribute('src')) buf = await (await fetch(bgAudio.getAttribute('src'))).arrayBuffer();
+  } catch (e) {}
+  if (!buf) { toast('Pick a song or add your own music first.', 'bad'); return; }
+  toast('Listening to the song…');
+  try {
+    const r = await analyseTempo(buf);
+    const ok = await uiConfirm('Found about ' + r.bpm + ' BPM, with the first beat at ' + r.offset.toFixed(3) + ' s. Set the BPM and grid offset to that?', 'Apply');
+    if (!ok) return;
+    editorBpm = Math.max(30, Math.min(maxBpm, r.bpm)); editorGridOffset = r.offset;
+    const b = document.getElementById('edit-bpm'), o = document.getElementById('edit-grid-offset');
+    if (b) b.value = editorBpm; if (o) o.value = editorGridOffset;
+    if (typeof updateGridReadout === 'function') updateGridReadout();
+    toast('Grid set: ' + editorBpm + ' BPM · offset ' + editorGridOffset.toFixed(3) + ' s', 'good');
+  } catch (e) { toast('Could not read that song (' + (e.message || 'unsupported file') + ').', 'bad'); }
+}
