@@ -158,11 +158,11 @@ function prunedDecor() {
 // what makes a level "the same level" for verification: the notes + the effects that change how it plays
 function isGameplayRandom(e) { return e && e.type === 'random' && Number(e.gp) === 1 && e.mode !== 'reset'; }
 function levelHashOf(data, effects) {
-  return hashString(JSON.stringify([(data || []).map(t => [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0]),
+  return hashString(JSON.stringify([(data || []).map(t => (t.taps || 1) > 1 ? [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0, t.taps] : [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0]),
     (effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])
       .concat((effects || []).filter(isGameplayRandom).map(e => ['random', e.time, e.target, e.each, e.seed, e.chance, e.mode, e.fixed]))]));
 }
-function tileKey(t) { return [t.lane, t.time, t.isHold ? 1 : 0, t.isHold ? (t.holdDuration || 0) : 0].join('|'); }
+function tileKey(t) { return [t.lane, t.time, t.isHold ? 1 : 0, t.isHold ? (t.holdDuration || 0) : 0, (t.taps || 1) > 1 ? t.taps : 1].join('|'); }
 function gameplayFx(effects) { return JSON.stringify((effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type) || isGameplayRandom(e)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])); }
 // true when the new version only REMOVES tiles (music/decor may change) compared with the last published version
 function isNerfUpdate() {
@@ -191,6 +191,8 @@ function buildLevelObject(name) {
     disableHolds: document.getElementById('edit-disable-holds').checked,
     strictMode: !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked),
     lockCosmetics: !!(document.getElementById('edit-lock-cos') && document.getElementById('edit-lock-cos').checked),
+    hideHitboxes: !!(document.getElementById('edit-hide-hb') && document.getElementById('edit-hide-hb').checked),
+    showLetters: !!(document.getElementById('edit-show-letters') && document.getElementById('edit-show-letters').checked),
     startPositions: editorStartPositions.slice(),
     tags: String((document.getElementById('edit-tags') || {}).value || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean).slice(0, 5),
     difficulty: document.getElementById('edit-difficulty').value || 'Normal',
