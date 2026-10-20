@@ -83,7 +83,7 @@ function decorFire(fx, t, instant) {
       if (fx.what === 'bg') { dBg = { from: dBg ? dBg.cur : currentLevelBackground, to: fx.color, t0: t, dur, cur: instant || !(dur > 0) ? fx.color : null }; if (!dBg.cur) dBg.cur = dBg.from; if (!(dur > 0)) dBg.cur = fx.color; }
       else targetIds(fx).forEach(g => { const s = gs(g); s.colFrom = s.col || null; s.colTo = fx.color; s.cp = 0; addTween(s, 'cp', 1, t, dur, ez); if (!(dur > 0)) s.col = fx.color; });
       break;
-    case 'shake': if (!instant) { dCam.shakeT0 = t; dCam.shakeDur = Math.max(0.05, Number(fx.dur) || 0.4); dCam.shakeStr = Number(fx.strength) || 8; } break;
+    case 'shake': if (!instant && !a11yCalm) { dCam.shakeT0 = t; dCam.shakeDur = Math.max(0.05, Number(fx.dur) || 0.4); dCam.shakeStr = Number(fx.strength) || 8; } break;
     case 'zoom': addTween(dCam, 'zoom', Math.max(0.3, Math.min(3, Number(fx.zoom) || 1)), t, dur, ez); break;
     case 'random': fireRandom(fx, t, dur, ez); break;
   }
@@ -383,7 +383,7 @@ function updateProgressBar(pct) {
 }
 
 function resetState() {
-  score = 0; notesHitThisGame = 0; tiles = []; particles = []; isDead = false; isPaused = false; patternStep = 0;
+  hitErrs = []; score = 0; notesHitThisGame = 0; tiles = []; particles = []; isDead = false; isPaused = false; patternStep = 0;
   scoreEl.innerText = "0"; lastScoreShown = 0; lastPctShown = -1;
   distanceTraveled = 0; nextSpawnDistance = 0; currentLives = maxLives;
   document.getElementById('lives-count').innerText = currentLives;
@@ -471,6 +471,7 @@ function replayInject() {
   while (replayPlay.i < d.h.length && d.h[replayPlay.i][0] <= now) {
     const e = d.h[replayPlay.i++], t = tiles.find(x => x.noteIdx === e[1] && !x.interacted);
     if (!t) continue;
+    if (t.tapsLeft > 1) { t.tapsLeft--; score += 10; for (let k = 0; k < 5; k++) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY)); if (typeof playLaneSound === 'function') playLaneSound(t.lane); continue; }
     t.interacted = true; score += 10; notesHitThisGame++;
     for (let k = 0; k < 8; k++) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY));
     if (typeof playLaneSound === 'function') playLaneSound(t.lane);
@@ -503,6 +504,7 @@ function startReplayWatch(level, g) {
 }
 
 function triggerRedFlash() {
+  if (a11yCalm) return;
   const flash = document.getElementById('red-flash'); flash.style.opacity = 0.8;
   setTimeout(() => { flash.style.opacity = 0; }, 150);
 }
@@ -527,6 +529,8 @@ function editorLevelConfig() {
   return {
     strictMode: !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked),
     lockCosmetics: !!(document.getElementById('edit-lock-cos') && document.getElementById('edit-lock-cos').checked),
+    hideHitboxes: !!(document.getElementById('edit-hide-hb') && document.getElementById('edit-hide-hb').checked),
+    showLetters: !!(document.getElementById('edit-show-letters') && document.getElementById('edit-show-letters').checked),
     lives: Math.max(1, Math.min(10, parseInt(document.getElementById('edit-lives').value) || 3)),
     fps: parseInt(document.getElementById('edit-fps').value) || 60,
     audioOffset: parseInt(document.getElementById('edit-audio-offset').value) || 0,
@@ -597,8 +601,11 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     currentLives = maxLives;
     windowLevelFPS = cfg.fps >= 10 ? cfg.fps : 60;
     levelDisableHolds = cfg.disableHolds;
+    metro = { bpm: Math.max(30, Number(sourceLevel ? sourceLevel.bpm : editorBpm) || 120), off: Number(sourceLevel ? sourceLevel.gridOffset : editorGridOffset) || 0, n: -1 };
     strictMode = sourceLevel ? !!sourceLevel.strictMode : !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked);
     hitZone = defaultHitZone(); tileHb = { scale: 1, offset: 0 }; tileMoveFx = null; tileHideFx = null;
+    levelHideHitboxes = sourceLevel ? !!sourceLevel.hideHitboxes : !!(document.getElementById('edit-hide-hb') && document.getElementById('edit-hide-hb').checked);
+    levelShowLetters = sourceLevel ? !!sourceLevel.showLetters : !!(document.getElementById('edit-show-letters') && document.getElementById('edit-show-letters').checked);
     lockCosmetics = sourceLevel ? !!sourceLevel.lockCosmetics : !!(document.getElementById('edit-lock-cos') && document.getElementById('edit-lock-cos').checked);
     levelLastNoteTime = pendingTiles.length ? pendingTiles[pendingTiles.length - 1].time : 0;
     runStartedAt = performance.now();
@@ -658,6 +665,7 @@ function spawnTile() {
 
 // --- effect firing (level playback) ---
 function fireAdvancedPulse(fx) {
+  if (a11yCalm) return;
   const target = (fx.layer == 1) ? document.getElementById('fg-flash') : document.getElementById('bg-flash');
   target.style.transition = `opacity ${fx.inTrans}s ease-out`; target.style.background = fx.color; target.style.opacity = 1;
   fxLater(() => { target.style.transition = `opacity ${fx.outTrans}s ease-in`; target.style.opacity = 0; }, (fx.duration - fx.outTrans) * 1000);
@@ -710,7 +718,7 @@ function particleColor() {
     case 'sparkle': return Math.random() < 0.5 ? '#fff2a8' : '#ffffff';
     case 'fire': return ['#ff7a18', '#ffd23f', '#ff3d00'][Math.floor(Math.random() * 3)];
     case 'confetti': return ['#ff4f81', '#4fd1ff', '#ffd23f', '#7cff6b', '#b36bff'][Math.floor(Math.random() * 5)];
-    default: return '#00ffff';
+    default: return hitLineColor();
   }
 }
 const TILE_COSMETIC_COLORS = { ice: '#7fdcff', gold: '#ffcf40', neon: '#39ff88', royal: '#9b5cff' };
@@ -845,6 +853,7 @@ function updateCustomLevel(dtSec) {
     const bl = dLane[pendingTileIdx] !== undefined ? dLane[pendingTileIdx] : n.lane;
     const nt = new Tile(laneFlipAt(n.time) ? 3 - bl : bl, y, levelDisableHolds ? false : n.isHold, n.holdDuration);
     nt.noteIdx = pendingTileIdx; nt.time = n.time; nt.preset = n.preset;
+    if (!nt.isHold && n.taps > 1) { nt.taps = Math.min(8, n.taps | 0); nt.tapsLeft = nt.taps; }
     nt.groups = [pendingTileIdx + 1].concat(n.groups || []);
     tiles.push(nt);
     pendingTileIdx++;
@@ -864,6 +873,7 @@ function updateCustomLevel(dtSec) {
     else decorFire(fx, fx.time, false);
   }
   if (replayPlay) replayInject();
+  metroTick();
   if (ghost) ghostTick();
   decorUpdate(customPlayTime);
   { const bgc = decorBackground(); if (bgc) document.body.style.background = bgc; }
@@ -929,6 +939,7 @@ function showCompletionScreen() {
   document.getElementById('death-stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
   const eb = document.getElementById('death-editor-btn'); if (eb) eb.classList.toggle('hidden', !isVerifying);
   { const di = document.getElementById('death-info'); if (di) di.textContent = '100%  ·  Attempt ' + currentAttempt; }
+  renderTimingBar();
   toggleMenu('death-screen');
 }
 
@@ -973,6 +984,14 @@ function pressLane(laneIndex) {
   let ok;
   if (strictMode) ok = !!target && target.y >= nearestAll.y - 3;      // STRICT: you must hit tile 1 before tile 2, no skipping
   else ok = !!target && (target === nearest || targetY >= nearestY - TILE_H * 0.85);
+  if (ok && target.tapsLeft > 1) {              // multi-tap tile: every tap counts, the last one clears it
+    target.tapsLeft--; score += 10;
+    if (rec) rec.h.push([Math.round(customPlayTime * 1000), target.noteIdx === undefined ? -1 : target.noteIdx, laneIndex]);
+    for (let i = 0; i < 5; i++) particles.push(new Particle(laneIndex * laneW + laneW / 2, lineY));
+    if (typeof playLaneSound === 'function') playLaneSound(laneIndex);
+    return;
+  }
+  if (ok && !replayPlay && target.time !== undefined && isCustomGame) hitErrs.push(Math.round((customPlayTime + Math.max(0, Math.min(0.05, (performance.now() - lastTime) / 1000)) - target.time) * 1000));
   if (ok) {
     target.interacted = true; score += 10; notesHitThisGame++;
     if (rec) rec.h.push([Math.round(customPlayTime * 1000), target.noteIdx === undefined ? -1 : target.noteIdx, laneIndex]);
@@ -1031,6 +1050,42 @@ canvas.addEventListener('pointerdown', (e) => {
   pressLane(lane);
 });
 // ---- PC mouse: a cursor that snaps to the lane you move into (setting: middle of the lane, or down by the hit line) ----
+// ---- accessibility ----
+let a11yCb = lsGet('et_cb') === '1', a11yOutline = Math.max(0, Math.min(2, Number(lsGet('et_outline')) || 0)), a11yCalm = lsGet('et_calm') === '1';
+const hitLineColor = () => a11yCb ? '#ffb000' : '#00ffff';
+function setA11y(key, v) {
+  if (key === 'cb') { a11yCb = !!v; const f = document.getElementById('red-flash'); if (f) f.style.background = a11yCb ? '#ffb000' : ''; }
+  else if (key === 'outline') a11yOutline = Math.max(0, Math.min(2, Number(v) || 0));
+  else if (key === 'calm') a11yCalm = !!v;
+}
+// ---- rhythm feel: metronome + hit-timing bar ----
+let metroOn = lsGet('et_metro') === '1', timingBarOn = lsGet('et_tbar') !== '0', metro = null, hitErrs = [], metroCtx = null;
+function setRhythm(key, v) { if (key === 'metro') metroOn = !!v; else if (key === 'tbar') timingBarOn = !!v; }
+function metroClick(strong) {
+  try {
+    metroCtx = metroCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = metroCtx.createOscillator(), g = metroCtx.createGain(), t0 = metroCtx.currentTime;
+    o.frequency.value = strong ? 1500 : 1000; g.gain.setValueAtTime(0.18, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05);
+    o.connect(g); g.connect(metroCtx.destination); o.start(t0); o.stop(t0 + 0.06);
+  } catch (e) {}
+}
+function metroTick() {
+  if (!metroOn || !metro || isDead || replayPlay) return;
+  const spb = 60 / metro.bpm, k = Math.floor((customPlayTime - metro.off) / spb);
+  if (metro.n === -1) { metro.n = k; return; }
+  if (k > metro.n) { if (customPlayTime - metro.off - k * spb < 0.12) metroClick(((k % 4) + 4) % 4 === 0); metro.n = k; }
+}
+function renderTimingBar() {
+  const host = document.getElementById('timing-bar'); if (!host) return;
+  const e = hitErrs.filter(x => Math.abs(x) <= 300);
+  if (!timingBarOn || e.length < 3) { host.innerHTML = ''; return; }
+  const avg = Math.round(e.reduce((a, b) => a + b, 0) / e.length), sd = Math.round(Math.sqrt(e.reduce((a, b) => a + (b - avg) * (b - avg), 0) / e.length));
+  const pos = v => (50 + Math.max(-150, Math.min(150, v)) / 150 * 50).toFixed(1);
+  const dots = e.slice(-120).map(v => '<i style="left:' + pos(v) + '%"></i>').join('');
+  host.innerHTML = '<div class="tb-track"><span class="tb-zone"></span>' + dots + '<b class="tb-avg" style="left:' + pos(avg) + '%"></b></div>' +
+    '<div class="tb-labels"><span>◀ early</span><span>perfect</span><span>late ▶</span></div>' +
+    '<div class="tb-text">Average ' + (avg > 0 ? '+' : '') + avg + ' ms ' + (Math.abs(avg) < 8 ? '(right on time)' : avg > 0 ? '(a little late)' : '(a little early)') + ' · spread ±' + sd + ' ms</div>';
+}
 let mouseSnapOn = lsGet('et_mouseSnap') !== '0', mouseSnapPos = lsGet('et_mouseSnapPos') === 'bottom' ? 'bottom' : 'mid';
 const mouseSnap = { x: 0, y: 0, in: false };
 function setMouseSnap(on, pos) { mouseSnapOn = !!on; mouseSnapPos = pos === 'bottom' ? 'bottom' : 'mid'; if (!mouseSnapOn) canvas.style.cursor = ''; }
@@ -1082,7 +1137,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 function drawBoard() {
   ctx.strokeStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, GH); ctx.stroke(); }
-  ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 4;
+  ctx.strokeStyle = hitLineColor(); ctx.lineWidth = 4;
   ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(GW, lineY); ctx.stroke();
 }
 function drawIdleFrame() {
@@ -1184,6 +1239,13 @@ function gameLoop(ts) {
       ctx.fillStyle = t.interacted ? "#222" : (tint || tileFill());
       ctx.fillRect(t.lane * laneW + 2 + ox, headTop, laneW - 4, TILE_H);
     }
+    if (a11yCb && t.isHold) { ctx.globalAlpha = 0.8 * hideMul * dA; ctx.fillStyle = '#fff'; ctx.fillRect(t.lane * laneW + laneW / 2 - 3 + ox, tailTop, 6, holdLength + TILE_H * 0.5); }   // hold tiles get a white spine (not just a different colour)
+    if (a11yOutline && !t.interacted) { ctx.globalAlpha = Math.max(0.5, hideMul * dA); ctx.strokeStyle = '#fff'; ctx.lineWidth = a11yOutline === 2 ? 5 : 2.5; ctx.strokeRect(t.lane * laneW + 3 + ox, headTop + 1, laneW - 6, TILE_H - 2); }
+    if (t.tapsLeft > 0 && !t.interacted) {
+      ctx.globalAlpha = Math.max(0.35, hideMul * dA); ctx.fillStyle = '#fff'; ctx.font = '800 44px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 5; const tx = t.lane * laneW + laneW / 2 + ox, ty = headTop + TILE_H / 2;
+      ctx.strokeText('×' + t.tapsLeft, tx, ty); ctx.fillText('×' + t.tapsLeft, tx, ty); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    }
     if (xform) ctx.restore();
     if (globeOn && globeGhosts.size && !t.interacted) {
       let row = 0; const now = performance.now();
@@ -1199,18 +1261,18 @@ function gameLoop(ts) {
         ctx.fillStyle = "#000"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(tag, cx, headTop + 16 + row * 18); row++;
       });
     }
-    if (showHitboxes) {
+    if (showHitboxes && !levelHideHitboxes) {
       ctx.globalAlpha = 1; ctx.strokeStyle = "#ff3b81"; ctx.lineWidth = 2;
       ctx.strokeRect(t.lane * laneW + 2 + ox, headTop, laneW - 4, TILE_H);
     }
-    if (showLaneText) {
+    if (showLaneText || levelShowLetters) {
       ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff"; ctx.font = "700 28px Arial";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(keyMap[t.lane].toUpperCase(), t.lane * laneW + laneW / 2 + ox, headTop + TILE_H / 2);
     }
     ctx.globalAlpha = 1.0;
   }
-  if (showHitboxes && gameActive && isCustomGame) drawHitboxOverlay();
+  if (showHitboxes && !levelHideHitboxes && gameActive && isCustomGame) drawHitboxOverlay();
   if (dVFlip) ctx.transform(1, 0, 0, -1, 0, GH);
   if (!inEditor || edShow.decor) drawDecorLayer(ctx, 'fg', inEditor ? editorTimer : customPlayTime, inEditor ? { ghost: true } : {});
   if (dVFlip) { decorCameraEnd(ctx); }
@@ -1302,6 +1364,7 @@ function die(reason) {
   if (hideDeathScreen && !isPlaytesting) {
     toggleMenu(null);
   } else {
+    renderTimingBar();
     toggleMenu('death-screen');
   }
 }
@@ -1390,6 +1453,8 @@ function startEditor(existingLevel) {
   document.getElementById('edit-disable-holds').checked = existingLevel ? !!existingLevel.disableHolds : false;
   const st = document.getElementById('edit-strict'); if (st) st.checked = existingLevel ? !!existingLevel.strictMode : false;
   const lc = document.getElementById('edit-lock-cos'); if (lc) lc.checked = existingLevel ? !!existingLevel.lockCosmetics : false;
+  const hh = document.getElementById('edit-hide-hb'); if (hh) hh.checked = existingLevel ? !!existingLevel.hideHitboxes : false;
+  const sl = document.getElementById('edit-show-letters'); if (sl) sl.checked = existingLevel ? !!existingLevel.showLetters : false;
   val('edit-tags', existingLevel && existingLevel.tags ? existingLevel.tags.join(', ') : '');
   if (!existingLevel || !existingLevel._draft) currentDraft = null;
   renderLevelIconPreview();
