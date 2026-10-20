@@ -15,7 +15,7 @@ const bgAudio = document.getElementById("bg-audio");
 // stuck on screen after you left it.)
 const overlays = [
   'main-menu', 'settings-menu', 'death-screen', 'pause-menu', 'my-levels-menu',
-  'creator-menu', 'news-menu', 'songs-menu', 'live-menu', 'watch-menu', 'voice-menu', 'hub-menu', 'browse-levels-menu', 'editor-level-settings',
+  'creator-menu', 'news-menu', 'songs-menu', 'live-menu', 'watch-menu', 'voice-menu', 'hub-menu', 'level-stats-menu', 'browse-levels-menu', 'editor-level-settings',
   'profile-modal', 'stats-modal', 'admin-panel', 'level-detail-menu', 'battle-menu', 'battle-level-picker',
   'battle-waiting-menu', 'battle-incoming-menu', 'battle-result-menu', 'shared-menu', 'spectate-menu', 'friends-menu'
 ];
@@ -103,6 +103,7 @@ function getEditorPPS() { return EDITOR_BASE_SPEED * 60 * editorZoom; }
 let strictMode = false;
 const defaultHitZone = () => ({ on: false, lanes: [0, 1, 2, 3].map(() => ({ top: 400, h: 140 })) });
 let hitZone = defaultHitZone();                     // one input hitbox PER LANE (board coords); off = classic "tap anywhere"
+let levelHideHitboxes = false, levelShowLetters = false;   // level settings: hide the hitbox overlay for everyone / always show lane letters on tiles
 let lockCosmetics = false;                          // level setting: ignore the player's custom tile colours / effects
 let tileHb = { scale: 1, offset: 0 };               // tile hitbox scale / vertical offset (used with the input zone)
 let tileMoveFx = null, tileHideFx = null;
