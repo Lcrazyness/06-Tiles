@@ -8,7 +8,7 @@
 const TRANSLUCENT_OVERLAYS = ['death-screen', 'pause-menu'];
 
 function toggleMenu(id) {
-  if (id && id !== 'death-screen' && id !== 'pause-menu' && typeof replayPlay !== 'undefined' && replayPlay) { replayPlay = null; if (typeof setReplayBanner === 'function') setReplayBanner(null); }
+  if (id && id !== 'death-screen' && id !== 'pause-menu' && typeof replayPlay !== 'undefined' && replayPlay) { if (replayPlay.live && typeof liveUnwatch === 'function') liveUnwatch(); replayPlay = null; if (typeof setReplayBanner === 'function') setReplayBanner(null); }
   overlays.forEach(o => { const el = document.getElementById(o); if (el) el.classList.add('hidden'); });
   if (id) {
     const el = document.getElementById(id);
