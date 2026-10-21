@@ -544,6 +544,7 @@ function edNewGroupFromSelection() {
 function addDecorObject(kind) {
   if (decorData.objects.length >= 1500) { toast('Object limit reached (1500).', 'bad'); return; }
   if (kind === 'image') { document.getElementById('decor-image-upload').click(); return; }
+  if (kind === 'video') { edReplaceVideo = false; document.getElementById('decor-video-upload').click(); return; }
   const size = { square: [90, 90], triangle: [90, 90], circle: [90, 90], glow: [200, 200], text: [200, 60] }[kind] || [90, 90];
   const o = { id: edNextObjId++, kind, time: snapTime(editorTimer), x: GW / 2, y: GH / 2, w: size[0], h: size[1], rot: 0, alpha: 1, color: kind === 'glow' ? '#37b6ff' : '#ffffff', color2: '', layer: 'bg', z: 0, add: kind === 'glow', groups: [], img: '', text: 'Text', font: 'Poppins', size: 56, bold: true, hidden: false, locked: false, name: '', outline: false };
   decorData.objects.push(o);
@@ -576,7 +577,23 @@ document.getElementById('decor-image-upload')?.addEventListener('change', async 
     decorData.objects.push(o); setEdTool('place'); edSelectObj(o, false, true); edChanged(); renderPalette();
   } catch (e) { toast(e.message || 'Could not add that image.', 'bad'); }
 });
-let edReplaceImage = false;
+let edReplaceImage = false, edReplaceVideo = false;
+document.getElementById('decor-video-upload')?.addEventListener('change', async ev => {
+  const file = ev.target.files && ev.target.files[0]; ev.target.value = '';
+  if (!file) return;
+  try {
+    const v = await videoFromFile(file);
+    const used = new Set(decorData.objects.filter(x => x.kind === 'video').map(x => x.vid));
+    const target = [...edSelObjs][0];
+    if (!used.has(v.sha) && used.size >= 3 && !(edReplaceVideo && target && target.kind === 'video' && decorData.objects.filter(x => x.kind === 'video' && x.vid === target.vid).length === 1)) { toast('A level can use 3 different videos.', 'bad'); return; }
+    if (edReplaceVideo && target && target.kind === 'video') { Object.assign(target, { vid: v.sha, vdur: v.dur, vw: v.w, vh: v.h }); edReplaceVideo = false; edChanged(); renderInspector(); return; }
+    if (decorData.objects.length >= 1500) { toast('Object limit reached (1500).', 'bad'); return; }
+    const sc = Math.min(1, 240 / Math.max(v.w, v.h));
+    const o = { id: edNextObjId++, kind: 'video', time: snapTime(editorTimer), x: GW / 2, y: GH / 2, w: Math.round(v.w * sc), h: Math.round(v.h * sc), rot: 0, alpha: 1, color: '#ffffff', color2: '', layer: 'bg', z: 0, add: false, groups: [], img: '', text: '', font: '', size: 40, bold: false, hidden: false, locked: false, name: '', outline: false, vid: v.sha, vdur: v.dur, vw: v.w, vh: v.h, vloop: true, vstart: 0, vspeed: 1 };
+    decorData.objects.push(o); setEdTool('place'); edSelectObj(o, false, true); edChanged(); renderPalette();
+    toast('Video added (' + Math.round(v.dur) + 's). It uploads when you publish.', 'good');
+  } catch (e) { toast(e.message || 'Could not add that video.', 'bad'); }
+});
 
 // ---------------------------------------------------------------------------
 // Triggers
@@ -741,7 +758,7 @@ function objectInspector(host, o) {
   propRow(host, { label: 'Y', key: 'y', kind: 'number', step: 5 }, o, ch);
   propRow(host, { label: 'Rotation (deg)', key: 'rot', kind: 'number', step: 5 }, o, ch);
   propRow(host, { label: 'Opacity', key: 'alpha', kind: 'number', step: 0.05, min: 0, max: 1, def: 1 }, o, ch);
-  if (o.kind !== 'image') propRow(host, { label: o.kind === 'text' ? 'Color' : 'Color 1', key: 'color', kind: 'color' }, o, ch);
+  if (o.kind !== 'image' && o.kind !== 'video') propRow(host, { label: o.kind === 'text' ? 'Color' : 'Color 1', key: 'color', kind: 'color' }, o, ch);
   if (['square', 'triangle', 'circle'].includes(o.kind)) {
     propRow(host, { label: 'Gradient to', key: 'color2', kind: 'color', empty: '#000000' }, o, ch);
     propRow(host, { label: 'Outline only', key: 'outline', kind: 'check' }, o, ch);
@@ -752,6 +769,12 @@ function objectInspector(host, o) {
   propRow(host, { label: 'Order (z)', key: 'z', kind: 'number', step: 1, min: -50, max: 50, def: 0 }, o, () => { edChanged(true); renderPalette(); });
   propRow(host, { label: 'Glow blend', key: 'add', kind: 'check' }, o, ch);
   groupsRow(host, [o]);
+  if (o.kind === 'video') {
+    propRow(host, { label: 'Loop', key: 'vloop', kind: 'check' }, o, ch);
+    propRow(host, { label: 'Start at (s into video)', key: 'vstart', kind: 'number', step: 0.5, min: 0, max: 180, def: 0 }, o, ch);
+    propRow(host, { label: 'Speed', key: 'vspeed', kind: 'number', step: 0.25, min: 0.25, max: 4, def: 1 }, o, ch);
+    btn(host, '🎬 Replace video', () => { edReplaceVideo = true; document.getElementById('decor-video-upload').click(); });
+  }
   if (o.kind === 'image') btn(host, '🖼 Replace image', () => { edReplaceImage = true; document.getElementById('decor-image-upload').click(); });
   const r = el('div', 'btn-row'); host.appendChild(r);
   btn(r, 'Appear at playhead', () => { o.time = snapTime(editorTimer); edChanged(); });
@@ -923,6 +946,10 @@ function editorDecorSync() {
   document.body.style.background = bg || (document.getElementById('edit-bg-color') || {}).value || '#202738';
 }
 function drawEditorLayer() {
+  drawEditorLayer0();
+  if (typeof drawCollab === 'function') { try { drawCollab(); } catch (e) {} }
+}
+function drawEditorLayer0() {
   if (!dVFlip) return drawEditorLayerRaw();
   const ft = ctx.fillText;   // the board is upside down: keep labels readable
   ctx.fillText = function (t, x, y, w) { ctx.save(); ctx.translate(x, y); ctx.scale(1, -1); ft.call(ctx, t, 0, 0, w); ctx.restore(); };
