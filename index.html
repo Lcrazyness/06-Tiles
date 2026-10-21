@@ -7,7 +7,7 @@
 <title>06 Tiles</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&family=Bebas+Neue&family=Orbitron:wght@400;700&family=Press+Start+2P&family=Pacifico&family=Permanent+Marker&family=Righteous&family=Fredoka:wght@400;700&family=Lobster&family=Audiowide&family=Caveat:wght@400;700&family=Monoton&display=swap">
-<link rel="stylesheet" href="style.css?v=20261014-2">
+<link rel="stylesheet" href="style.css?v=20261020-1">
 </head>
 <body>
 
@@ -105,6 +105,7 @@
       <div class="settings-row"><span>Calm mode <small>(no flashes or screen shake)</small></span><input type="checkbox" id="setting-calm"></div>
       <div class="settings-row"><span>Metronome <small>(a click on every beat of the level's BPM)</small></span><input type="checkbox" id="setting-metronome"></div>
       <div class="settings-row"><span>Timing bar after each run <small>(early / late)</small></span><input type="checkbox" id="setting-tbar"></div>
+      <div class="settings-row"><span>Let friends watch my runs live</span><input type="checkbox" id="setting-liveshare"></div>
       <div class="settings-row"><span>Mouse cursor snaps to lanes <small>(PC mouse)</small></span><input type="checkbox" id="setting-mousesnap"></div>
       <div class="settings-row"><span>Snap position</span><select id="setting-mousesnap-pos" class="num-in" style="width:130px!important"><option value="mid">Middle of the lane</option><option value="bottom">Bottom, by the hit line</option></select></div>
       <div class="settings-row"><span>Show ghost <small>(race a see-through run)</small></span><input type="checkbox" id="setting-ghost"></div>
@@ -230,6 +231,7 @@
     <input type="range" id="timeline-slider" min="0" max="60" value="0" step="0.01" oninput="scrubTimeline(this.value)">
   </div>
   <input type="file" id="decor-image-upload" accept="image/*" style="display:none">
+  <input type="file" id="decor-video-upload" accept="video/mp4,.mp4" style="display:none">
   <input type="file" id="fx-sfx-upload" accept="audio/*" style="display:none">
   <input type="checkbox" id="edit-noclip" style="display:none">
 </div>
@@ -296,15 +298,16 @@
 <div id="warning-screen" class="hidden"></div>
 
 <script src="js/config.js?v=20261014-2"></script>
-<script src="js/state.js?v=20261014-2"></script>
-<script src="js/ui.js?v=20261014-2"></script>
-<script src="js/storage.js?v=20261014-2"></script>
+<script src="js/state.js?v=20261020-1"></script>
+<script src="js/ui.js?v=20261020-1"></script>
+<script src="js/storage.js?v=20261020-1"></script>
+<script src="js/video.js?v=20261020-1"></script>
 <script src="js/auth.js?v=20261014-2"></script>
-<script src="js/game.js?v=20261018-2"></script>
-<script src="js/editor.js?v=20261014-2"></script>
-<script src="js/browse.js?v=20261014-2"></script>
-<script src="js/battle.js?v=20261014-2"></script>
-<script src="js/social.js?v=20261018-2"></script>
+<script src="js/game.js?v=20261020-1"></script>
+<script src="js/editor.js?v=20261020-1"></script>
+<script src="js/browse.js?v=20261020-1"></script>
+<script src="js/battle.js?v=20261020-1"></script>
+<script src="js/social.js?v=20261020-1"></script>
   <script src="js/main.js?v=20261014-2"></script>
 </body>
 </html>
