@@ -14,7 +14,7 @@
 const DECOR_FONTS = ['Poppins', 'Bebas Neue', 'Orbitron', 'Press Start 2P', 'Pacifico', 'Permanent Marker', 'Righteous', 'Fredoka', 'Lobster', 'Audiowide', 'Caveat', 'Monoton'];
 const DECOR_KINDS = [
   { kind: 'square', icon: '■', label: 'Square' }, { kind: 'triangle', icon: '▲', label: 'Triangle' }, { kind: 'circle', icon: '●', label: 'Circle' },
-  { kind: 'glow', icon: '✺', label: 'Glow' }, { kind: 'image', icon: '🖼', label: 'Image' }, { kind: 'text', icon: 'T', label: 'Text' }
+  { kind: 'glow', icon: '✺', label: 'Glow' }, { kind: 'image', icon: '🖼', label: 'Image' }, { kind: 'video', icon: '🎬', label: 'Video' }, { kind: 'text', icon: 'T', label: 'Text' }
 ];
 const TILE_PRESET_TEMPLATES = {
   Classic: { style: 'flat', color: '#111111', color2: '#333333', radius: 0, border: 0, borderColor: '#ffffff', glow: 0, alpha: 1, holdColor: '', wide: 1, tall: 1 },
@@ -208,6 +208,7 @@ function drawDecorObject(c, o, t, opts) {
     case 'circle': c.beginPath(); c.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2); o.outline ? c.stroke() : c.fill(); break;
     case 'glow': { c.scale(1, h / w); const r = w / 2, g = c.createRadialGradient(0, 0, 0, 0, 0, r); const rgb = hexRgb(col); g.addColorStop(0, 'rgba(' + rgb.join(',') + ',1)'); g.addColorStop(1, 'rgba(' + rgb.join(',') + ',0)'); c.fillStyle = g; c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill(); break; }
     case 'image': { const im = decorImage(o.img); if (im) c.drawImage(im, -w / 2, -h / 2, w, h); else { c.strokeStyle = '#888'; c.strokeRect(-w / 2, -h / 2, w, h); } break; }
+    case 'video': drawDecorVideo(c, o, t, w, h); break;
     case 'text': {
       c.font = (o.bold ? '700 ' : '400 ') + (o.size || 40) + 'px "' + (o.font || 'Poppins') + '", system-ui, sans-serif';
       c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -427,10 +428,16 @@ function replayBegin() {
   rec = null; ghost = null;
   const id = replayLevelId();
   if (replayPlay && replayPlay.levelId !== id) replayPlay = null;
+  if (replayPlay && replayPlay.live) {   // spectating a friend: skip everything before the moment we joined
+    const from = (replayPlay.startAt || 0) * 1000, d = replayPlay.data, hi = d.h.findIndex(e => e[0] >= from), wi = d.w.findIndex(x => x >= from);
+    replayPlay.i = hi < 0 ? d.h.length : hi; replayPlay.wi = wi < 0 ? d.w.length : wi;
+    setReplayBanner('👁 LIVE · ' + replayPlay.username); return;
+  }
   if (replayPlay) { replayPlay.i = 0; replayPlay.wi = 0; setReplayBanner('▶ REPLAY · ' + replayPlay.username + (replayPlay.completed ? ' · ✔ 100%' : ' · ' + replayPlay.pct + '%')); return; }
   setReplayBanner(null);
   if (!id || isPlaytesting || isVerifying || isBattleMode || practiceMode) return;
   rec = { h: [], w: [], end: 0, died: null, salt: dSalt };
+  if (typeof liveStart === 'function') liveStart();
   if (ghostOn()) ghostLoad(id, customPlayTime);
 }
 async function ghostLoad(id, startedAt) {
@@ -481,6 +488,7 @@ function replayInject() {
 }
 function replaySave(completed) {
   const r = rec; rec = null;
+  if (typeof liveFinish === 'function') liveFinish(r, completed);
   if (!r || replayPlay || !r.h.length) return;
   const id = replayLevelId(); if (!id) return;
   const pct = completed ? 100 : Math.max(0, Math.min(99, Math.floor(customPlayTime / Math.max(1, levelLastNoteTime) * 100))), sc = Math.floor(score);
@@ -618,6 +626,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     { const ah = document.getElementById('attempt-hud'); if (ah) { ah.textContent = 'Attempt ' + currentAttempt + (practiceMode ? ' · PRACTICE' : ''); ah.classList.toggle('hidden', isBattleMode); } }
     if (practiceMode && practiceStartSec > 0) fastForwardTo(practiceStartSec);
     else if (startPosArmed && (isPlaytesting || isVerifying) && editorStartPos !== null) fastForwardTo(editorStartPos);
+    else if (replayPlay && replayPlay.live && replayPlay.startAt > 0) fastForwardTo(replayPlay.startAt);
     startPosArmed = false;
     practiceNextAuto = (practiceMode ? Math.max(customPlayTime, practiceStartSec) : 0) + autoCheckpointSec;
     replayBegin();
