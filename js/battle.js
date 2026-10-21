@@ -50,6 +50,7 @@ async function connectBattle() {
   battleSocket = io(API_BASE_URL, { auth: { token: getAuthToken() || undefined, guestId: getGuestId() }, transports: ['polling', 'websocket'], upgrade: true, tryAllTransports: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 6000, timeout: 30000 });
   const s = battleSocket;
   if (typeof registerLiveHandlers === 'function') registerLiveHandlers(s);
+  if (typeof collabAttach === 'function') collabAttach(s);
 
   s.on('connect', () => { setBattleConn('online', 'Online'); if (globeLevelId) s.emit('globe_join', { levelId: globeLevelId }); });
   s.on('connect_error', err => {
