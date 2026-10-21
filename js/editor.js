@@ -582,6 +582,7 @@ document.getElementById('decor-video-upload')?.addEventListener('change', async 
   const file = ev.target.files && ev.target.files[0]; ev.target.value = '';
   if (!file) return;
   try {
+    if (typeof videoFromFile !== 'function') throw new Error('video.js is missing from your site files - upload js/video.js and reload.');
     const v = await videoFromFile(file);
     const used = new Set(decorData.objects.filter(x => x.kind === 'video').map(x => x.vid));
     const target = [...edSelObjs][0];
