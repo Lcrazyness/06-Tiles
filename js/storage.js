@@ -274,7 +274,10 @@ async function publishVerifiedLevel() {
   nerfUpdate = false;
   closeCreatorMenu();
   try {
-    await uploadLevelVideos(level.decor);
+    if ((level.decor.objects || []).some(o => o.kind === 'video')) {
+      if (typeof uploadLevelVideos !== 'function') throw new Error('video.js is missing from your site files - upload js/video.js too.');
+      await uploadLevelVideos(level.decor);
+    }
     toast(updating ? 'Updating…' : 'Publishing…');
     let data;
     if (updating) {
@@ -487,7 +490,7 @@ async function draftPublishFlow() {
     const me = (list.drafts || []).find(x => x.id === currentDraft.id);
     if (!me || !me.verified) { await uiAlert('Waiting for ' + (currentDraft.verifier || 'your verifier') + ' to verify the latest save. They can open it from Shared in My Levels and play it through.', 'Not verified yet'); return; }
     if (!(await uiConfirm('Publish "' + currentEditingName + '" for everyone?', 'Publish'))) return;
-    await uploadLevelVideos(prunedDecor());
+    if (decorData.objects.some(o => o.kind === 'video') && typeof uploadLevelVideos === 'function') await uploadLevelVideos(prunedDecor());
     const data = await apiRequest('/api/drafts/' + currentDraft.id + '/publish', { method: 'POST', auth: true, body: {} });
     currentEditingOnlineId = data.level.id;
     await uiAlert('"' + currentEditingName + '" is live!', 'Published');
