@@ -115,7 +115,28 @@ function randomizeLane(m, roll) {
   const free = [0, 1, 2, 3].filter(l => !busy[l]);
   if (free.length) dLane[i] = free[Math.floor(roll * free.length) % free.length];
 }
+let tileFreezeUntil = 0, tileLag = 0;   // "Freeze tiles" trigger: tiles hover, and tiles that haven't appeared yet wait too
+// Shell-game shuffle: the tiles of a group swap lanes with each other (a seeded permutation, new every attempt unless fixed).
+function fireShuffle(fx, t, dur, ez, instant) {
+  if (typeof inEditor !== 'undefined' && inEditor) return;
+  const target = Number(fx.target) || 0; if (!target) return;
+  const mem = randomMembers(target).filter(m => m >= 1 && m < 10000 && m <= pendingTiles.length);
+  if (mem.length < 2) return;
+  const seed = Number(fx.seed) || 1, base = (((seed | 0) * 7919 + Math.round(t * 1000) * 31) ^ (Number(fx.fixed) === 1 ? 0 : dSalt)) | 0, r = rngFrom(base ^ 0x5bd1e995);
+  const baseLane = m => dLane[m - 1] !== undefined ? dLane[m - 1] : pendingTiles[m - 1].lane, vis = (m, l) => laneFlipAt(pendingTiles[m - 1].time) ? 3 - l : l;
+  const old = mem.map(baseLane), perm = old.slice();
+  for (let i = perm.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const x = perm[i]; perm[i] = perm[j]; perm[j] = x; }
+  mem.forEach((m, i) => {
+    dLane[m - 1] = perm[i];
+    const tl = tiles.find(x => x.noteIdx === m - 1);
+    if (tl) {
+      tl.lane = vis(m, perm[i]);
+      if (!instant && old[i] !== perm[i]) { const s = gs(m); s.dx = (vis(m, old[i]) - vis(m, perm[i])) * laneW; addTween(s, 'dx', 0, t, dur, ez); }
+    }
+  });
+}
 function fireRandom(fx, t, dur, ez) {
+  if (fx.mode === 'shuffle') { fireShuffle(fx, t, dur, ez, !(dur > 0)); return; }
   const target = Number(fx.target) || 0, each = Number(fx.each) !== 0 && target !== 0;
   const members = each ? randomMembers(target) : [target];
   const num = (k, d) => { const v = Number(fx[k]); return Number.isFinite(v) ? v : d; };
@@ -611,7 +632,7 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
     levelDisableHolds = cfg.disableHolds;
     metro = { bpm: Math.max(30, Number(sourceLevel ? sourceLevel.bpm : editorBpm) || 120), off: Number(sourceLevel ? sourceLevel.gridOffset : editorGridOffset) || 0, n: -1 };
     strictMode = sourceLevel ? !!sourceLevel.strictMode : !!(document.getElementById('edit-strict') && document.getElementById('edit-strict').checked);
-    hitZone = defaultHitZone(); tileHb = { scale: 1, offset: 0 }; tileMoveFx = null; tileHideFx = null;
+    hitZone = defaultHitZone(); tileHb = { scale: 1, offset: 0 }; tileMoveFx = null; tileHideFx = null; tileFreezeUntil = 0; tileLag = 0;
     levelHideHitboxes = sourceLevel ? !!sourceLevel.hideHitboxes : !!(document.getElementById('edit-hide-hb') && document.getElementById('edit-hide-hb').checked);
     levelShowLetters = sourceLevel ? !!sourceLevel.showLetters : !!(document.getElementById('edit-show-letters') && document.getElementById('edit-show-letters').checked);
     lockCosmetics = sourceLevel ? !!sourceLevel.lockCosmetics : !!(document.getElementById('edit-lock-cos') && document.getElementById('edit-lock-cos').checked);
@@ -758,7 +779,7 @@ function fastForwardTo(sec) {
     if (fx.type === 'tile_style') fireTileStyle(fx);
     else if (fx.type === 'speed') { speed = targetSpeed = initialSpeed = fx.target; speedTransitionDuration = 0; }
     else if (fx.type === 'hitbox') fireHitbox(fx);
-    else if (!['pulse', 'image', 'extra_image', 'sfx', 'video', 'tilemove', 'tilehide'].includes(fx.type)) { decorUpdate(fx.time); decorFire(fx, fx.time, true); }
+    else if (!['pulse', 'image', 'extra_image', 'sfx', 'video', 'tilemove', 'tilehide', 'tilefreeze'].includes(fx.type)) { decorUpdate(fx.time); decorFire(fx, fx.time, true); }
   }
   decorUpdate(customPlayTime);
 }
@@ -845,6 +866,7 @@ function drawHitboxOverlay() {
 // --- level clock: runs from the same frame delta as tile movement ---
 function updateCustomLevel(dtSec) {
   customPlayTime += dtSec;
+  if (customPlayTime < tileFreezeUntil) tileLag += dtSec;
 
   if (levelUsesAudio && !levelAudioStarted && customPlayTime * 1000 + levelAudioOffsetMs >= 0) {
     levelAudioStarted = true;
@@ -855,14 +877,15 @@ function updateCustomLevel(dtSec) {
   const pxPerSec = speed * 60;
   while (pendingTileIdx < pendingTiles.length) {
     const n = pendingTiles[pendingTileIdx];
-    const spawnAt = n.time - 690 / pxPerSec;
-    if (customPlayTime < spawnAt) break;
+    const spawnAt = n.time - 690 / pxPerSec, ctl = customPlayTime - tileLag;
+    if (ctl < spawnAt) break;
     // If a frame ran long, start the tile where it *should* be so arrival time stays exact.
-    const y = -TILE_H + pxPerSec * (customPlayTime - spawnAt);
+    const y = -TILE_H + pxPerSec * (ctl - spawnAt);
     const bl = dLane[pendingTileIdx] !== undefined ? dLane[pendingTileIdx] : n.lane;
     const nt = new Tile(laneFlipAt(n.time) ? 3 - bl : bl, y, levelDisableHolds ? false : n.isHold, n.holdDuration);
     nt.noteIdx = pendingTileIdx; nt.time = n.time; nt.preset = n.preset;
     if (!nt.isHold && n.taps > 1) { nt.taps = Math.min(8, n.taps | 0); nt.tapsLeft = nt.taps; }
+    if (!nt.isHold && (n.fake === 1 || n.fake === 2)) { nt.fake = n.fake; nt.fakeA = Number.isFinite(Number(n.fakeAlpha)) && n.fakeAlpha !== '' ? Math.max(0.05, Math.min(1, Number(n.fakeAlpha))) : (n.fake === 1 ? 0.35 : 1); }
     nt.groups = [pendingTileIdx + 1].concat(n.groups || []);
     tiles.push(nt);
     pendingTileIdx++;
@@ -878,6 +901,7 @@ function updateCustomLevel(dtSec) {
     else if (fx.type === 'hitbox') fireHitbox(fx);
     else if (fx.type === 'tilemove') tileMoveFx = { mode: Number(fx.mode) || 0, amount: Number(fx.amount) || 0, dur: Math.max(0.1, Number(fx.duration) || 1), start: customPlayTime };
     else if (fx.type === 'tilehide') tileHideFx = { mode: Number(fx.mode) || 0, fadeY: Number(fx.fadeY) || 200, dur: Math.max(0.1, Number(fx.duration) || 2), start: customPlayTime };
+    else if (fx.type === 'tilefreeze') tileFreezeUntil = Math.max(tileFreezeUntil, fx.time + Math.max(0.1, Math.min(30, Number(fx.duration) || 2)));
     else if (fx.type === 'video') fireVideo(fx);
     else decorFire(fx, fx.time, false);
   }
@@ -973,12 +997,15 @@ function inInputZone(t) {
 
 function pressLane(laneIndex) {
   if (!gameActive || isDead || inEditor || isPaused || replayPlay) return;
+  let decoy = null, realHere = null;             // a decoy tile in this lane: tapping it kills you (unless the real tile in the lane is nearer)
+  for (const t of tiles) { if (t.interacted || t.lane !== laneIndex || !inInputZone(t)) continue; if (t.fake === 2) { if (!decoy || t.y > decoy.y) decoy = t; } else if (!t.fake && (!realHere || t.y > realHere.y)) realHere = t; }
+  if (decoy && (!realHere || decoy.y > realHere.y + 8)) { die('FAKE TILE!'); return; }
   let nearestAll = null;                         // the next tile in order, whatever the zone says
-  for (const t of tiles) if (!t.interacted && (!nearestAll || t.y > nearestAll.y)) nearestAll = t;
+  for (const t of tiles) if (!t.interacted && t.fake !== 1 && t.fake !== 2 && (!nearestAll || t.y > nearestAll.y)) nearestAll = t;
   if (!nearestAll) return;
   let nearest = null, target = null;             // among tiles inside the input zone
   for (const t of tiles) {
-    if (t.interacted || !inInputZone(t)) continue;
+    if (t.interacted || t.fake || !inInputZone(t)) continue;
     if (!nearest || t.y > nearest.y) nearest = t;
     if (t.lane === laneIndex && (!target || t.y > target.y)) target = t;
   }
@@ -1205,13 +1232,13 @@ function gameLoop(ts) {
   if (inEditor) drawEditorLayer();
 
   for (let i = tiles.length - 1; i >= 0; i--) {
-    const t = tiles[i]; t.y += speed * dt;
+    const t = tiles[i]; if (!(customPlayTime < tileFreezeUntil)) t.y += speed * dt;
     const holdLength = t.isHold ? (t.holdDuration * speed * 60) : 0;
     const headTop = t.y - TILE_H;
     const tailTop = t.y - TILE_H - holdLength;
 
     if (tailTop > GH) {
-      if (!t.interacted) {
+      if (!t.interacted && !t.fake) {
         if (handleHit()) { tiles.splice(i, 1); continue; }
         else { die("MISSED!"); return; }
       }
@@ -1232,7 +1259,7 @@ function gameLoop(ts) {
     }
 
     const ox = tileOffsetX(t);
-    const hideMul = tileAlphaMul(headTop);
+    const hideMul = tileAlphaMul(headTop) * (t.fake ? t.fakeA : 1);
     const ds = t.groups ? decorCombined(t.groups) : null;
     if (ds && !ds.vis) { ctx.globalAlpha = 1; continue; }
     const xform = ds && (ds.dx || ds.dy || ds.rot || ds.sc !== 1);
