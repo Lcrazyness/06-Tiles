@@ -1124,6 +1124,7 @@ function cloudSyncLevel(level) {
         if (!r.ok) return;                                      // try again next time
       }
       syncHashes.set(level.id, h);
+      if (typeof uploadLevelVideos === 'function' && level.decor && (level.decor.objects || []).some(o => o.kind === 'video')) uploadLevelVideos(level.decor, true).catch(() => {});   // so an admin can publish it with its videos
     } catch (e) { /* silent */ }
   }, 2500));
 }
