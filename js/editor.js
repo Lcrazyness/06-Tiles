@@ -22,6 +22,7 @@ const TRIG_DEFS = {
   shake: { icon: '≋', label: 'Shake', tip: 'Shake the camera', def: { strength: 10, dur: 0.5 } },
   zoom: { icon: '🔍', label: 'Camera zoom', tip: 'Zoom the whole board', def: { zoom: 1.25, dur: 0.6, ease: 'inout' } },
   random: { icon: '🎲', label: 'Randomize', tip: 'Randomly move, spin, resize, fade, recolour or hide the members of a group', def: { target: 0, each: 1, chance: 100, seed: 1, mode: 'set', dur: 0.5, ease: 'out', mv: 1, mx: 60, my: 60, rt: 0, rd: 45, sz: 0, smin: 0.7, smax: 1.4, al: 0, amin: 0.3, amax: 1, col: 0, c1: '#ff2e88', c2: '#00f0ff', c3: '#ffc93c', vis: 0, hide: 30 } },
+  tilefreeze: { icon: '❄', label: 'Freeze tiles', tip: 'Tiles stop falling for a moment, then carry on (only in real play, not the editor preview)', def: { duration: 2 } },
   laneflip: { icon: '⇅', label: 'Flip board', tip: 'Turn the board upside down (tiles rise from the bottom)', def: { on: 1, axis: 'v' } },
   speed: { icon: '⏩', label: 'Speed', tip: 'Change tile speed', def: { target: 25, transDuration: 0.5 } },
   hitbox: { icon: '▭', label: 'Hitbox', tip: 'Per-lane input boxes', def: { zoneOn: 1, z0t: 400, z0h: 140, z1t: 400, z1h: 140, z2t: 400, z2h: 140, z3t: 400, z3h: 140 } },
@@ -544,7 +545,7 @@ function edNewGroupFromSelection() {
 function addDecorObject(kind) {
   if (decorData.objects.length >= 1500) { toast('Object limit reached (1500).', 'bad'); return; }
   if (kind === 'image') { document.getElementById('decor-image-upload').click(); return; }
-  if (kind === 'video') { edReplaceVideo = false; document.getElementById('decor-video-upload').click(); return; }
+  if (kind === 'video') { edReplaceVideo = false; chooseVideoSource(); return; }
   const size = { square: [90, 90], triangle: [90, 90], circle: [90, 90], glow: [200, 200], text: [200, 60] }[kind] || [90, 90];
   const o = { id: edNextObjId++, kind, time: snapTime(editorTimer), x: GW / 2, y: GH / 2, w: size[0], h: size[1], rot: 0, alpha: 1, color: kind === 'glow' ? '#37b6ff' : '#ffffff', color2: '', layer: 'bg', z: 0, add: kind === 'glow', groups: [], img: '', text: 'Text', font: 'Poppins', size: 56, bold: true, hidden: false, locked: false, name: '', outline: false };
   decorData.objects.push(o);
@@ -578,21 +579,35 @@ document.getElementById('decor-image-upload')?.addEventListener('change', async 
   } catch (e) { toast(e.message || 'Could not add that image.', 'bad'); }
 });
 let edReplaceImage = false, edReplaceVideo = false;
+async function chooseVideoSource() {
+  if (typeof pickVideoDialog !== 'function') { document.getElementById('decor-video-upload').click(); return; }
+  const pick = await pickVideoDialog();
+  if (!pick) { edReplaceVideo = false; return; }
+  if (pick.file) { document.getElementById('decor-video-upload').click(); return; }
+  placeVideoObject({ sha: pick.lib.sha, dur: pick.lib.dur, w: pick.lib.w || 16, h: pick.lib.h || 9, name: pick.lib.name });
+}
+function placeVideoObject(v) {
+  const used = new Set(decorData.objects.filter(x => x.kind === 'video').map(x => x.vid));
+  const target = [...edSelObjs][0];
+  if (!used.has(v.sha) && used.size >= 6 && !(edReplaceVideo && target && target.kind === 'video' && decorData.objects.filter(x => x.kind === 'video' && x.vid === target.vid).length === 1)) { toast('A level can use 6 different videos.', 'bad'); return; }
+  if (edReplaceVideo && target && target.kind === 'video') { Object.assign(target, { vid: v.sha, vdur: v.dur, vw: v.w, vh: v.h, vname: v.name || '' }); edReplaceVideo = false; edChanged(); renderInspector(); return; }
+  if (decorData.objects.length >= 1500) { toast('Object limit reached (1500).', 'bad'); return; }
+  const sc = Math.min(1, 240 / Math.max(v.w, v.h));
+  const o = { id: edNextObjId++, kind: 'video', time: snapTime(editorTimer), x: GW / 2, y: GH / 2, w: Math.round(v.w * sc), h: Math.round(v.h * sc), rot: 0, alpha: 1, color: '#ffffff', color2: '', layer: 'bg', z: 0, add: false, groups: [], img: '', text: '', font: '', size: 40, bold: false, hidden: false, locked: false, name: '', outline: false, vid: v.sha, vdur: v.dur, vw: v.w, vh: v.h, vname: v.name || '', vloop: true, vstart: 0, vspeed: 1 };
+  decorData.objects.push(o); setEdTool('place'); edSelectObj(o, false, true); edChanged(); renderPalette();
+  toast('Video added.', 'good');
+}
 document.getElementById('decor-video-upload')?.addEventListener('change', async ev => {
   const file = ev.target.files && ev.target.files[0]; ev.target.value = '';
   if (!file) return;
   try {
     if (typeof videoFromFile !== 'function') throw new Error('video.js is missing from your site files - upload js/video.js and reload.');
     const v = await videoFromFile(file);
-    const used = new Set(decorData.objects.filter(x => x.kind === 'video').map(x => x.vid));
-    const target = [...edSelObjs][0];
-    if (!used.has(v.sha) && used.size >= 3 && !(edReplaceVideo && target && target.kind === 'video' && decorData.objects.filter(x => x.kind === 'video' && x.vid === target.vid).length === 1)) { toast('A level can use 3 different videos.', 'bad'); return; }
-    if (edReplaceVideo && target && target.kind === 'video') { Object.assign(target, { vid: v.sha, vdur: v.dur, vw: v.w, vh: v.h }); edReplaceVideo = false; edChanged(); renderInspector(); return; }
-    if (decorData.objects.length >= 1500) { toast('Object limit reached (1500).', 'bad'); return; }
-    const sc = Math.min(1, 240 / Math.max(v.w, v.h));
-    const o = { id: edNextObjId++, kind: 'video', time: snapTime(editorTimer), x: GW / 2, y: GH / 2, w: Math.round(v.w * sc), h: Math.round(v.h * sc), rot: 0, alpha: 1, color: '#ffffff', color2: '', layer: 'bg', z: 0, add: false, groups: [], img: '', text: '', font: '', size: 40, bold: false, hidden: false, locked: false, name: '', outline: false, vid: v.sha, vdur: v.dur, vw: v.w, vh: v.h, vloop: true, vstart: 0, vspeed: 1 };
-    decorData.objects.push(o); setEdTool('place'); edSelectObj(o, false, true); edChanged(); renderPalette();
-    toast('Video added (' + Math.round(v.dur) + 's). It uploads when you publish.', 'good');
+    const admin = typeof getAuthUser === 'function' && getAuthUser() && getAuthUser().isAdmin && getAuthToken();
+    placeVideoObject(v);
+    if (admin && await uiConfirm('Share this video in the library so every editor can use it without uploading? (It uploads now.)', 'Share')) {
+      try { await uploadLevelVideos({ objects: [{ kind: 'video', vid: v.sha, vdur: v.dur, vw: v.w, vh: v.h, vname: v.name }] }, false, true); toast('Shared in the video library.', 'good'); } catch (err) { toast(err.message, 'bad'); }
+    }
   } catch (e) { toast(e.message || 'Could not add that video.', 'bad'); }
 });
 
@@ -627,7 +642,13 @@ function trigFields(fx) {
       const on = [{ v: 1, l: 'On' }, { v: 0, l: 'Off' }], pc = (label, key, d) => num(label, key, { step: 5, min: 0, max: 100, def: d });
       num('Group to randomize', 'target', { step: 1, min: 0, def: 0, hint: 'Pick the group: tile #N = N · object = 10000 + id · your own groups 20001+. For "each member" use a real group (not 0).' });
       sel('Randomize', 'each', [{ v: 1, l: 'Each member separately' }, { v: 0, l: 'The whole group as one' }], { rebuild: false });
-      sel('What to do', 'mode', [{ v: 'set', l: 'Set random values' }, { v: 'add', l: 'Add to current values' }, { v: 'reset', l: 'Reset members to normal' }], { str: true, rebuild: true });
+      sel('What to do', 'mode', [{ v: 'set', l: 'Set random values' }, { v: 'add', l: 'Add to current values' }, { v: 'reset', l: 'Reset members to normal' }, { v: 'shuffle', l: 'Shuffle lanes (the tiles swap places)' }], { str: true, rebuild: true });
+      if (fx.mode === 'shuffle') {
+        sel('Each attempt', 'fixed', [{ v: 0, l: 'New shuffle every attempt' }, { v: 1, l: 'Same shuffle every attempt (uses the seed)' }], { rebuild: true });
+        if (Number(fx.fixed) === 1) num('Seed', 'seed', { step: 1, min: 0, max: 99999, def: 1 });
+        num('Swap time (s, 0 = instant)', 'dur', { step: 0.1, min: 0 }); sel('Easing', 'ease', EASES, { str: true });
+        break;
+      }
       pc('Chance a member is affected (%)', 'chance', 100);
       sel('Each attempt', 'fixed', [{ v: 0, l: 'New random result every attempt' }, { v: 1, l: 'Same result every attempt (uses the seed)' }], { rebuild: true });
       if (Number(fx.fixed) === 1) num('Seed', 'seed', { step: 1, min: 0, max: 99999, def: 1, hint: 'Same seed = same result every attempt. Change it for a different pattern.' });
@@ -644,6 +665,7 @@ function trigFields(fx) {
       }
       break;
     }
+    case 'tilefreeze': num('Freeze for (s)', 'duration', { step: 0.1, min: 0.1, max: 30, def: 2, hint: 'Tiles already on screen hover, and tiles that have not appeared yet wait. Everything after this moves later by this much - place the next tiles that much later.' }); break;
     case 'laneflip': if (!fx.axis) fx.axis = 'h'; sel('Flip', 'on', [{ v: 1, l: 'On' }, { v: 0, l: 'Off' }]); sel('Direction', 'axis', [{ v: 'v', l: 'Upside down' }, { v: 'h', l: 'Left-right' }], { str: true }); break;
     case 'speed': num('Target speed', 'target', { step: 1, min: 5, max: 60, hint: 'Normal = 18. 0.5× = 10 · 1.5× = 26 · 2× = 34' }); num('Transition (s, 0 = instant)', 'transDuration', { step: 0.05, min: 0 }); break;
     case 'hitbox': sel('Hitboxes', 'zoneOn', [{ v: 1, l: 'On (drag the boxes)' }, { v: 0, l: 'Off (tap anywhere)' }]); break;
@@ -695,6 +717,17 @@ function renderInspector() {
       tsel.value = ts.every(t => (t.taps || 1) === (ts[0].taps || 1)) ? (ts[0].taps || 1) : 1;
       tsel.onchange = () => { const v = Number(tsel.value); ts.forEach(t => { if (v > 1) t.taps = v; else delete t.taps; }); edChanged(true); };
       tp.appendChild(tsel); host.appendChild(tp);
+      const fk = el('div', 'inspector-field'); fk.appendChild(el('label', '', 'Tile type'));
+      const fsel = el('select'); [[0, 'Real tile'], [1, 'Fake - see-through, ignore it'], [2, 'Decoy - kills you if tapped']].forEach(([v, l]) => { const o = el('option', '', l); o.value = v; fsel.appendChild(o); });
+      fsel.value = ts.every(t => (t.fake || 0) === (ts[0].fake || 0)) ? (ts[0].fake || 0) : 0;
+      fsel.onchange = () => { const v = Number(fsel.value); ts.forEach(t => { if (v) t.fake = v; else { delete t.fake; delete t.fakeAlpha; } }); edChanged(); };
+      fk.appendChild(fsel); host.appendChild(fk);
+      if (ts.every(t => t.fake)) {
+        const fa = el('div', 'inspector-field'); fa.appendChild(el('label', '', 'See-through (0.05 = ghost, 1 = solid)'));
+        const fin = el('input'); fin.type = 'number'; fin.step = 0.05; fin.min = 0.05; fin.max = 1; fin.value = ts[0].fakeAlpha !== undefined && ts[0].fakeAlpha !== '' ? ts[0].fakeAlpha : (ts[0].fake === 1 ? 0.35 : 1);
+        fin.oninput = () => { const v = Math.max(0.05, Math.min(1, parseFloat(fin.value) || 0.35)); ts.forEach(t => { t.fakeAlpha = v; }); edChanged(true); };
+        fa.appendChild(fin); host.appendChild(fa);
+      }
     }
     groupsRow(host, ts);
   }
@@ -772,9 +805,9 @@ function objectInspector(host, o) {
   groupsRow(host, [o]);
   if (o.kind === 'video') {
     propRow(host, { label: 'Loop', key: 'vloop', kind: 'check' }, o, ch);
-    propRow(host, { label: 'Start at (s into video)', key: 'vstart', kind: 'number', step: 0.5, min: 0, max: 180, def: 0 }, o, ch);
+    propRow(host, { label: 'Start at (s into video)', key: 'vstart', kind: 'number', step: 0.5, min: 0, def: 0 }, o, ch);
     propRow(host, { label: 'Speed', key: 'vspeed', kind: 'number', step: 0.25, min: 0.25, max: 4, def: 1 }, o, ch);
-    btn(host, '🎬 Replace video', () => { edReplaceVideo = true; document.getElementById('decor-video-upload').click(); });
+    btn(host, '🎬 Replace video', () => { edReplaceVideo = true; chooseVideoSource(); });
   }
   if (o.kind === 'image') btn(host, '🖼 Replace image', () => { edReplaceImage = true; document.getElementById('decor-image-upload').click(); });
   const r = el('div', 'btn-row'); host.appendChild(r);
@@ -981,7 +1014,8 @@ function drawEditorLayerRaw() {
       const sel = edSelTiles.has(t), pr = presetOf(t.preset), flipped = laneFlipAt(t.time);
       ctx.save();
       if (pr) { ctx.globalAlpha = 1; drawPresetBox(ctx, r.x - 1, r.top, r.w + 2, r.h, Object.assign({}, pr, { wide: 1, tall: 1 }), 0.92); }
-      else { ctx.globalAlpha = 0.85; ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.6)" : "rgba(0, 235, 255, 0.55)"; ctx.fillRect(r.x, r.top, r.w, r.h); }
+      else { ctx.globalAlpha = 0.85 * (t.fake ? Math.max(0.3, t.fakeAlpha !== undefined && t.fakeAlpha !== '' ? t.fakeAlpha : (t.fake === 1 ? 0.35 : 1)) : 1); ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.6)" : "rgba(0, 235, 255, 0.55)"; ctx.fillRect(r.x, r.top, r.w, r.h); }
+      if (t.fake) { ctx.globalAlpha = 1; ctx.fillStyle = t.fake === 2 ? '#ff4d4d' : '#ffffff'; ctx.font = '700 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(t.fake === 2 ? 'DECOY' : 'FAKE', r.x + r.w / 2, r.top + 3); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; }
       if (t.isHold) { ctx.globalAlpha = 0.55; ctx.fillStyle = '#ff8a3d'; ctx.fillRect(r.x + r.w * 0.3, r.top, r.w * 0.4, r.h - tileH); }
       if ((t.taps || 1) > 1) { ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.font = '800 ' + Math.round(Math.min(34, tileH * 0.35)) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('×' + t.taps, r.x + r.w / 2, r.bottom - tileH / 2); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; }
       ctx.globalAlpha = 1; ctx.strokeStyle = sel ? '#ffffff' : "rgba(255,255,255,0.55)"; ctx.lineWidth = sel ? 2.5 : 1; if (sel) ctx.setLineDash([5, 3]);
