@@ -755,7 +755,7 @@ async function adminEditLevel(id) {
 }
 function adminExtraOptions(p) {
   return [{ value: 'impersonate', label: '👤 Log in as this player' }, { value: 'removestats', label: '🧹 Remove specific stats…' }, { value: 'rename', label: '✎ Rename player' }, p.muted ? { value: 'unmute', label: '🔊 Unmute' } : { value: 'mute', label: '🔇 Mute (no comments/publishing)' },
-    { value: 'stars', label: '★ Give / take bonus stars' }, ...(p.owner ? [] : [{ value: 'password', label: '🔑 Set a new password' }]),
+    { value: 'stat', label: '📈 Give / set any stat (stars, points, scores…)' }, { value: 'stars', label: '★ Give / take bonus stars' }, ...(p.owner ? [] : [{ value: 'password', label: '🔑 Set a new password' }]),
     { value: 'dellevels', label: '🗑 Delete all their levels' }, ...(p.isAdmin ? [] : [{ value: 'delaccount', label: '☠ Delete account' }])];
 }
 async function adminExtraAction(action, p) {
@@ -767,6 +767,15 @@ async function adminExtraAction(action, p) {
   if (action === 'mute') {
     const r = await openFormDialog({ title: 'Mute ' + p.username, message: 'Muted players can\'t comment or publish levels.', fields: [{ id: 'amount', label: 'Length', type: 'number', value: '1', maxlength: 6 }, { id: 'unit', label: 'Unit', type: 'select', value: 'days', options: [{ value: 'minutes', label: 'Minutes' }, { value: 'hours', label: 'Hours' }, { value: 'days', label: 'Days' }, { value: 'perm', label: 'Permanent' }] }], okText: 'Mute', danger: true });
     if (r) { const per = { minutes: 1, hours: 60, days: 1440 }; await post('/mute', r.unit === 'perm' ? { permanent: true } : { minutes: Math.round(Number(r.amount) * per[r.unit]) }, 'Muted.'); }
+    return true;
+  }
+  if (action === 'stat') {
+    const STATS = [['stars', 'Stars'], ['extreme_points', 'Extreme points'], ['creator_points', 'Creator points'], ['games_completed', 'Levels completed'], ['games_played', 'Games played'], ['total_score', 'Total score'], ['best_score', 'Best score'], ['total_notes_hit', 'Notes hit'], ['battle_wins', 'Battle wins'], ['battle_losses', 'Battle losses'], ['elo', 'Battle rating']];
+    const r = await openFormDialog({ title: 'Change a stat for ' + p.username, message: 'Add gives that amount on top (negative takes away). Set makes the stat exactly that number.', fields: [
+      { id: 'stat', label: 'Stat', type: 'select', value: 'stars', options: STATS.map(x => ({ value: x[0], label: x[1] })) },
+      { id: 'mode', label: 'Do what', type: 'select', value: 'add', options: [{ value: 'add', label: 'Add (or take away with a minus)' }, { value: 'set', label: 'Set to exactly' }] },
+      { id: 'amount', label: 'Amount', type: 'number', value: '10', maxlength: 10 }], okText: 'Apply' });
+    if (r) await post('/stat', { stat: r.stat, mode: r.mode, amount: Number(r.amount) }, 'Stat updated.');
     return true;
   }
   if (action === 'stars') { const r = await openFormDialog({ title: 'Bonus stars for ' + p.username, message: 'Positive adds stars, negative removes them.', fields: [{ id: 'd', label: 'Amount', type: 'number', value: '5', maxlength: 5 }], okText: 'Apply' }); if (r) await post('/stars', { delta: Number(r.d) }, 'Stars updated.'); return true; }
