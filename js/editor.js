@@ -665,7 +665,7 @@ function trigFields(fx) {
       }
       break;
     }
-    case 'tilefreeze': num('Freeze for (s)', 'duration', { step: 0.1, min: 0.1, max: 30, def: 2, hint: 'Tiles already on screen hover, and tiles that have not appeared yet wait. Everything after this moves later by this much - place the next tiles that much later.' }); break;
+    case 'tilefreeze': num('Freeze for (s)', 'duration', { step: 0.1, min: 0.1, max: 30, def: 2, hint: 'Tiles already on screen hover, and tiles that have not appeared yet wait. Every tile after this lands this much later than its time on the timeline. To land a tile on a beat at music time X after the freeze, place it at X minus the freeze time. (Easiest: make this the last part of the level.)' }); break;
     case 'laneflip': if (!fx.axis) fx.axis = 'h'; sel('Flip', 'on', [{ v: 1, l: 'On' }, { v: 0, l: 'Off' }]); sel('Direction', 'axis', [{ v: 'v', l: 'Upside down' }, { v: 'h', l: 'Left-right' }], { str: true }); break;
     case 'speed': num('Target speed', 'target', { step: 1, min: 5, max: 60, hint: 'Normal = 18. 0.5× = 10 · 1.5× = 26 · 2× = 34' }); num('Transition (s, 0 = instant)', 'transDuration', { step: 0.05, min: 0 }); break;
     case 'hitbox': sel('Hitboxes', 'zoneOn', [{ v: 1, l: 'On (drag the boxes)' }, { v: 0, l: 'Off (tap anywhere)' }]); break;
@@ -711,6 +711,39 @@ function renderInspector() {
     ps.value = nT === 1 && Number.isInteger(ts[0].preset) ? ts[0].preset : (ts.every(t => t.preset === ts[0].preset) && Number.isInteger(ts[0].preset) ? ts[0].preset : -1);
     ps.onchange = () => { const v = Number(ps.value); ts.forEach(t => { if (v >= 0) t.preset = v; else delete t.preset; }); edChanged(true); };
     pr.appendChild(ps); host.appendChild(pr);
+    {   // tile kind + hold tile settings
+      const kd = el('div', 'inspector-field'); kd.appendChild(el('label', '', 'Tile kind'));
+      const ksel = el('select'); [[0, 'Tap tile'], [1, 'Hold tile']].forEach(([v, l]) => { const o = el('option', '', l); o.value = v; ksel.appendChild(o); });
+      ksel.value = ts.every(t => t.isHold) ? 1 : 0;
+      ksel.onchange = () => {
+        const hold = Number(ksel.value) === 1;
+        ts.forEach(t => {
+          if (hold) { t.isHold = true; t.holdDuration = t.holdDuration || Math.max(getEditorGridStep(), 1); delete t.taps; delete t.fake; delete t.fakeAlpha; }
+          else { t.isHold = false; t.holdDuration = 0; ['maxHold', 'hstyle', 'barColor', 'stemColor', 'ringColor', 'ringFill', 'barAlpha', 'stemW', 'ringR', 'barRadius'].forEach(k => delete t[k]); }
+        });
+        edChanged();
+      };
+      kd.appendChild(ksel); host.appendChild(kd);
+      const holds = ts.filter(t => t.isHold);
+      if (holds.length) {
+        const hp = key => { const o = {}; Object.defineProperty(o, key, { get: () => holds[0][key], set: v => holds.forEach(h => { h[key] = v; }) }); return o; };
+        const hch = () => edChanged(true);
+        host.appendChild(el('div', 'selected-effect-title', '<span>HOLD TILE</span><b>' + holds.length + (holds.length === 1 ? ' tile' : ' tiles') + '</b>'));
+        propRow(host, { label: 'Hold length (s)', key: 'holdDuration', kind: 'number', step: 0.05, min: 0.1, max: 30, def: 1, hint: 'How long the bar takes to reach the top of the tile.' }, hp('holdDuration'), hch);
+        propRow(host, { label: 'Max Hold (can\'t let go early)', key: 'maxHold', kind: 'check', hint: 'On: letting go before the bar is full costs a life / kills you. Off: you can let go any time and it still gives 10 score.' }, hp('maxHold'), () => { edChanged(true); });
+        propRow(host, { label: 'Look', key: 'hstyle', kind: 'select', str: true, options: [{ v: 'stem', l: 'Stem + ring + rising bar' }, { v: 'block', l: 'Block (old look)' }] }, { get hstyle() { return holds[0].hstyle || 'stem'; }, set hstyle(v) { holds.forEach(h => { if (v === 'block') h.hstyle = 'block'; else delete h.hstyle; }); } }, hch);
+        propRow(host, { label: 'Bar color', key: 'barColor', kind: 'color', empty: '#4f8fbf' }, hp('barColor'), hch);
+        propRow(host, { label: 'Bar opacity', key: 'barAlpha', kind: 'number', step: 0.05, min: 0.1, max: 1, def: 1 }, hp('barAlpha'), hch);
+        propRow(host, { label: 'Bar corner roundness', key: 'barRadius', kind: 'number', step: 2, min: 0, max: 45, def: 26 }, hp('barRadius'), hch);
+        propRow(host, { label: 'Stem color', key: 'stemColor', kind: 'color', empty: '#ffffff' }, hp('stemColor'), hch);
+        propRow(host, { label: 'Stem width', key: 'stemW', kind: 'number', step: 1, min: 2, max: 24, def: 5 }, hp('stemW'), hch);
+        propRow(host, { label: 'Ring color', key: 'ringColor', kind: 'color', empty: '#ffffff' }, hp('ringColor'), hch);
+        propRow(host, { label: 'Ring fill', key: 'ringFill', kind: 'color', empty: '#000000' }, hp('ringFill'), hch);
+        propRow(host, { label: 'Ring size', key: 'ringR', kind: 'number', step: 1, min: 8, max: 40, def: 24 }, hp('ringR'), hch);
+        const rs = el('div', 'btn-row'); host.appendChild(rs);
+        btn(rs, 'Reset hold look', () => { holds.forEach(h => ['hstyle', 'barColor', 'stemColor', 'ringColor', 'ringFill', 'barAlpha', 'stemW', 'ringR', 'barRadius'].forEach(k => delete h[k])); edChanged(); }, 'btn-ghost');
+      }
+    }
     if (ts.every(t => !t.isHold)) {
       const tp = el('div', 'inspector-field'); tp.appendChild(el('label', '', 'Taps needed'));
       const tsel = el('select'); [1, 2, 3, 4, 5, 6].forEach(n => { const o = el('option', '', n === 1 ? 'Normal (1 tap)' : n + ' taps'); o.value = n; tsel.appendChild(o); });
@@ -1013,10 +1046,12 @@ function drawEditorLayerRaw() {
       if (r.top > GH + 4 || r.top + r.h < -4) return;
       const sel = edSelTiles.has(t), pr = presetOf(t.preset), flipped = laneFlipAt(t.time);
       ctx.save();
-      if (pr) { ctx.globalAlpha = 1; drawPresetBox(ctx, r.x - 1, r.top, r.w + 2, r.h, Object.assign({}, pr, { wide: 1, tall: 1 }), 0.92); }
-      else { ctx.globalAlpha = 0.85 * (t.fake ? Math.max(0.3, t.fakeAlpha !== undefined && t.fakeAlpha !== '' ? t.fakeAlpha : (t.fake === 1 ? 0.35 : 1)) : 1); ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.6)" : "rgba(0, 235, 255, 0.55)"; ctx.fillRect(r.x, r.top, r.w, r.h); }
+      const hcfg = t.isHold ? holdCfg(t) : null, stemH = hcfg && hcfg.style === 'stem';
+      if (stemH) { drawStemHold(ctx, t.lane * laneW, laneW, r.top + r.h - tileH, r.top, r.h - tileH, sel ? 0.5 : -1, 1, null, hcfg, false); }
+      else if (pr) { ctx.globalAlpha = 1; drawPresetBox(ctx, r.x - 1, r.top, r.w + 2, r.h, Object.assign({}, pr, { wide: 1, tall: 1 }), 0.92); }
+      else if (!stemH) { ctx.globalAlpha = 0.85 * (t.fake ? Math.max(0.3, t.fakeAlpha !== undefined && t.fakeAlpha !== '' ? t.fakeAlpha : (t.fake === 1 ? 0.35 : 1)) : 1); ctx.fillStyle = t.isHold ? "rgba(255, 100, 0, 0.6)" : "rgba(0, 235, 255, 0.55)"; ctx.fillRect(r.x, r.top, r.w, r.h); }
       if (t.fake) { ctx.globalAlpha = 1; ctx.fillStyle = t.fake === 2 ? '#ff4d4d' : '#ffffff'; ctx.font = '700 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(t.fake === 2 ? 'DECOY' : 'FAKE', r.x + r.w / 2, r.top + 3); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; }
-      if (t.isHold) { ctx.globalAlpha = 0.55; ctx.fillStyle = '#ff8a3d'; ctx.fillRect(r.x + r.w * 0.3, r.top, r.w * 0.4, r.h - tileH); }
+      if (t.isHold && !stemH) { ctx.globalAlpha = 0.55; ctx.fillStyle = '#ff8a3d'; ctx.fillRect(r.x + r.w * 0.3, r.top, r.w * 0.4, r.h - tileH); }
       if ((t.taps || 1) > 1) { ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.font = '800 ' + Math.round(Math.min(34, tileH * 0.35)) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('×' + t.taps, r.x + r.w / 2, r.bottom - tileH / 2); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; }
       ctx.globalAlpha = 1; ctx.strokeStyle = sel ? '#ffffff' : "rgba(255,255,255,0.55)"; ctx.lineWidth = sel ? 2.5 : 1; if (sel) ctx.setLineDash([5, 3]);
       ctx.strokeRect(r.x + 0.5, r.top + 0.5, r.w - 1, r.h - 1);
