@@ -106,6 +106,9 @@
       <div class="settings-row"><span>Metronome <small>(a click on every beat of the level's BPM)</small></span><input type="checkbox" id="setting-metronome"></div>
       <div class="settings-row"><span>Timing bar after each run <small>(early / late)</small></span><input type="checkbox" id="setting-tbar"></div>
       <div class="settings-row"><span>Let friends watch my runs live</span><input type="checkbox" id="setting-liveshare"></div>
+      <div class="settings-row"><span>Long-press hold bar <small>(hold a key and a hold bar grows - looks only)</small></span><input type="checkbox" id="setting-lp"></div>
+      <div class="settings-row"><span>Press-and-hold time (s)</span><input type="number" id="setting-lpsec" class="num-in" min="0.1" max="10" step="0.1" style="width:80px!important"></div>
+      <div class="settings-row"><span>Long-press hold length (s)</span><input type="number" id="setting-lplen" class="num-in" min="0.2" max="30" step="0.1" style="width:80px!important"></div>
       <div class="settings-row"><span>Mouse cursor snaps to lanes <small>(PC mouse)</small></span><input type="checkbox" id="setting-mousesnap"></div>
       <div class="settings-row"><span>Snap position</span><select id="setting-mousesnap-pos" class="num-in" style="width:130px!important"><option value="mid">Middle of the lane</option><option value="bottom">Bottom, by the hit line</option></select></div>
       <div class="settings-row"><span>Show ghost <small>(race a see-through run)</small></span><input type="checkbox" id="setting-ghost"></div>
@@ -300,14 +303,14 @@
 <script src="js/config.js?v=20261014-2"></script>
 <script src="js/state.js?v=20261020-1"></script>
 <script src="js/ui.js?v=20261020-1"></script>
-<script src="js/storage.js?v=20261021-1"></script>
+<script src="js/storage.js?v=20261022-1"></script>
 <script src="js/video.js?v=20261021-1"></script>
 <script src="js/auth.js?v=20261014-2"></script>
-<script src="js/game.js?v=20261021-1"></script>
-<script src="js/editor.js?v=20261021-1"></script>
-<script src="js/browse.js?v=20261021-1"></script>
+<script src="js/game.js?v=20261022-1"></script>
+<script src="js/editor.js?v=20261022-1"></script>
+<script src="js/browse.js?v=20261022-1"></script>
 <script src="js/battle.js?v=20261020-1"></script>
-<script src="js/social.js?v=20261020-1"></script>
+<script src="js/social.js?v=20261022-1"></script>
   <script src="js/main.js?v=20261014-2"></script>
 </body>
 </html>
