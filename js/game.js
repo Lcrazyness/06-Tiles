@@ -343,6 +343,43 @@ function decorEditorSync(effects, t) {
 //   * Hotkeys are ignored while typing in a text box.
 // ============================================================================
 
+// ---- hold tiles: a stem with a ring on the end; when you press it a bar rises up to the top of the tile as you hold ----
+function holdCfg(n) {
+  const col = s => /^#[0-9a-f]{6}$/i.test(String(s || '')) ? s : null, num = (v, d, lo, hi) => { if (v === '' || v === null || v === undefined) return d; v = Number(v); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
+  return { maxHold: !!n.maxHold, style: n.hstyle === 'block' ? 'block' : 'stem', bar: col(n.barColor) || '#4f8fbf', stem: col(n.stemColor) || '#ffffff', ring: col(n.ringColor) || '#ffffff', ringFill: col(n.ringFill) || '#000000',
+    barA: num(n.barAlpha, 1, 0.1, 1), stemW: num(n.stemW, 5, 2, 24), ringR: num(n.ringR, 24, 8, 40), barR: num(n.barRadius, 26, 0, 45) };
+}
+// p < 0: not pressed yet; p 0..1: how far the bar has risen
+function drawStemHold(c, lx, lw, headTop, tailTop, holdLen, p, alpha, tint, cfg, failed) {
+  const cx = lx + lw / 2, ringY = headTop + TILE_H / 2, R = Math.min(cfg.ringR, lw / 2 - 3);
+  c.save();
+  if (p >= 0) {
+    const h = TILE_H + p * holdLen, top = headTop + TILE_H - h, w = lw - 4, x = lx + 2, r = Math.max(0, Math.min(cfg.barR, w / 2, h / 2));
+    c.globalAlpha = Math.max(0, Math.min(1, alpha * cfg.barA)); c.fillStyle = failed ? '#c0392b' : (tint || cfg.bar);
+    c.beginPath(); c.moveTo(x, top + h); c.lineTo(x, top + r); c.arcTo(x, top, x + r, top, r); c.lineTo(x + w - r, top); c.arcTo(x + w, top, x + w, top + r, r); c.lineTo(x + w, top + h); c.closePath(); c.fill();
+  }
+  c.globalAlpha = Math.max(0, Math.min(1, alpha));
+  c.fillStyle = tint || cfg.stem; c.fillRect(cx - cfg.stemW / 2, tailTop, cfg.stemW, Math.max(0, ringY - tailTop));
+  c.beginPath(); c.arc(cx, ringY, R, 0, Math.PI * 2); c.fillStyle = cfg.ringFill; c.fill();
+  c.lineWidth = Math.max(3, R / 6); c.strokeStyle = tint || cfg.ring; c.stroke();
+  c.restore();
+}
+// player setting: hold a key for a while and a hold bar grows in that lane (looks only - no score, no penalty)
+let lpOn = lsGet('et_lp') === '1', lpSec = Math.max(0.1, Number(lsGet('et_lpSec')) || 1), lpLen = Math.max(0.2, Number(lsGet('et_lpLen')) || 2);
+function setLongPress(on, sec, len) { lpOn = !!on; lpSec = Math.max(0.1, Math.min(10, Number(sec) || 1)); lpLen = Math.max(0.2, Math.min(30, Number(len) || 2)); }
+const lpDown = [0, 0, 0, 0], lpStart = [0, 0, 0, 0];
+function drawLongPress() {
+  if (!lpOn || !gameActive || isPaused || inEditor || isDead) { lpDown.fill(0); lpStart.fill(0); return; }
+  const now = performance.now(), cfg = holdCfg({});
+  for (let l = 0; l < 4; l++) {
+    if (keys[keyMap[l]]) { if (!lpDown[l]) lpDown[l] = now; if (!lpStart[l] && now - lpDown[l] >= lpSec * 1000) lpStart[l] = now; }
+    else { lpDown[l] = 0; lpStart[l] = 0; }
+    if (lpStart[l]) {
+      const p = Math.min(1, (now - lpStart[l]) / (lpLen * 1000)), len = Math.min(lineY - TILE_H, lpLen * speed * 60), headTop = lineY - TILE_H / 2;
+      drawStemHold(ctx, l * laneW, laneW, headTop, headTop - len, len, p, 0.9, null, cfg, false);
+    }
+  }
+}
 class Tile {
   constructor(lane, overrideY = -TILE_H, isHold = false, holdDuration = 0) {
     this.lane = lane;
@@ -884,6 +921,7 @@ function updateCustomLevel(dtSec) {
     const bl = dLane[pendingTileIdx] !== undefined ? dLane[pendingTileIdx] : n.lane;
     const nt = new Tile(laneFlipAt(n.time) ? 3 - bl : bl, y, levelDisableHolds ? false : n.isHold, n.holdDuration);
     nt.noteIdx = pendingTileIdx; nt.time = n.time; nt.preset = n.preset;
+    if (nt.isHold) nt.hold = holdCfg(n);
     if (!nt.isHold && n.taps > 1) { nt.taps = Math.min(8, n.taps | 0); nt.tapsLeft = nt.taps; }
     if (!nt.isHold && (n.fake === 1 || n.fake === 2)) { nt.fake = n.fake; nt.fakeA = Number.isFinite(Number(n.fakeAlpha)) && n.fakeAlpha !== '' ? Math.max(0.05, Math.min(1, Number(n.fakeAlpha))) : (n.fake === 1 ? 0.35 : 1); }
     nt.groups = [pendingTileIdx + 1].concat(n.groups || []);
@@ -1237,7 +1275,7 @@ function gameLoop(ts) {
     const headTop = t.y - TILE_H;
     const tailTop = t.y - TILE_H - holdLength;
 
-    if (tailTop > GH) {
+    if ((t.interacted || t.fake ? tailTop : headTop) > GH) {
       if (!t.interacted && !t.fake) {
         if (handleHit()) { tiles.splice(i, 1); continue; }
         else { die("MISSED!"); return; }
@@ -1245,17 +1283,23 @@ function gameLoop(ts) {
       tiles.splice(i, 1); continue;
     }
 
-    if (t.isHold && t.interacted && !t.failed) {
-      if (tailTop < lineY - holdLength) {
-        if (!replayPlay && !keys[keyMap[t.lane]]) {
-          t.failed = true;
-          if (rec) rec.w.push(Math.round(customPlayTime * 1000));
-          if (!handleHit()) { die("RELEASED EARLY!"); return; }
-        } else {
-          score += 0.5 * dt;
-          if (Math.random() > 0.7) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY));
-        }
+    let holdP = -1;
+    if (t.isHold && t.interacted) {
+      if (t.holdY0 === undefined) t.holdY0 = t.y;
+      const hl = Math.max(1, holdLength);
+      const p = t.released ? t.relP : Math.max(0, Math.min(1, (t.y - t.holdY0) / hl));
+      if (!t.released && !t.holdDone) {
+        if (p >= 1) { t.holdDone = true; for (let k = 0; k < 10; k++) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY)); }
+        else if (!replayPlay && !keys[keyMap[t.lane]]) {
+          t.released = true; t.relP = p;
+          if (t.hold && t.hold.maxHold) {                 // "Max Hold" tile: you can't let go before the bar is full
+            t.failed = true;
+            if (rec) rec.w.push(Math.round(customPlayTime * 1000));
+            if (!handleHit()) { die("RELEASED EARLY!"); return; }
+          }
+        } else if (Math.random() > 0.8) particles.push(new Particle(t.lane * laneW + laneW / 2, lineY));
       }
+      holdP = t.holdDone ? 1 : p;
     }
 
     const ox = tileOffsetX(t);
@@ -1265,17 +1309,20 @@ function gameLoop(ts) {
     const xform = ds && (ds.dx || ds.dy || ds.rot || ds.sc !== 1);
     if (xform) { const cx = t.lane * laneW + laneW / 2 + ox, cy = headTop + TILE_H / 2; ctx.save(); ctx.translate(cx + ds.dx, cy + ds.dy); ctx.rotate(ds.rot * Math.PI / 180); ctx.scale(ds.sc, ds.sc); ctx.translate(-cx, -cy); }
     const dA = ds ? ds.a : 1, pr = presetOf(t.preset), tint = ds && ds.col;
-    if (t.isHold) {
+    const stemStyle = t.isHold && t.hold && t.hold.style === 'stem';
+    if (stemStyle) drawStemHold(ctx, t.lane * laneW + ox, laneW, headTop, tailTop, holdLength, holdP, hideMul * dA, tint, t.hold, t.failed);
+    if (t.isHold && !stemStyle) {
       if (pr) { ctx.globalAlpha = 1; drawPresetBox(ctx, t.lane * laneW + 12 + ox, tailTop, laneW - 24, holdLength, Object.assign({}, pr, { style: pr.style === 'outline' ? 'outline' : 'flat', color: pr.holdColor || pr.color, wide: 1, tall: 1, radius: Math.min(pr.radius, 10) }), (t.interacted ? 0.3 : 1) * hideMul * dA, tint); }
       else { ctx.globalAlpha = hideMul * dA; ctx.fillStyle = t.interacted ? "#333" : (tint || "#000"); ctx.fillRect(t.lane * laneW + 12 + ox, tailTop, laneW - 24, holdLength); }
     }
-    if (pr) { ctx.globalAlpha = 1; drawPresetBox(ctx, t.lane * laneW + 2 + ox, headTop, laneW - 4, TILE_H, pr, (t.interacted ? 0.25 : currentTileStyle.alpha) * hideMul * dA, tint); }
+    if (stemStyle) { /* drawn above */ }
+    else if (pr) { ctx.globalAlpha = 1; drawPresetBox(ctx, t.lane * laneW + 2 + ox, headTop, laneW - 4, TILE_H, pr, (t.interacted ? 0.25 : currentTileStyle.alpha) * hideMul * dA, tint); }
     else {
       ctx.globalAlpha = (t.interacted ? 0.25 : currentTileStyle.alpha) * hideMul * dA;
       ctx.fillStyle = t.interacted ? "#222" : (tint || tileFill());
       ctx.fillRect(t.lane * laneW + 2 + ox, headTop, laneW - 4, TILE_H);
     }
-    if (a11yCb && t.isHold) { ctx.globalAlpha = 0.8 * hideMul * dA; ctx.fillStyle = '#fff'; ctx.fillRect(t.lane * laneW + laneW / 2 - 3 + ox, tailTop, 6, holdLength + TILE_H * 0.5); }   // hold tiles get a white spine (not just a different colour)
+    if (a11yCb && t.isHold && !stemStyle) { ctx.globalAlpha = 0.8 * hideMul * dA; ctx.fillStyle = '#fff'; ctx.fillRect(t.lane * laneW + laneW / 2 - 3 + ox, tailTop, 6, holdLength + TILE_H * 0.5); }   // hold tiles get a white spine (not just a different colour)
     if (a11yOutline && !t.interacted) { ctx.globalAlpha = Math.max(0.5, hideMul * dA); ctx.strokeStyle = '#fff'; ctx.lineWidth = a11yOutline === 2 ? 5 : 2.5; ctx.strokeRect(t.lane * laneW + 3 + ox, headTop + 1, laneW - 6, TILE_H - 2); }
     if (t.tapsLeft > 0 && !t.interacted) {
       ctx.globalAlpha = Math.max(0.35, hideMul * dA); ctx.fillStyle = '#fff'; ctx.font = '800 44px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1327,6 +1374,7 @@ function gameLoop(ts) {
   }
   ctx.globalAlpha = 1.0;
   if (dVFlip) ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  drawLongPress();
   drawMouseSnap();
 }
 
