@@ -195,6 +195,9 @@ function initGhostSettings() {
   if (tb) { tb.checked = timingBarOn; tb.addEventListener('change', () => { try { localStorage.setItem('et_tbar', tb.checked ? '1' : '0'); } catch (e) {} setRhythm('tbar', tb.checked); }); }
   const ls = document.getElementById('setting-liveshare');
   if (ls) { ls.checked = liveShareOn(); ls.addEventListener('change', () => { try { localStorage.setItem('et_liveShare', ls.checked ? '1' : '0'); } catch (e) {} }); }
+  const lpc = document.getElementById('setting-lp'), lps = document.getElementById('setting-lpsec'), lpl = document.getElementById('setting-lplen');
+  const lpSave = () => { try { localStorage.setItem('et_lp', lpc.checked ? '1' : '0'); localStorage.setItem('et_lpSec', String(lps.value)); localStorage.setItem('et_lpLen', String(lpl.value)); } catch (e) {} setLongPress(lpc.checked, lps.value, lpl.value); };
+  if (lpc && lps && lpl) { lpc.checked = lpOn; lps.value = lpSec; lpl.value = lpLen; [lpc, lps, lpl].forEach(x => x.addEventListener('change', lpSave)); }
   const ms = document.getElementById('setting-mousesnap'), mp = document.getElementById('setting-mousesnap-pos');
   if (ms) { ms.checked = mouseSnapOn; ms.addEventListener('change', () => { try { localStorage.setItem('et_mouseSnap', ms.checked ? '1' : '0'); } catch (e) {} setMouseSnap(ms.checked, mp && mp.value); }); }
   if (mp) { mp.value = mouseSnapPos; mp.addEventListener('change', () => { try { localStorage.setItem('et_mouseSnapPos', mp.value); } catch (e) {} setMouseSnap(ms ? ms.checked : true, mp.value); }); }
