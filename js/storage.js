@@ -158,12 +158,12 @@ function prunedDecor() {
 // what makes a level "the same level" for verification: the notes + the effects that change how it plays
 function isGameplayRandom(e) { return e && e.type === 'random' && (Number(e.gp) === 1 || e.mode === 'shuffle') && e.mode !== 'reset'; }
 function levelHashOf(data, effects) {
-  return hashString(JSON.stringify([(data || []).map(t => t.fake ? [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0, t.taps || 1, t.fake] : (t.taps || 1) > 1 ? [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0, t.taps] : [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0]),
+  return hashString(JSON.stringify([(data || []).map(t => t.isHold && t.maxHold ? [t.lane, t.time, 1, t.holdDuration || 0, 1, 0, 'm'] : t.fake ? [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0, t.taps || 1, t.fake] : (t.taps || 1) > 1 ? [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0, t.taps] : [t.lane, t.time, t.isHold ? 1 : 0, t.holdDuration || 0]),
     (effects || []).filter(e => ['speed', 'hitbox', 'laneflip'].includes(e.type)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])
       .concat((effects || []).filter(isGameplayRandom).map(e => ['random', e.time, e.target, e.each, e.seed, e.chance, e.mode, e.fixed]))
       .concat((effects || []).filter(e => e.type === 'tilefreeze').map(e => ['freeze', e.time, e.duration]))]));
 }
-function tileKey(t) { return [t.lane, t.time, t.isHold ? 1 : 0, t.isHold ? (t.holdDuration || 0) : 0, (t.taps || 1) > 1 ? t.taps : 1].concat(t.fake ? [t.fake] : []).join('|'); }
+function tileKey(t) { return [t.lane, t.time, t.isHold ? 1 : 0, t.isHold ? (t.holdDuration || 0) : 0, (t.taps || 1) > 1 ? t.taps : 1].concat(t.fake ? [t.fake] : []).concat(t.isHold && t.maxHold ? ['m'] : []).join('|'); }
 function gameplayFx(effects) { return JSON.stringify((effects || []).filter(e => ['speed', 'hitbox', 'laneflip', 'tilefreeze'].includes(e.type) || isGameplayRandom(e)).map(e => [e.type, e.time, e.target, e.on, e.transDuration, e.zoneOn, e.z0t, e.z0h, e.z1t, e.z1h, e.z2t, e.z2h, e.z3t, e.z3h])); }
 // true when the new version only REMOVES tiles (music/decor may change) compared with the last published version
 function isNerfUpdate() {
@@ -497,3 +497,4 @@ async function draftPublishFlow() {
     await uiAlert('"' + currentEditingName + '" is live!', 'Published');
   } catch (e) { await uiAlert(e.message || 'Could not publish.', 'Publish failed'); }
 }
+
