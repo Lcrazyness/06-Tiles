@@ -298,6 +298,7 @@ async function loadAdminPanel(tab) {
   };
   toggleMenu('admin-panel');
   if (!getAuthToken()) { draw('<div class="empty">Log in as an admin first.</div>'); return; }
+  if (adminTab === 'backup') { draw(await adminBackupHtml(), null); return; }   // the backup tab works even when the server is down (it reads the copy saved on this device)
   draw('<div class="empty">Loading…</div>');
   try {
     const overview = await apiRequest('/api/admin/overview', { auth: true });
