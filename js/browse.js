@@ -690,7 +690,7 @@ async function deleteDraft(id) {
 // ---------------------------------------------------------------------------
 // Admin extras: alert types, player history
 // ---------------------------------------------------------------------------
-const ALERT_ICONS = { five_star: '⭐', level_updated: '✎', report: '⚑', report_player: '⚑', suspicious: '🕵', auto_flag: '🚩' };
+const ALERT_ICONS = { five_star: '⭐', level_updated: '✎', report: '⚑', report_player: '⚑', suspicious: '🕵', auto_flag: '🚩', stat_claim: '📥' };
 function adminOpenPlayer(name) { adminPlayerSearch = name; loadAdminPanel('players'); }
 async function adminShowHistory(p) {
   try {
@@ -755,7 +755,7 @@ async function adminEditLevel(id) {
 }
 function adminExtraOptions(p) {
   return [{ value: 'impersonate', label: '👤 Log in as this player' }, { value: 'removestats', label: '🧹 Remove specific stats…' }, { value: 'rename', label: '✎ Rename player' }, p.muted ? { value: 'unmute', label: '🔊 Unmute' } : { value: 'mute', label: '🔇 Mute (no comments/publishing)' },
-    { value: 'stat', label: '📈 Give / set any stat (stars, points, scores…)' }, { value: 'stars', label: '★ Give / take bonus stars' }, ...(p.owner ? [] : [{ value: 'password', label: '🔑 Set a new password' }]),
+    { value: 'stat', label: '📈 Give / set any stat (stars, points, scores…)' }, { value: 'claim', label: '📥 Stats this player saved on their device' }, { value: 'stars', label: '★ Give / take bonus stars' }, ...(p.owner ? [] : [{ value: 'password', label: '🔑 Set a new password' }]),
     { value: 'dellevels', label: '🗑 Delete all their levels' }, ...(p.isAdmin ? [] : [{ value: 'delaccount', label: '☠ Delete account' }])];
 }
 async function adminExtraAction(action, p) {
@@ -767,6 +767,15 @@ async function adminExtraAction(action, p) {
   if (action === 'mute') {
     const r = await openFormDialog({ title: 'Mute ' + p.username, message: 'Muted players can\'t comment or publish levels.', fields: [{ id: 'amount', label: 'Length', type: 'number', value: '1', maxlength: 6 }, { id: 'unit', label: 'Unit', type: 'select', value: 'days', options: [{ value: 'minutes', label: 'Minutes' }, { value: 'hours', label: 'Hours' }, { value: 'days', label: 'Days' }, { value: 'perm', label: 'Permanent' }] }], okText: 'Mute', danger: true });
     if (r) { const per = { minutes: 1, hours: 60, days: 1440 }; await post('/mute', r.unit === 'perm' ? { permanent: true } : { minutes: Math.round(Number(r.amount) * per[r.unit]) }, 'Muted.'); }
+    return true;
+  }
+  if (action === 'claim') {
+    let c = null; try { c = (await apiRequest('/api/admin/players/' + p.id + '/claim', { auth: true })).claim; } catch (e) { toast(e.message, 'bad'); return true; }
+    if (!c) { toast(p.username + ' has not sent any saved stats.'); return true; }
+    const names = { stars: 'Stars', extreme_points: 'Extreme points', creator_points: 'Creator points', games_completed: 'Levels completed', games_played: 'Games played', total_score: 'Total score', best_score: 'Best score', total_notes_hit: 'Notes hit', battle_wins: 'Battle wins', battle_losses: 'Battle losses', elo: 'Battle rating' };
+    const list = Object.keys(c).map(k => (names[k] || k) + ': ' + c[k]).join('\n');
+    if (await uiConfirm(p.username + ' says their old stats were:\n\n' + list + '\n\nThese come from their device and are not checked. Set their account to these numbers?', 'Approve')) await post('/claim/approve', {}, 'Stats set.');
+    else if (await uiConfirm('Throw these away so they stop showing up?', 'Throw away')) { await apiRequest('/api/admin/players/' + p.id + '/claim', { method: 'DELETE', auth: true }); toast('Removed.'); }
     return true;
   }
   if (action === 'stat') {
