@@ -90,6 +90,33 @@ function loginAccount() {
 }
 function logoutAccount() { clearAuthSession(); if (typeof disconnectBattle === 'function') disconnectBattle(); renderAccountModal(); }
 
+// If the server was reset, this device still remembers who you were. One question (a new password) and the account is back online.
+// The password itself is never stored on the device.
+let recoveryAsked = false;
+async function offerAccountRecovery(old) {
+  let name = old.username;
+  for (let tries = 0; tries < 3; tries++) {
+    const r = await openFormDialog({ title: 'Bring your account back online?', message: 'The server was reset and "' + name + '" is no longer online. Your levels and progress are still on this device. Choose a password to put the account back online (8+ characters).',
+      fields: tries ? [{ id: 'name', label: 'Username', type: 'text', value: name, maxlength: 20 }, { id: 'pw', label: 'Password', type: 'password', value: '', maxlength: 128 }] : [{ id: 'pw', label: 'Password', type: 'password', value: '', maxlength: 128 }], okText: 'Bring it back' });
+    if (!r) { toast('You can do this later from the account menu: just sign up with the same name.'); return; }
+    if (r.name) name = String(r.name).trim();
+    try {
+      const data = await apiRequest('/api/auth/register', { method: 'POST', body: { username: name, email: old.email, password: r.pw } });
+      saveAuthSession(data.token, data.user);
+      if (typeof disconnectBattle === 'function') disconnectBattle();
+      const st = old.statistics || {};
+      try {
+        await apiRequest('/api/me/claim-stats', { method: 'POST', auth: true, body: { stats: { stars: old.stars, extreme_points: old.extremePoints, creator_points: old.creatorPoints, games_completed: st.gamesCompleted, games_played: st.gamesPlayed, total_score: st.totalScore, best_score: st.bestScore, total_notes_hit: st.totalNotesHit, battle_wins: st.battleWins, battle_losses: st.battleLosses, elo: old.elo } } });
+      } catch (e2) { /* the admin can still give the stats by hand */ }
+      try { if (typeof syncHashes !== 'undefined') syncHashes.clear(); (myLevels || []).forEach(l => { if (l.published) { l.published = false; l.onlineId = null; } if (typeof cloudSyncLevel === 'function') cloudSyncLevel(l); }); persistMyLevels(); } catch (e3) {}
+      toast('Your account is back online. Your old stats were sent to the admins to approve. Republish your levels when you are ready.', 'good');
+      return;
+    } catch (e) {
+      if (e.status === 409 || /taken|already/i.test(e.message || '')) { await uiAlert('That name or email is already in use on the server. If it is your account, log in with your old password from the account menu. Otherwise pick a different username.', 'Already taken'); continue; }
+      await uiAlert(e.message || 'Could not create the account.', 'Not yet'); if (/8-128|Password/i.test(e.message || '')) continue; return;
+    }
+  }
+}
 async function restoreAuthSession() {
   const token = getAuthToken();
   if (!token || !API_BASE_URL) { refreshProfileButton(); return; }
@@ -97,7 +124,11 @@ async function restoreAuthSession() {
     const data = await apiRequest('/api/auth/me', { auth: true });
     if (data.success && data.user) saveAuthSession(token, data.user);
   } catch (e) {
-    if (e.status === 401 || e.status === 404) clearAuthSession();   // only drop the session if the server actually rejected it
+    if (e.status === 401 || e.status === 404) {   // only drop the session if the server actually rejected it
+      const old = getAuthUser();
+      clearAuthSession();
+      if (old && old.username && old.email && !recoveryAsked) { recoveryAsked = true; setTimeout(() => offerAccountRecovery(old), 1200); }
+    }
     else { refreshProfileButton(); updateAdminButton(getAuthUser()); }
   }
 }
