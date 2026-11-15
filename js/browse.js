@@ -1318,11 +1318,14 @@ async function adminBackupRestore(fileOrBlob, label) {
     for (let i = 0; i < lines.length; i++) {
       const o = JSON.parse(lines[i]);
       if (!o.t) continue;
-      const rows = o.rows, step = 20;
-      for (let k = 0; k < rows.length; k += step) {
+      // send rows in batches by SIZE (about 4 MB), so rows holding music or recordings never make one request too big
+      const rows = o.rows; let k = 0;
+      while (k < rows.length) {
+        let n = 0, bytes = 0;
+        while (k + n < rows.length && n < 50 && (n === 0 || bytes + JSON.stringify(rows[k + n]).length < 4e6)) { bytes += JSON.stringify(rows[k + n]).length; n++; }
         bkStatus('Restoring ' + o.t + ' (' + (i + 1) + '/' + lines.length + ')…');
-        const r = await apiRequest('/api/admin/backup/import', { method: 'POST', auth: true, timeout: 120000, body: { table: o.t, rows: rows.slice(k, k + step), replaceUsers } });
-        ins += r.inserted; skip += r.skipped;
+        const r = await apiRequest('/api/admin/backup/import', { method: 'POST', auth: true, timeout: 180000, body: { table: o.t, rows: rows.slice(k, k + n), replaceUsers } });
+        ins += r.inserted; skip += r.skipped; k += n;
       }
     }
     bkStatus('Finishing up…');
