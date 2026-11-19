@@ -41,6 +41,7 @@
 <button id="stop-playtest-btn" class="hidden" onclick="stopPlaytest()">STOP PLAYTESTING</button>
 <div id="score-container" class="hidden"><div id="score">0</div><div id="rest-msg">BREATHE</div></div>
 <div id="countdown" class="hidden"></div>
+<div id="newbest-pop"><div class="nb-label">NEW BEST</div><div class="nb-pct">0%</div></div>
 
 <canvas id="gameCanvas" width="360" height="640"></canvas>
 
@@ -150,6 +151,12 @@
   <div class="center-panel"><div class="avatar big" id="battle-incoming-avatar">?</div><h2 id="battle-incoming-name">Someone</h2><p id="battle-incoming-level">wants to battle</p>
     <div class="row-btns"><button class="btn btn-ghost" onclick="declineChallenge()">DECLINE</button><button class="btn btn-play" onclick="acceptChallenge()">ACCEPT</button></div></div>
 </div>
+<div id="rm-wheel-menu" class="overlay hidden">
+  <div class="center-panel"><h2 id="rm-wheel-title">RANKED MATCH</h2><div id="rm-vs" class="rm-vs"></div>
+    <div class="rm-wheel-wrap"><canvas id="rm-wheel" width="320" height="320"></canvas><div class="rm-pointer">▼</div></div>
+    <div id="rm-wheel-result" class="rm-wheel-result">Spinning the wheel…</div></div>
+</div>
+<div id="rm-result-menu" class="overlay hidden"><div class="center-panel"></div></div>
 <div id="battle-result-menu" class="overlay hidden">
   <div class="center-panel">
     <div class="battle-result-banner" id="battle-result-banner">RESULT</div><div class="note" id="battle-result-sub"></div>
@@ -264,7 +271,7 @@
     <div class="settings-row"><span>Lock tile look <small>(ignore players' custom tile colors &amp; effects)</small></span><input type="checkbox" id="edit-lock-cos"></div>
     <div class="settings-row"><span>Strict mode <small>(hit tile 1 before tile 2 - no skipping)</small></span><input type="checkbox" id="edit-strict"></div>
     <div class="settings-row"><span>Tags <small>(speed, chords, holds, memory, tech, long, short, jumps, streams, strict, beginner)</small></span><input type="text" id="edit-tags" class="num-in wide" placeholder="speed, chords"></div>
-    <div class="settings-row"><span>Difficulty</span><select id="edit-difficulty" class="num-in"><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Insane</option><option>Extreme</option></select></div>
+    <div class="settings-row"><span>Difficulty</span><select id="edit-difficulty" class="num-in"><option>Easy</option><option selected>Normal</option><option>Hard</option><option>Harder</option><option>Insane</option><option>Extreme</option></select></div>
     <div class="section-title">SONG</div>
     <div class="settings-row"><span>Song <small id="edit-song-label">No song</small></span><span class="btn-row"><button class="btn small btn-ghost" onclick="document.getElementById('audio-upload').click()">Upload</button><button class="btn small btn-ghost" onclick="pickLibrarySong()">📚 Library</button></span></div>
     <div class="section-title">APPEARANCE</div>
@@ -301,15 +308,16 @@
 <div id="warning-screen" class="hidden"></div>
 
 <script src="js/config.js?v=20261014-2"></script>
-<script src="js/state.js?v=20261020-1"></script>
-<script src="js/ui.js?v=20261020-1"></script>
-<script src="js/storage.js?v=20261022-1"></script>
+<script src="js/state.js?v=20261118-1"></script>
+<script src="js/ui.js?v=20261118-1"></script>
+<script src="js/storage.js?v=20261118-1"></script>
 <script src="js/video.js?v=20261021-1"></script>
-<script src="js/auth.js?v=20261024-1"></script>
-<script src="js/game.js?v=20261022-1"></script>
-<script src="js/editor.js?v=20261022-1"></script>
-<script src="js/browse.js?v=20261024-2"></script>
-<script src="js/battle.js?v=20261020-1"></script>
+<script src="js/auth.js?v=20261118-1"></script>
+<script src="js/game.js?v=20261118-1"></script>
+<script src="js/editor.js?v=20261118-1"></script>
+<script src="js/browse.js?v=20261118-1"></script>
+<script src="js/battle.js?v=20261118-1"></script>
+<script src="js/ranked.js?v=20261118-1"></script>
 <script src="js/social.js?v=20261022-1"></script>
   <script src="js/main.js?v=20261014-2"></script>
 </body>
