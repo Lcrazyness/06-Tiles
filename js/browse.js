@@ -140,7 +140,7 @@ async function openPlayerProfile(player) {
   try { const d = await apiRequest('/api/creators/' + encodeURIComponent(username)); draw(d.user, d.levels); } catch (e) {}
 }
 
-const LB_TABS = [['elo', 'Battle Rating'], ['points', 'Extreme Pts'], ['stars', 'Stars'], ['difficulty', 'Difficulty Beaten'], ['creator', 'Creator'], ['bestScore', 'Best Score'], ['totalScore', 'Total Score'], ['notesHit', 'Notes'], ['battleWins', 'Battle Wins']];
+const LB_TABS = [['ranked', 'Ranked'], ['elo', 'Battle Rating'], ['points', 'Extreme Pts'], ['stars', 'Stars'], ['difficulty', 'Difficulty Beaten'], ['creator', 'Creator'], ['bestScore', 'Best Score'], ['totalScore', 'Total Score'], ['notesHit', 'Notes'], ['battleWins', 'Battle Wins']];
 
 async function renderLeaderboards() {
   document.getElementById('browse-sub-tabs').innerHTML = '<div class="tabs small wrap">' +
@@ -162,7 +162,8 @@ async function loadLeaderboard(sort) {
     players.forEach((p, i) => {
       const st = p.statistics || {};
       let value, sub;
-      if (sort === 'elo') { value = n(p.elo); sub = n(st.battleWins) + ' W / ' + n(st.battleLosses) + ' L'; }
+      if (sort === 'ranked') { value = (p.rank ? p.rank.name + ' · ' : '') + n(p.rankedRp) + ' RP'; sub = n(p.rankedWins) + ' W / ' + n(p.rankedLosses) + ' L'; }
+      else if (sort === 'elo') { value = n(p.elo); sub = n(st.battleWins) + ' W / ' + n(st.battleLosses) + ' L'; }
       else if (sort === 'points') { value = n(p.extremePoints) + ' EP'; sub = (p.listBeaten || 0) + ' list levels beaten'; }
       else if (sort === 'stars') { value = '★ ' + n(p.stars); sub = 'Hardest: ' + (p.hardestDifficulty || '—'); }
       else if (sort === 'difficulty') { value = p.hardestDifficulty || '—'; sub = '★ ' + n(p.stars) + ' stars'; }
@@ -356,7 +357,7 @@ async function adminRateLevel(level, done) {
     title: 'Rate "' + level.name + '"', message: 'Rated levels give players stars, appear under Rated, count for creator points, and can be used in battles.',
     fields: [
       { id: 'rated', label: 'Rated?', type: 'select', value: level.featured ? 'yes' : 'yes', options: [{ value: 'yes', label: 'Yes - rated level' }, { value: 'no', label: 'No - remove rating' }] },
-      { id: 'difficulty', label: 'Difficulty', type: 'select', value: level.difficulty || 'Normal', options: ['Easy', 'Normal', 'Hard', 'Insane', 'Extreme'].map(d => ({ value: d, label: d })) },
+      { id: 'difficulty', label: 'Difficulty', type: 'select', value: level.difficulty || 'Normal', options: ['Easy', 'Normal', 'Hard', 'Harder', 'Insane', 'Extreme'].map(d => ({ value: d, label: d })) },
       { id: 'stars', label: 'Stars awarded for beating it (1-10)', type: 'number', value: String(level.ratedStars || ''), maxlength: 2 }
     ], okText: 'Save'
   });
@@ -395,7 +396,8 @@ async function adminPlayersHtml() {
   const data = await apiRequest('/api/admin/players?search=' + encodeURIComponent(adminPlayerSearch), { auth: true });
   const players = data.players || [];
   adminPlayersCache = {}; players.forEach(p => { adminPlayersCache[p.id] = p; });
-  return `<div class="searchbar"><span>🔎</span><input id="admin-psearch" placeholder="Search players…" value="${escapeHtml(adminPlayerSearch)}" onkeydown="if(event.key==='Enter'){adminPlayerSearch=this.value;loadAdminPanel('players')}"></div>
+  return `<div class="row-btns"><button class="btn small" onclick="adminCreateAccount()">➕ Create account</button></div>
+    <div class="searchbar"><span>🔎</span><input id="admin-psearch" placeholder="Search players…" value="${escapeHtml(adminPlayerSearch)}" onkeydown="if(event.key==='Enter'){adminPlayerSearch=this.value;loadAdminPanel('players')}"></div>
     <div class="song-list">${players.length ? players.map(p => `
       <div class="song-row admin-row"><div class="song-art" style="${p.profileIcon ? '' : 'background:' + artGradient(p.username)}">${p.profileIcon ? '<img src="' + escapeHtml(p.profileIcon) + '" alt="">' : escapeHtml(p.username.slice(0, 1).toUpperCase())}</div>
         <div class="song-info"><div class="song-title">${escapeHtml(p.username)}${p.isAdmin ? ' 🛡' : ''}</div>
@@ -497,7 +499,7 @@ function renderLevelCard(level, source) {
 function levelFilterHtml() {
   const tags = ['speed', 'chords', 'holds', 'memory', 'tech', 'long', 'short', 'jumps', 'streams', 'strict', 'beginner'];
   return '<div class="level-filters"><select onchange="browseDiff=this.value;renderBrowseLevels()"><option value="">All difficulties</option>' +
-    ['Easy', 'Normal', 'Hard', 'Insane', 'Extreme'].map(d => '<option' + (browseDiff === d ? ' selected' : '') + '>' + d + '</option>').join('') + '</select>' +
+    ['Easy', 'Normal', 'Hard', 'Harder', 'Insane', 'Extreme'].map(d => '<option' + (browseDiff === d ? ' selected' : '') + '>' + d + '</option>').join('') + '</select>' +
     '<select onchange="browseTag=this.value;renderBrowseLevels()"><option value="">All tags</option>' + tags.map(t => '<option' + (browseTag === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>';
 }
 async function getFilteredLevels(search, tab) {
@@ -755,13 +757,14 @@ async function adminEditLevel(id) {
   try { await apiRequest('/api/admin/levels/' + id + '/edit', { method: 'PATCH', auth: true, body: { name: r.name, tags: r.tags.split(',').map(t => t.trim()).filter(Boolean) } }); toast('Saved.', 'good'); loadAdminPanel('levels'); } catch (e) { toast(e.message, 'bad'); }
 }
 function adminExtraOptions(p) {
-  return [{ value: 'impersonate', label: '👤 Log in as this player' }, { value: 'removestats', label: '🧹 Remove specific stats…' }, { value: 'rename', label: '✎ Rename player' }, p.muted ? { value: 'unmute', label: '🔊 Unmute' } : { value: 'mute', label: '🔇 Mute (no comments/publishing)' },
+  return [{ value: 'impersonate', label: '👤 Log in as this player' }, { value: 'devcode', label: '📱 Device code (log a device into this account)' }, { value: 'removestats', label: '🧹 Remove specific stats…' }, { value: 'rename', label: '✎ Rename player' }, p.muted ? { value: 'unmute', label: '🔊 Unmute' } : { value: 'mute', label: '🔇 Mute (no comments/publishing)' },
     { value: 'stat', label: '📈 Give / set any stat (stars, points, scores…)' }, { value: 'claim', label: '📥 Stats this player saved on their device' }, { value: 'stars', label: '★ Give / take bonus stars' }, ...(p.owner ? [] : [{ value: 'password', label: '🔑 Set a new password' }]),
     { value: 'dellevels', label: '🗑 Delete all their levels' }, ...(p.isAdmin ? [] : [{ value: 'delaccount', label: '☠ Delete account' }])];
 }
 async function adminExtraAction(action, p) {
   const post = (path, body, ok) => apiRequest('/api/admin/players/' + p.id + path, { method: 'POST', auth: true, body }).then(() => { toast(ok, 'good'); loadAdminPanel('players'); });
   if (action === 'impersonate') { startImpersonation(p.id, p.username); return true; }
+  if (action === 'devcode') { await adminDeviceCode(p); return true; }
   if (action === 'removestats') { await adminRemoveStats(p); return true; }
   if (action === 'rename') { const r = await openFormDialog({ title: 'Rename ' + p.username, fields: [{ id: 'u', label: 'New username', type: 'text', value: p.username, maxlength: 20 }], okText: 'Rename' }); if (r) await post('/username', { username: r.u.trim() }, 'Renamed.'); return true; }
   if (action === 'unmute') { await post('/mute', { unmute: true }, 'Unmuted.'); return true; }
@@ -773,14 +776,14 @@ async function adminExtraAction(action, p) {
   if (action === 'claim') {
     let c = null; try { c = (await apiRequest('/api/admin/players/' + p.id + '/claim', { auth: true })).claim; } catch (e) { toast(e.message, 'bad'); return true; }
     if (!c) { toast(p.username + ' has not sent any saved stats.'); return true; }
-    const names = { stars: 'Stars', extreme_points: 'Extreme points', creator_points: 'Creator points', games_completed: 'Levels completed', games_played: 'Games played', total_score: 'Total score', best_score: 'Best score', total_notes_hit: 'Notes hit', battle_wins: 'Battle wins', battle_losses: 'Battle losses', elo: 'Battle rating' };
+    const names = { stars: 'Stars', extreme_points: 'Extreme points', creator_points: 'Creator points', games_completed: 'Levels completed', games_played: 'Games played', total_score: 'Total score', best_score: 'Best score', total_notes_hit: 'Notes hit', battle_wins: 'Battle wins', battle_losses: 'Battle losses', elo: 'Battle rating', rank_rp: 'Ranked points' };
     const list = Object.keys(c).map(k => (names[k] || k) + ': ' + c[k]).join('\n');
     if (await uiConfirm(p.username + ' says their old stats were:\n\n' + list + '\n\nThese come from their device and are not checked. Set their account to these numbers?', 'Approve')) await post('/claim/approve', {}, 'Stats set.');
     else if (await uiConfirm('Throw these away so they stop showing up?', 'Throw away')) { await apiRequest('/api/admin/players/' + p.id + '/claim', { method: 'DELETE', auth: true }); toast('Removed.'); }
     return true;
   }
   if (action === 'stat') {
-    const STATS = [['stars', 'Stars'], ['extreme_points', 'Extreme points'], ['creator_points', 'Creator points'], ['games_completed', 'Levels completed'], ['games_played', 'Games played'], ['total_score', 'Total score'], ['best_score', 'Best score'], ['total_notes_hit', 'Notes hit'], ['battle_wins', 'Battle wins'], ['battle_losses', 'Battle losses'], ['elo', 'Battle rating']];
+    const STATS = [['stars', 'Stars'], ['extreme_points', 'Extreme points'], ['creator_points', 'Creator points'], ['games_completed', 'Levels completed'], ['games_played', 'Games played'], ['total_score', 'Total score'], ['best_score', 'Best score'], ['total_notes_hit', 'Notes hit'], ['battle_wins', 'Battle wins'], ['battle_losses', 'Battle losses'], ['elo', 'Battle rating'], ['rank_rp', 'Ranked points']];
     const r = await openFormDialog({ title: 'Change a stat for ' + p.username, message: 'Add gives that amount on top (negative takes away). Set makes the stat exactly that number.', fields: [
       { id: 'stat', label: 'Stat', type: 'select', value: 'stars', options: STATS.map(x => ({ value: x[0], label: x[1] })) },
       { id: 'mode', label: 'Do what', type: 'select', value: 'add', options: [{ value: 'add', label: 'Add (or take away with a minus)' }, { value: 'set', label: 'Set to exactly' }] },
@@ -1367,4 +1370,34 @@ async function openLevelStats(level) {
       try { await apiRequest('/api/levels/' + encodeURIComponent(level.id) + '/stats', { method: 'DELETE', auth: true }); toast('Stats reset.', 'good'); openLevelStats(level); } catch (e) { toast(e.message, 'bad'); }
     };
   } catch (e) { menu.innerHTML = screenHtml('LEVEL STATS', "toggleMenu('level-detail-menu')", '<div class="empty">' + escapeHtml(e.message || 'Could not load stats.') + '</div>'); }
+}
+
+
+// ---------------------------------------------------------------- admin: create accounts + device codes
+function deviceLinkUrl(code) { return location.origin + location.pathname + '#device=' + code; }
+async function showDeviceCode(name, code, expiresAt, extra) {
+  const link = deviceLinkUrl(code);
+  try { await navigator.clipboard.writeText(link); } catch (e) {}
+  await uiAlert((extra ? extra + '\n\n' : '') + 'Device code for ' + name + ':\n\n' + code + '\n\nOr send them this link (copied to your clipboard):\n' + link + '\n\nIt works once and expires ' + new Date(expiresAt).toLocaleString() + '. Whoever opens it first becomes ' + name + ' on that device.', '📱 Device code');
+}
+async function adminDeviceCode(p) {
+  const r = await openFormDialog({ title: 'Device code for ' + p.username, message: 'A code (or link) logs ANY device straight into this account with no password. Use it when signing in is broken.',
+    fields: [{ id: 'a', label: 'What do you want to do?', type: 'select', value: 'make', options: [{ value: 'make', label: 'Make a new code' }, { value: 'revoke', label: 'Cancel all unused codes' }] }], okText: 'Next' });
+  if (!r) return;
+  try {
+    if (r.a === 'revoke') { const d = await apiRequest('/api/admin/players/' + p.id + '/device-codes', { method: 'DELETE', auth: true }); toast(d.revoked + ' code(s) cancelled.', 'good'); return; }
+    const d = await apiRequest('/api/admin/players/' + p.id + '/device-code', { method: 'POST', auth: true, body: {} });
+    await showDeviceCode(p.username, d.code, d.expiresAt);
+  } catch (e) { toast(e.message, 'bad'); }
+}
+async function adminCreateAccount() {
+  const r = await openFormDialog({ title: 'Create an account', message: 'Leave the email and password empty to have them filled in for you. You get a device code to put the account on a device.',
+    fields: [{ id: 'username', label: 'Username (3-20 letters, numbers, _)', type: 'text', value: '', maxlength: 20 }, { id: 'email', label: 'Email (optional)', type: 'text', value: '', maxlength: 254 }, { id: 'password', label: 'Password (optional, 8+ characters)', type: 'text', value: '', maxlength: 128 }], okText: 'Create' });
+  if (!r || !r.username.trim()) return;
+  try {
+    const d = await apiRequest('/api/admin/accounts', { method: 'POST', auth: true, body: { username: r.username.trim(), email: r.email.trim(), password: r.password } });
+    toast('Account ' + d.user.username + ' created.', 'good');
+    await showDeviceCode(d.user.username, d.code, d.expiresAt, 'Account created: ' + d.user.username + (d.password ? '\nPassword (shown once): ' + d.password : ''));
+    loadAdminPanel('players');
+  } catch (e) { toast(e.message, 'bad'); }
 }
