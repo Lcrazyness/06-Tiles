@@ -493,6 +493,7 @@ function replayBegin() {
   }
   if (replayPlay) { replayPlay.i = 0; replayPlay.wi = 0; setReplayBanner('▶ REPLAY · ' + replayPlay.username + (replayPlay.completed ? ' · ✔ 100%' : ' · ' + replayPlay.pct + '%')); return; }
   setReplayBanner(null);
+  if (isBattleMode && typeof rmActive === 'function' && rmActive()) { rec = { h: [], w: [], end: 0, died: null, salt: dSalt }; return; }   // ranked/2v2: my taps are sent (tiny) so a dead player can watch me
   if (!id || isPlaytesting || isVerifying || isBattleMode || practiceMode) return;
   rec = { h: [], w: [], end: 0, died: null, salt: dSalt };
   if (typeof liveStart === 'function') liveStart();
@@ -625,6 +626,8 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
   gameActive = true;
   resetState();
   releaseAllKeys();
+  { const dt = document.getElementById('death-title'), ds = document.getElementById('death-stars'), di = document.getElementById('death-info');   // nothing from the last run's end screen may carry over
+    if (dt) dt.classList.remove('good'); if (ds) ds.innerHTML = ''; if (di) di.textContent = ''; const nb = document.getElementById('newbest-pop'); if (nb) nb.classList.remove('show'); const dsc = document.getElementById('death-screen'); if (dsc) dsc.classList.remove('nb-hold'); }
   if (!isPlaytesting && !isVerifying && !isBattleMode) beginStatsGame();
   toggleMenu(null);
   document.getElementById('editor-ui').classList.add('hidden');
@@ -970,6 +973,7 @@ function updateCustomLevel(dtSec) {
   stopLoop();
   gameActive = false;
   bgAudio.pause();
+  if (replayPlay && replayPlay.rm) { if (typeof rmWatchEnded === 'function') rmWatchEnded('finished'); return; }   // the player I'm spectating finished
 
   if (isVerifying && verifyPartial) {
     isVerifying = false; verifyPartial = false; levelVerified = false; pendingPublishAfterVerification = false;
@@ -1191,6 +1195,7 @@ canvas.addEventListener('pointercancel', releasePointer);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 function handleEscape() {
+  if (typeof rmActive === 'function' && rmActive()) { rmLeavePrompt(); return; }   // ranked / 2v2
   if (isPaused) { resumeGame(); return; }
   if (gameActive && !isDead && !inEditor) {
     if (isBattleMode) { forfeitBattlePrompt(); return; }
@@ -1418,6 +1423,7 @@ function resumeGame() {
 
 function die(reason) {
   if (isDead) return;
+  if (replayPlay && replayPlay.rm) { isDead = true; gameActive = false; stopLoop(); bgAudio.pause(); if (typeof rmWatchEnded === 'function') rmWatchEnded(reason); return; }   // the player I'm spectating died
   if (isVerifying) levelVerified = false;          // stays in verify mode so Retry re-runs the verification
   if (practiceMode && !isBattleMode) { isDead = true; gameActive = false; stopLoop(); practiceRespawn(); return; }
   isDead = true;
@@ -1425,7 +1431,9 @@ function die(reason) {
   stopLoop();
   bgAudio.pause();
   if (rec) { rec.end = Math.round(customPlayTime * 1000); rec.died = String(reason || 'FAILED').slice(0, 30); }
-  if (isCustomGame) noteBestPct(livePct());
+  const diedPct = isCustomGame ? livePct() : 0, prevBest = currentLevelKey ? getBestPct(currentLevelKey) : 0;
+  if (isCustomGame) noteBestPct(diedPct);
+  const freshBest = isCustomGame && !!currentLevelKey && !practiceMode && !isPlaytesting && !isVerifying && !isBattleMode && !replayPlay && diedPct > prevBest && diedPct >= 1;
 
   if (isBattleMode) {
     if (typeof handleBattleFinish === 'function') handleBattleFinish(false, reason);
@@ -1438,6 +1446,8 @@ function die(reason) {
   document.getElementById('death-title').classList.remove('good');
   document.getElementById('death-stars').innerHTML = '';
   document.getElementById('final-score').innerText = 'Score: ' + Math.floor(score);
+  { const di = document.getElementById('death-info'); if (di) di.textContent = (isCustomGame ? diedPct + '%  ·  ' : '') + 'Attempt ' + currentAttempt + (isCustomGame && prevBest > diedPct ? '  ·  Best ' + prevBest + '%' : ''); }   // always rewritten, so a finished run's "100%" can't linger
+  if (freshBest) showNewBest(diedPct);
   document.getElementById('death-retry-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-quit-btn').classList.toggle('hidden', isPlaytesting);
   document.getElementById('death-stop-playtest-btn').classList.toggle('hidden', !isPlaytesting);
@@ -1453,6 +1463,15 @@ function die(reason) {
   }
 }
 
+let newBestTimer = 0;
+function showNewBest(pct) {
+  const el = document.getElementById('newbest-pop'); if (!el) return;
+  el.querySelector('.nb-pct').textContent = pct + '%';
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  const ds = document.getElementById('death-screen'); if (ds) ds.classList.add('nb-hold');   // the death panel waits so the big % stands alone
+  clearTimeout(newBestTimer); newBestTimer = setTimeout(() => { el.classList.remove('show'); if (ds) ds.classList.remove('nb-hold'); }, 1900);
+}
+
 function restartGame() {
   clearTimeout(autoRetryTimer);
   document.getElementById('death-screen').classList.add('hidden');
@@ -1466,6 +1485,7 @@ function restartGame() {
 
 function quitPlaytestOrGame() {
   const wasBattle = isBattleMode;
+  if (typeof rmActive === 'function' && rmActive()) rmLeave();
   stopLoop();
   gameActive = false; isDead = true; isPaused = false; score = 0; scoreEl.innerText = "0";
   bgAudio.pause();
