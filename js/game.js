@@ -700,9 +700,9 @@ function startGame(mode, isCustom = false, customIndex = -1, testTiles = null, t
 
     // Music: levels carry their own song (saved with the level / published with it). Editor playtests use the song loaded in the editor.
     let audioSrc = null;
-    if (sourceLevel) audioSrc = sourceLevel._audioUrl || sourceLevel.audio || (sourceLevel.songId && typeof API_BASE_URL !== 'undefined' ? API_BASE_URL + '/api/songs/' + sourceLevel.songId + '/audio' : null);
+    if (sourceLevel) audioSrc = sourceLevel._audioUrl || sourceLevel.audio || (sourceLevel.audioUrl && typeof API_BASE_URL !== 'undefined' ? API_BASE_URL + sourceLevel.audioUrl : null) || (sourceLevel.songId && typeof API_BASE_URL !== 'undefined' ? API_BASE_URL + '/api/songs/' + sourceLevel.songId + '/audio' : null);
     else if (currentAudioUrl) audioSrc = currentAudioUrl;
-    levelUsesAudio = !!audioSrc && !isBattleMode;
+    levelUsesAudio = !!audioSrc;
     levelStartPositions = sourceLevel && Array.isArray(sourceLevel.startPositions) ? sourceLevel.startPositions : [];
     if (levelUsesAudio) {
       if (bgAudio.getAttribute('src') !== audioSrc) { bgAudio.src = audioSrc; bgAudio.load(); }
