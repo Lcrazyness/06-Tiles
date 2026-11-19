@@ -137,13 +137,14 @@ function estimateDifficulty(level) {
   const density = tileCount / duration;
   if (density < 1.2) return 'Easy';
   if (density < 2) return 'Normal';
-  if (density < 3) return 'Hard';
-  if (density < 4.2) return 'Insane';
+  if (density < 2.8) return 'Hard';
+  if (density < 3.5) return 'Harder';
+  if (density < 4.4) return 'Insane';
   return 'Extreme';
 }
 
 function difficultyBadgeClass(diff) {
-  return { Easy: 'diff-badge--easy', Normal: 'diff-badge--normal', Hard: 'diff-badge--hard', Insane: 'diff-badge--insane', Extreme: 'diff-badge--extreme' }[diff] || 'diff-badge--normal';
+  return { Easy: 'diff-badge--easy', Normal: 'diff-badge--normal', Hard: 'diff-badge--hard', Harder: 'diff-badge--harder', Insane: 'diff-badge--insane', Extreme: 'diff-badge--extreme' }[diff] || 'diff-badge--normal';
 }
 
 function makeLevelId() { return 'lvl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
@@ -497,4 +498,3 @@ async function draftPublishFlow() {
     await uiAlert('"' + currentEditingName + '" is live!', 'Published');
   } catch (e) { await uiAlert(e.message || 'Could not publish.', 'Publish failed'); }
 }
-
