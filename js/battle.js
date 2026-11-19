@@ -100,6 +100,7 @@ async function connectBattle() {
     pendingChallengeId = null; incomingChallengeId = null;
     activeMatch = { matchId: d.matchId, opponent: d.opponent.name, level: d.level, target: d.target || 3 };
     myBattleResult = null;
+    if (typeof prefetchMatchAudio === 'function') prefetchMatchAudio(d.level);
     battleScore = { you: 0, opp: 0, target: activeMatch.target, round: 1 };
     setWaiting('Match found vs ' + d.opponent.name, 'Rated level: ' + d.level.name + ' · first to ' + activeMatch.target + ' round wins');
     s.emit('match_ready', { matchId: d.matchId });
