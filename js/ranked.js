@@ -131,6 +131,7 @@ function rmAttach(s) {
   s.on('rm_found', d => {
     rmCleanup(); RM.over = false; RM.active = false; RM.matchId = d.matchId; RM.kind = d.kind; RM.you = d.you; RM.players = d.players; RM.level = d.level; RM.lives = d.lives || 5; RM.finished = false; RM.queuedAs = null;
     activeMatch = null; myBattleResult = null;
+    prefetchMatchAudio(RM.level);
     rmShowWheel(d);
   });
   s.on('rm_go', d => { if (d.matchId === RM.matchId) rmBegin(d.countdown || 3); });
@@ -234,3 +235,8 @@ function rmShowResult(d) {
   RM.matchId = null; toggleMenu('rm-result-menu');
 }
 function rmBackToLobby() { toggleMenu('battle-menu'); rmInjectLobby(); }
+
+// warm the browser cache with the level's music while the wheel spins (the endpoint is cacheable, so repeat levels cost nothing)
+function prefetchMatchAudio(l) {
+  try { const u = l && (l.audioUrl ? API_BASE_URL + l.audioUrl : l.songId ? API_BASE_URL + '/api/songs/' + l.songId + '/audio' : null); if (u) fetch(u).catch(() => {}); } catch (e) {}
+}
