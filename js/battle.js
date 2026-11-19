@@ -51,6 +51,7 @@ async function connectBattle() {
   const s = battleSocket;
   if (typeof registerLiveHandlers === 'function') registerLiveHandlers(s);
   if (typeof collabAttach === 'function') collabAttach(s);
+  if (typeof rmAttach === 'function') rmAttach(s);
 
   s.on('connect', () => { setBattleConn('online', 'Online'); if (globeLevelId) s.emit('globe_join', { levelId: globeLevelId }); });
   s.on('connect_error', err => {
@@ -75,6 +76,7 @@ async function connectBattle() {
     if (typeof liveOnDisconnect === 'function') liveOnDisconnect();
     onlinePlayers = []; renderOnlinePlayers();
     if (activeMatch && !myBattleResult) { toast('Lost connection to the server.', 'bad'); abortMatchLocally(); }
+    else if (typeof RM !== 'undefined' && RM.active) { toast('Lost connection to the server.', 'bad'); rmAbort(); }
   });
   s.on('welcome', d => { battleMe = d; const el = document.getElementById('battle-me'); if (el) el.textContent = 'Playing as ' + d.name; });
   s.on('presence', list => { onlinePlayers = list; renderOnlinePlayers(); });
@@ -126,6 +128,7 @@ function emitBattle(event, payload) { if (battleSocket && battleSocket.connected
 // --- lobby ---
 function openBattleMenu() {
   toggleMenu('battle-menu'); connectBattle(); renderOnlinePlayers();
+  if (typeof rmInjectLobby === 'function') rmInjectLobby();
   const host = document.querySelector('#battle-menu .screen-col') || document.querySelector('#battle-menu .screen-body') || document.getElementById('battle-menu');
   if (host && !host.querySelector('.battle-extras')) host.insertAdjacentHTML('afterbegin', '<div class="row-btns battle-extras"><button class="btn small btn-ghost" onclick="openFriends()">👥 Friends</button><button class="btn small btn-ghost" onclick="openSpectate()">👁 Spectate</button></div>');
 }
@@ -154,6 +157,7 @@ function renderOnlinePlayers() {
     btn.className = 'play-btn'; btn.textContent = 'CHALLENGE'; btn.disabled = p.status !== 'lobby';
     btn.onclick = () => { battlePickTarget = p; openBattleLevelPicker(); };
     row.appendChild(btn);
+    if (typeof partyInviteBtn === 'function') row.appendChild(partyInviteBtn(p));
     list.appendChild(row);
   });
 }
@@ -189,7 +193,7 @@ async function openBattleLevelPicker() {
 function acceptChallenge() { if (incomingChallengeId) emitBattle('challenge_respond', { challengeId: incomingChallengeId, accept: true }); incomingChallengeId = null; setWaiting('Starting…', 'Setting up your battle.'); }
 function declineChallenge() { if (incomingChallengeId) emitBattle('challenge_respond', { challengeId: incomingChallengeId, accept: false }); incomingChallengeId = null; toggleMenu('battle-menu'); }
 function cancelBattleFlow() {
-  emitBattle('queue_leave');
+  emitBattle('queue_leave'); emitBattle('ranked_leave'); emitBattle('team_leave');
   if (pendingChallengeId) emitBattle('challenge_cancel', { challengeId: pendingChallengeId });
   pendingChallengeId = null;
   if (activeMatch && !myBattleResult) leaveActiveMatch();
@@ -236,6 +240,7 @@ function updateOpponentBar(pct) {
 }
 
 function updateBattleProgress(pct, scoreNow) {
+  if (typeof rmActive === 'function' && rmActive()) { rmProgress(pct, scoreNow); return; }   // ranked / 2v2 have their own HUD
   const bar = document.getElementById('race-bar-me');
   if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
   const now = Date.now();
@@ -245,6 +250,7 @@ function updateBattleProgress(pct, scoreNow) {
 }
 
 function handleBattleFinish(finished, reason) {
+  if (typeof rmActive === 'function' && rmActive()) { rmFinish(finished, reason); return; }
   if (myBattleResult || !activeMatch) return;
   myBattleResult = { finished, score: Math.floor(score), reason };
   showGameHud(false);
@@ -279,6 +285,7 @@ function leaveActiveMatch() {
   document.getElementById('battle-race-hud').classList.add('hidden');
 }
 function abortMatchLocally() {
+  if (typeof rmAbort === 'function' && typeof RM !== 'undefined' && (RM.active || RM.matchId)) { rmAbort(); return; }
   stopLoop(); gameActive = false; isBattleMode = false; activeMatch = null; myBattleResult = null;
   document.getElementById('countdown').classList.add('hidden');
   bgAudio.pause(); showGameHud(false);
@@ -287,6 +294,7 @@ function abortMatchLocally() {
 function leaveBattleFromResult() { leaveActiveMatch(); toggleMenu('battle-menu'); }
 
 async function forfeitBattlePrompt() {
+  if (typeof rmActive === 'function' && rmActive()) { rmLeavePrompt(); return; }
   if (await uiConfirm('Leave the battle? That counts as a loss.', 'Leave', true)) {
     leaveActiveMatch(); stopLoop(); gameActive = false; bgAudio.pause(); showGameHud(false);
     toggleMenu('battle-menu');
