@@ -56,6 +56,7 @@ function renderAccountModal() {
       <input type="password" id="account-password" placeholder="Password (8+ characters)" maxlength="128" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginAccount()">
       <button class="btn btn-play" onclick="loginAccount()">LOG IN</button>
       <button class="btn btn-ghost" onclick="registerAccount()">CREATE ACCOUNT</button>
+      <button class="btn btn-ghost" onclick="useDeviceCode()">📱 I have a device code</button>
       <div id="account-status" class="status-line"></div>`);
 }
 
@@ -88,6 +89,27 @@ function loginAccount() {
   if (!usernameOrEmail || !password) { setAccountStatus('Enter your username/email and password.', true); return; }
   authSubmit('/api/auth/login', { usernameOrEmail, password }, 'Logging in… (the server may need a moment to wake up)');
 }
+// An admin can give you a one-time code (or a link) that logs this device into an account without a password.
+async function redeemDeviceCode(code) {
+  const data = await apiRequest('/api/auth/device-code', { method: 'POST', body: { code } });
+  saveAuthSession(data.token, data.user);
+  if (typeof disconnectBattle === 'function') disconnectBattle();
+  return data;
+}
+async function useDeviceCode() {
+  const r = await openFormDialog({ title: 'Device code', message: 'Type the code an admin gave you. This device will be logged in to that account.', fields: [{ id: 'code', label: 'Code', type: 'text', value: '', maxlength: 20 }], okText: 'Link this device' });
+  if (!r || !r.code.trim()) return;
+  setAccountStatus('Linking this device…');
+  try { const d = await redeemDeviceCode(r.code.trim()); toast(d.message || 'Device linked.', 'good'); renderAccountModal(); }
+  catch (e) { setAccountStatus(e.message, true); }
+}
+async function redeemDeviceLinkFromUrl() {
+  const m = /[#&?]device=([A-Za-z0-9-]{8,24})/.exec(location.hash || '');
+  if (!m) return false;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}   // the code is single-use, but don't leave it in the address bar
+  try { const d = await redeemDeviceCode(m[1]); toast(d.message || 'Device linked.', 'good'); return true; }
+  catch (e) { toast(e.message || 'That device link did not work.', 'bad'); return false; }
+}
 function logoutAccount() { clearAuthSession(); if (typeof disconnectBattle === 'function') disconnectBattle(); renderAccountModal(); }
 
 // If the server was reset, this device still remembers who you were. One question (a new password) and the account is back online.
@@ -106,7 +128,7 @@ async function offerAccountRecovery(old) {
       if (typeof disconnectBattle === 'function') disconnectBattle();
       const st = old.statistics || {};
       try {
-        await apiRequest('/api/me/claim-stats', { method: 'POST', auth: true, body: { stats: { stars: old.stars, extreme_points: old.extremePoints, creator_points: old.creatorPoints, games_completed: st.gamesCompleted, games_played: st.gamesPlayed, total_score: st.totalScore, best_score: st.bestScore, total_notes_hit: st.totalNotesHit, battle_wins: st.battleWins, battle_losses: st.battleLosses, elo: old.elo } } });
+        await apiRequest('/api/me/claim-stats', { method: 'POST', auth: true, body: { stats: { stars: old.stars, extreme_points: old.extremePoints, creator_points: old.creatorPoints, games_completed: st.gamesCompleted, games_played: st.gamesPlayed, total_score: st.totalScore, best_score: st.bestScore, total_notes_hit: st.totalNotesHit, battle_wins: st.battleWins, battle_losses: st.battleLosses, elo: old.elo, rank_rp: old.rankedRp } } });
       } catch (e2) { /* the admin can still give the stats by hand */ }
       try { if (typeof syncHashes !== 'undefined') syncHashes.clear(); (myLevels || []).forEach(l => { if (l.published) { l.published = false; l.onlineId = null; } if (typeof cloudSyncLevel === 'function') cloudSyncLevel(l); }); persistMyLevels(); } catch (e3) {}
       toast('Your account is back online. Your old stats were sent to the admins to approve. Republish your levels when you are ready.', 'good');
@@ -118,6 +140,7 @@ async function offerAccountRecovery(old) {
   }
 }
 async function restoreAuthSession() {
+  if (await redeemDeviceLinkFromUrl()) return;
   const token = getAuthToken();
   if (!token || !API_BASE_URL) { refreshProfileButton(); return; }
   try {
@@ -178,7 +201,7 @@ function formatBattleWinRate(s) {
 function difficultyBeatenHtml(u) {
   const counts = (u && u.difficultyCounts) || {};
   return '<div class="panel"><div class="section-title">DIFFICULTY BEATEN</div><div class="diff-chips">' +
-    ['Easy', 'Normal', 'Hard', 'Insane', 'Extreme'].map(d => '<div class="diff-chip ' + (counts[d] ? 'on' : '') + '"><span class="diff-badge ' + difficultyBadgeClass(d) + '">' + d + '</span><b>' + Number(counts[d] || 0) + '</b></div>').join('') +
+    ['Easy', 'Normal', 'Hard', 'Harder', 'Insane', 'Extreme'].map(d => '<div class="diff-chip ' + (counts[d] ? 'on' : '') + '"><span class="diff-badge ' + difficultyBadgeClass(d) + '">' + d + '</span><b>' + Number(counts[d] || 0) + '</b></div>').join('') +
     '</div><div class="note center">Beat rated levels to earn stars and climb the difficulty ladder.</div></div>';
 }
 
