@@ -524,7 +524,7 @@ function renderPalette(light) {
   sectionTitle(tail, 'SONG');
   const sg = el('div', 'tool-grid'); tail.appendChild(sg);
   const sb = (icon, text, fn, id) => { const b = el('button', 'tool-btn', '<span class="tool-icon">' + icon + '</span>' + text); if (id) b.id = id; b.onclick = fn; sg.appendChild(b); };
-  sb('🎵', 'Load song', () => document.getElementById('audio-upload').click()); sb('📚', 'Song library', pickLibrarySong); sb('🎧', 'Tester', toggleSongTester, 'btn-song-test');
+  sb('🎵', 'Load song', () => document.getElementById('audio-upload').click()); sb('🎧', 'Tester', toggleSongTester, 'btn-song-test');
   if (!LEG) sb('▶', 'Test from playhead', () => startPlaytest(editorTimer));
   const pt = el('div', 'tool-drawer-section'); host.appendChild(pt);
   sectionTitle(pt, 'PLAYTEST');
@@ -580,11 +580,7 @@ document.getElementById('decor-image-upload')?.addEventListener('change', async 
 });
 let edReplaceImage = false, edReplaceVideo = false;
 async function chooseVideoSource() {
-  if (typeof pickVideoDialog !== 'function') { document.getElementById('decor-video-upload').click(); return; }
-  const pick = await pickVideoDialog();
-  if (!pick) { edReplaceVideo = false; return; }
-  if (pick.file) { document.getElementById('decor-video-upload').click(); return; }
-  placeVideoObject({ sha: pick.lib.sha, dur: pick.lib.dur, w: pick.lib.w || 16, h: pick.lib.h || 9, name: pick.lib.name });
+  document.getElementById('decor-video-upload').click();
 }
 function placeVideoObject(v) {
   const used = new Set(decorData.objects.filter(x => x.kind === 'video').map(x => x.vid));
@@ -603,11 +599,7 @@ document.getElementById('decor-video-upload')?.addEventListener('change', async 
   try {
     if (typeof videoFromFile !== 'function') throw new Error('video.js is missing from your site files - upload js/video.js and reload.');
     const v = await videoFromFile(file);
-    const admin = typeof getAuthUser === 'function' && getAuthUser() && getAuthUser().isAdmin && getAuthToken();
     placeVideoObject(v);
-    if (admin && await uiConfirm('Share this video in the library so every editor can use it without uploading? (It uploads now.)', 'Share')) {
-      try { await uploadLevelVideos({ objects: [{ kind: 'video', vid: v.sha, vdur: v.dur, vw: v.w, vh: v.h, vname: v.name }] }, false, true); toast('Shared in the video library.', 'good'); } catch (err) { toast(err.message, 'bad'); }
-    }
   } catch (e) { toast(e.message || 'Could not add that video.', 'bad'); }
 });
 
@@ -1141,16 +1133,6 @@ async function loadLibrarySongAudio(id) {
     if (!res.ok) throw new Error('missing');
     setEditorAudio(await res.blob());
   } catch (e) { toast('Could not load the library song.', 'bad'); }
-}
-async function pickLibrarySong() {
-  if (typeof openSongPicker !== 'function') { toast('Song library is not available.', 'bad'); return; }
-  const s = await openSongPicker();
-  if (!s) return;
-  currentSongId = s.id; currentAudioBlob = null;
-  await loadLibrarySongAudio(s.id);
-  currentSongId = s.id; updateSongLabel(); levelVerified = false;
-  if (s.bpm && await uiConfirm('Set the level BPM to ' + s.bpm + '?', 'Yes')) { editorBpm = Math.min(maxBpm, s.bpm); document.getElementById('edit-bpm').value = editorBpm; updateGridReadout(); }
-  toast('Using "' + s.name + '".', 'good');
 }
 
 // ---------------------------------------------------------------------------
