@@ -1502,7 +1502,7 @@ function quitPlaytestOrGame() {
   if (isPlaytesting) { stopPlaytest(); return; }
   showGameHud(false);
   isBattleMode = false;
-  toggleMenu('main-menu');
+  toggleMenu(typeof OFFLINE_MODE !== 'undefined' && OFFLINE_MODE ? 'offline-menu' : 'main-menu');
 }
 
 // ---------------------------------------------------------------------------
