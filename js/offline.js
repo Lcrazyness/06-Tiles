@@ -61,8 +61,8 @@ async function renderOffline() {
   const head = `<div class="off-bar"><div class="off-title"><span class="off-dot"></span>OFFLINE MODE <small>no internet used</small></div>
       <button class="off-btn" onclick="exitOfflineMode()">⏏ Exit</button></div>
     <div class="off-stats"><div><b>${OFF.idx.length}</b> levels saved</div><div><b>${offMB(used)}</b> used${quota ? ' of ' + offMB(quota) : ''}</div><div>Last update: <b>${last ? new Date(last).toLocaleDateString() : 'never'}</b></div></div>
-    <div class="off-tabs"><button class="${OFF.tab === 'library' ? 'on' : ''}" onclick="OFF.tab='library';renderOffline()">LIBRARY</button><button class="${OFF.tab === 'download' ? 'on' : ''}" onclick="OFF.tab='download';renderOffline()">DOWNLOAD</button></div>`;
-  host.innerHTML = '<div class="off-wrap">' + head + (OFF.tab === 'library' ? offLibraryHtml() : offDownloadHtml()) + '</div>';
+    <div class="off-tabs"><button class="${OFF.tab === 'library' ? 'on' : ''}" onclick="OFF.tab='library';renderOffline()">LIBRARY</button><button class="${OFF.tab === 'list' ? 'on' : ''}" onclick="OFF.tab='list';renderOffline()">THE LIST</button><button class="${OFF.tab === 'download' ? 'on' : ''}" onclick="OFF.tab='download';renderOffline()">DOWNLOAD</button></div>`;
+  host.innerHTML = '<div class="off-wrap">' + head + (OFF.tab === 'library' ? offLibraryHtml() : OFF.tab === 'list' ? offListHtml() : offDownloadHtml()) + '</div>';
   if (OFF.tab === 'library') offFillList();
 }
 function offLibraryHtml() {
@@ -84,13 +84,20 @@ function offFillList() {
       <button class="off-play" onclick="offPlay('${r.id}')">PLAY</button><button class="off-x" title="Remove from this device" onclick="offRemove('${r.id}')">✕</button></div>`).join('') + (rows.length > 300 ? '<div class="off-sub" style="padding:8px">Showing the first 300 - use search.</div>' : '')
     : '<div class="off-empty">No matches.</div>';
 }
+function offListHtml() {
+  const rows = OFF.idx.filter(r => r.listPos).sort((a, b) => a.listPos - b.listPos);
+  if (!rows.length) return '<div class="off-empty">The list is not saved yet.<br>Open <b>DOWNLOAD</b> while you are online - the list is always included.</div>';
+  return '<div class="off-sub" style="margin-bottom:10px">The hardest levels, ranked by the admins (as of your last update).</div><div class="off-list">' + rows.map(r => `<div class="off-row"><div class="off-rank">#${r.listPos}</div><div class="off-info"><div class="off-name">${esc2(r.name)}</div>
+      <div class="off-sub">${esc2(r.author || '')} · ${esc2(r.difficulty || '')} · ${r.listPoints} pts · ${r.tiles} tiles${r.audio ? ' · ♪' : ''}</div></div>
+      <button class="off-play" onclick="offPlay('${r.id}')">PLAY</button></div>`).join('') + '</div>';
+}
 function offDownloadHtml() {
   const p = OFF.plan, pr = OFF.prog;
   const est = p ? `<div class="off-plan"><b>${p.levels.length}</b> new or changed levels · about <b>${offMB(p.bytes)}</b> to download${p.skippedVideoBytes ? `<br><small>${offMB(p.skippedVideoBytes)} of videos not included (box is off)</small>` : ''}</div>` : '';
   const prog = pr ? `<div class="off-prog"><div class="off-progbar"><i style="width:${pr.total ? Math.round(pr.done / pr.total * 100) : 0}%"></i></div><div class="off-sub">${esc2(pr.text)}</div></div>` : '';
   return `<div class="off-card"><div class="off-h">What to save</div>
-    <label class="off-opt"><input type="radio" name="offscope" ${OFF.scope === 'rated' ? 'checked' : ''} onchange="OFF.scope='rated';OFF.plan=null;renderOffline()"> Rated levels only <small>(the featured ones - smallest)</small></label>
-    <label class="off-opt"><input type="radio" name="offscope" ${OFF.scope === 'all' ? 'checked' : ''} onchange="OFF.scope='all';OFF.plan=null;renderOffline()"> Every level <small>(bigger)</small></label>
+    <label class="off-opt"><input type="radio" name="offscope" ${OFF.scope === 'rated' ? 'checked' : ''} onchange="OFF.scope='rated';OFF.plan=null;renderOffline()"> Rated levels + the list <small>(always saved - smallest)</small></label>
+    <label class="off-opt"><input type="radio" name="offscope" ${OFF.scope === 'all' ? 'checked' : ''} onchange="OFF.scope='all';OFF.plan=null;renderOffline()"> Also every other level <small>(bigger)</small></label>
     <label class="off-opt"><input type="checkbox" ${OFF.music ? 'checked' : ''} onchange="OFF.music=this.checked;OFF.plan=null;renderOffline()"> Music</label>
     <label class="off-opt"><input type="checkbox" ${OFF.video ? 'checked' : ''} onchange="OFF.video=this.checked;OFF.plan=null;renderOffline()"> Videos <small>(big - the server limits how much video it sends per day)</small></label></div>
     ${est}${prog}
@@ -128,6 +135,10 @@ async function offCheck() {
       const l = local.get(r.id), changed = !l || l.ver !== r.ver;
       const wantA = OFF.music && (r.hasAudio || r.songId) && !blobKeys.has(offAudioKey(r));
       const wantV = OFF.video && r.videoBytes > 0 && !(l && l.vidsOk);
+      if (l && !changed && (l.listPos !== r.listPos || l.listPoints !== r.listPoints || l.stars !== r.stars || l.rated !== r.rated || l.difficulty !== r.difficulty || l.name !== r.name)) {   // list position / stars moved: update the label only, no download
+        const nl = Object.assign({}, l, { listPos: r.listPos, listPoints: r.listPoints, stars: r.stars, rated: r.rated, difficulty: r.difficulty, name: r.name });
+        await OffDB.put('idx', nl); OFF.idx = OFF.idx.map(x => x.id === nl.id ? nl : x);
+      }
       if (!changed && !wantA && !wantV) continue;
       need.push({ r, changed, wantA, wantV });
       if (changed) bytes += r.dataBytes;
@@ -154,7 +165,7 @@ async function offDownload() {
         const old = OFF.idx.find(x => x.id === r.id) || {};
         let level = changed ? null : await OffDB.get('levels', r.id);
         if (!level) { level = await offApi('/api/levels/' + r.id + '?lite=1'); delete level.audio; await OffDB.put('levels', level); got += r.dataBytes; }
-        const rec = { id: r.id, name: r.name, author: r.author, difficulty: r.difficulty, stars: r.stars, tiles: r.tiles, songId: r.songId, ver: r.ver, saved: old.saved || Date.now(), audio: !!old.audio, vids: [], vidsOk: true };
+        const rec = { id: r.id, name: r.name, author: r.author, difficulty: r.difficulty, stars: r.stars, rated: r.rated, listPos: r.listPos, listPoints: r.listPoints, tiles: r.tiles, songId: r.songId, ver: r.ver, saved: old.saved || Date.now(), audio: !!old.audio, vids: [], vidsOk: true };
         if (wantA || (!changed && old.audio)) {
           const key = offAudioKey(r);
           if (!(await OffDB.get('blobs', key))) { const b = await fetchBlob(r.songId ? '/api/songs/' + r.songId + '/audio' : '/api/levels/' + r.id + '/audio'); await OffDB.put('blobs', b, key); got += b.size; }
