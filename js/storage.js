@@ -82,6 +82,7 @@ function refreshProfileButton() {
 const mediaUrl = u => (typeof u === 'string' && u.startsWith('/') && typeof API_BASE_URL !== 'undefined') ? API_BASE_URL + u : u;
 async function apiRequest(path, { method = 'GET', body, auth = false, timeout = 45000 } = {}) {
   if (!API_BASE_URL) throw new Error('The online server is not configured.');
+  if (typeof OFFLINE_MODE !== 'undefined' && OFFLINE_MODE) throw new Error('Offline mode is on.');
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (auth) { const token = getAuthToken(); if (token) headers.Authorization = 'Bearer ' + token; }
