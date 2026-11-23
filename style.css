@@ -463,3 +463,4 @@ body.offline-skin::after { content: "OFFLINE"; position: fixed; right: 10px; bot
 .off-progbar i { display: block; height: 100%; background: #e8b84a; }
 .off-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 #offline-menu::before, #offline-menu::after { display: none; }
+.off-rank { min-width: 44px; font-weight: 800; color: #e8b84a; font-size: 18px; }
