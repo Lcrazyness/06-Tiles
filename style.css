@@ -424,3 +424,42 @@ a.btn{text-decoration:none}
 .rm-res-team{display:flex;flex-direction:column;gap:6px}.rm-res-team.mine .note{color:var(--cyan)}
 .rm-rp{display:flex;flex-direction:column;gap:6px}.rm-rp-top{display:flex;align-items:center;justify-content:center;gap:8px;font-size:16px}.rm-up{color:var(--green,#3ddc71);font-weight:900}.rm-down{color:var(--red);font-weight:900}.rm-rankup{color:#ffd84d;font-weight:900}.rm-rankdown{color:var(--red);font-weight:800}
 .rm-card{margin-bottom:10px}#rm-lobby .row-btns{margin-bottom:6px}#rm-lobby .row-btns .btn{flex:1}
+
+/* ---- OFFLINE MODE: deliberately looks nothing like the normal game (terminal / paper look) ---- */
+#offline-menu { background: #11130f; color: #d9d6c3; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; overflow-y: auto; align-items: flex-start; }
+body.offline-skin::after { content: "OFFLINE"; position: fixed; right: 10px; bottom: 8px; z-index: 99998; font: 700 11px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .14em; color: #e8b84a; background: rgba(17,19,15,.82); border: 1px solid #5a4a1c; padding: 3px 8px; border-radius: 3px; pointer-events: none; }
+.off-wrap { width: min(760px, 100%); margin: 0 auto; padding: 16px 16px 60px; }
+.off-bar { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e8b84a; padding-bottom: 10px; margin-bottom: 12px; }
+.off-title { font-weight: 800; letter-spacing: .16em; color: #e8b84a; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+.off-title small { color: #8f8b76; font-weight: 400; letter-spacing: .04em; font-size: 12px; }
+.off-dot { width: 10px; height: 10px; background: #e8b84a; display: inline-block; }
+.off-stats { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 12px; color: #9a9680; margin-bottom: 14px; }
+.off-stats b { color: #d9d6c3; }
+.off-tabs { display: flex; gap: 0; margin-bottom: 14px; border: 1px solid #3a3b30; }
+.off-tabs button { flex: 1; background: transparent; color: #8f8b76; border: 0; padding: 10px; font: inherit; letter-spacing: .12em; cursor: pointer; }
+.off-tabs button.on { background: #e8b84a; color: #11130f; font-weight: 800; }
+.off-btn { background: transparent; color: #d9d6c3; border: 1px solid #5b5c4b; padding: 9px 14px; font: inherit; cursor: pointer; border-radius: 2px; }
+.off-btn:hover:not(:disabled) { border-color: #e8b84a; color: #e8b84a; }
+.off-btn.go { background: #e8b84a; color: #11130f; border-color: #e8b84a; font-weight: 800; }
+.off-btn.danger { color: #d97a6a; border-color: #6a3a32; }
+.off-btn:disabled { opacity: .35; cursor: default; }
+.off-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.off-input { background: #1b1d16; color: #d9d6c3; border: 1px solid #3a3b30; padding: 9px 10px; font: inherit; border-radius: 2px; flex: 1 1 140px; min-width: 0; }
+.off-list { display: flex; flex-direction: column; border-top: 1px solid #2b2c24; }
+.off-row { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid #2b2c24; }
+.off-info { flex: 1; min-width: 0; }
+.off-name { font-weight: 700; color: #f1eedb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.off-sub { font-size: 12px; color: #8f8b76; margin-top: 2px; }
+.off-play { background: #e8b84a; color: #11130f; border: 0; padding: 8px 16px; font: inherit; font-weight: 800; letter-spacing: .08em; cursor: pointer; border-radius: 2px; }
+.off-x { background: transparent; border: 1px solid #3a3b30; color: #8f8b76; padding: 7px 10px; cursor: pointer; border-radius: 2px; font: inherit; }
+.off-empty { padding: 40px 10px; text-align: center; color: #8f8b76; line-height: 1.8; }
+.off-card { border: 1px solid #3a3b30; padding: 14px; margin-bottom: 12px; }
+.off-h { color: #e8b84a; letter-spacing: .12em; font-weight: 800; margin-bottom: 8px; font-size: 12px; }
+.off-opt { display: block; padding: 6px 0; cursor: pointer; }
+.off-opt small { color: #8f8b76; }
+.off-plan { border-left: 3px solid #e8b84a; padding: 8px 12px; margin: 12px 0; background: #1b1d16; }
+.off-prog { margin: 12px 0; }
+.off-progbar { height: 8px; background: #1b1d16; border: 1px solid #3a3b30; }
+.off-progbar i { display: block; height: 100%; background: #e8b84a; }
+.off-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#offline-menu::before, #offline-menu::after { display: none; }
