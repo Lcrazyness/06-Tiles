@@ -41,6 +41,7 @@ function setBattleConn(state, text) {
 }
 
 async function connectBattle() {
+  if (typeof OFFLINE_MODE !== 'undefined' && OFFLINE_MODE) return;
   if (battleSocket && (battleSocket.connected || battleConnState === 'connecting')) return;
   if (!API_BASE_URL) { setBattleConn('error', 'No server configured'); return; }
   setBattleConn('connecting', 'Connecting… (the server can take ~30s to wake up)');
@@ -100,10 +101,9 @@ async function connectBattle() {
     pendingChallengeId = null; incomingChallengeId = null;
     activeMatch = { matchId: d.matchId, opponent: d.opponent.name, level: d.level, target: d.target || 3 };
     myBattleResult = null;
-    if (typeof prefetchMatchAudio === 'function') prefetchMatchAudio(d.level);
-    battleScore = { you: 0, opp: 0, target: activeMatch.target, round: 1 };
+        battleScore = { you: 0, opp: 0, target: activeMatch.target, round: 1 };
     setWaiting('Match found vs ' + d.opponent.name, 'Rated level: ' + d.level.name + ' · first to ' + activeMatch.target + ' round wins');
-    s.emit('match_ready', { matchId: d.matchId });
+    const mid = d.matchId; prefetchMatchAssets(activeMatch.level).then(() => { if (activeMatch && activeMatch.matchId === mid) s.emit('match_ready', { matchId: mid }); });
   });
   s.on('match_go', d => {
     if (!activeMatch || d.matchId !== activeMatch.matchId) return;
