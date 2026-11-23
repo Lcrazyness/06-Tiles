@@ -184,7 +184,7 @@ function renderLevelCardBase(level, source) {
   const row = document.createElement('div');
   row.className = 'song-row';
   row.innerHTML = `
-    <div class="song-art" style="${level.icon || level.thumb ? '' : 'background:' + artGradient(level.name)}">${level.icon || level.thumb ? '<img src="' + escapeHtml(level.icon || level.thumb) + '" alt="">' : '♪'}<span class="speaker">🔊</span></div>
+    <div class="song-art" style="${level.icon || level.thumb ? '' : 'background:' + artGradient(level.name)}">${level.icon || level.thumb ? '<img src="' + escapeHtml(mediaUrl(level.icon || level.thumb)) + '" alt="">' : '♪'}<span class="speaker">🔊</span></div>
     <div class="song-info">
       <div class="song-title">${escapeHtml(level.name)}</div>
       <div class="song-sub">${escapeHtml(level.author || 'You')}</div>
@@ -221,7 +221,7 @@ function openLevelDetail(level, source, fromAdmin = false) {
   const avg = Number(level.ratingAverage || getAvgRating(level) || 0);
   const tiles = level.tileCount || (level.data || []).length;
   const body = `
-    <div class="panel detail-head"><div class="song-art" style="${level.icon || level.thumb ? '' : 'background:' + artGradient(level.name)}">${level.icon || level.thumb ? '<img src="' + escapeHtml(level.icon || level.thumb) + '" alt="">' : '♪'}</div>
+    <div class="panel detail-head"><div class="song-art" style="${level.icon || level.thumb ? '' : 'background:' + artGradient(level.name)}">${level.icon || level.thumb ? '<img src="' + escapeHtml(mediaUrl(level.icon || level.thumb)) + '" alt="">' : '♪'}</div>
       <div><div class="hero-name">${escapeHtml(level.name)}</div><div class="hero-sub">by ${escapeHtml(level.author || 'You')}</div><div class="song-meta"><span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span>${level.featured ? '<span class="feat">★ ' + (level.ratedStars || 0) + ' stars</span>' : ''}${level.listPosition ? '<span class="feat list">#' + level.listPosition + ' · ' + level.listPoints + ' EP</span>' : ''}</div></div></div>
     ${level.description ? '<div class="panel note">' + escapeHtml(level.description).replace(/\n/g, '<br>') + '</div>' : ''}
     <div class="stats-grid three"><div class="stat-card"><span>TILES</span><b>${tiles}</b></div><div class="stat-card"><span>RATING</span><b>${avg ? avg.toFixed(1) : '—'}</b></div><div class="stat-card"><span>PLAYS</span><b>${level.plays || 0}</b></div></div>
@@ -1064,64 +1064,6 @@ async function deleteNews(id) {
 }
 
 // ---------------------------------------------------------------------------
-// Song library
-// ---------------------------------------------------------------------------
-let songPickResolve = null, songPreview = null, songList = [];
-function openSongPicker() {
-  ensureOverlay('songs-menu');
-  return new Promise(resolve => { songPickResolve = resolve; toggleMenu('songs-menu'); document.body.classList.add('songs-over-editor'); loadSongs(); });
-}
-function closeSongPicker(song) {
-  stopSongPreview();
-  document.body.classList.remove('songs-over-editor');
-  const r = songPickResolve; songPickResolve = null;
-  document.getElementById('songs-menu').classList.add('hidden');
-  if (inEditor) { document.getElementById('editor-ui').classList.remove('hidden'); document.body.classList.remove('menus-open'); }
-  else toggleMenu('main-menu');
-  if (r) r(song || null);
-}
-function stopSongPreview() { if (songPreview) { songPreview.pause(); songPreview = null; } }
-async function loadSongs() {
-  const host = document.getElementById('songs-menu');
-  host.innerHTML = screenHtml('SONG LIBRARY', 'closeSongPicker()', '<div class="empty">Loading…</div>');
-  try { songList = (await apiRequest('/api/songs')).songs || []; } catch (e) { host.innerHTML = screenHtml('SONG LIBRARY', 'closeSongPicker()', errorBox(e.message, 'loadSongs()')); return; }
-  renderSongs();
-}
-function renderSongs(filter) {
-  const host = document.getElementById('songs-menu'), admin = isAdminUser(), q = String(filter || '').toLowerCase();
-  const rows = songList.filter(s => !q || (s.name + ' ' + s.artist).toLowerCase().includes(q)).map(s => `<div class="song-row admin-row">
-      <div class="song-art" style="background:${artGradient(s.name)}">♪</div>
-      <div class="song-info"><div class="song-title">${escapeHtml(s.name)}</div><div class="song-sub">${escapeHtml(s.artist || 'Unknown')} · ${(s.size / 1.37 / 1048576).toFixed(1)} MB${s.bpm ? ' · ' + s.bpm + ' BPM' : ''}</div></div>
-      <div class="song-actions"><button class="mini-btn" onclick="previewSong(${s.id})">▶</button><button class="mini-btn" onclick="useSong(${s.id})">Use</button>${admin ? '<button class="mini-btn danger" onclick="deleteSong(' + s.id + ')">🗑</button>' : ''}</div></div>`).join('');
-  host.innerHTML = screenHtml('SONG LIBRARY', 'closeSongPicker()',
-    `<input type="text" id="song-search" class="form-input" placeholder="Search songs…" value="${escapeHtml(filter || '')}" oninput="renderSongs(this.value);document.getElementById('song-search').focus()">
-     ${admin ? '<button class="btn btn-play" onclick="uploadSong()">＋ Upload a song (admin)</button>' : ''}
-     <div class="song-list">${rows || '<div class="empty">No songs yet.' + (admin ? '' : ' Admins can add free songs here.') + '</div>'}</div>`);
-}
-function previewSong(id) {
-  stopSongPreview(); bgAudio.pause();
-  songPreview = new Audio(API_BASE_URL + '/api/songs/' + id + '/audio'); songPreview.volume = 0.8; songPreview.play().catch(() => toast('Could not play the preview.', 'bad'));
-  setTimeout(() => { if (songPreview) songPreview.pause(); }, 20000);
-}
-function useSong(id) { const s = songList.find(x => x.id === id); closeSongPicker(s ? { id: s.id, name: s.name, artist: s.artist, bpm: s.bpm } : null); }
-async function uploadSong() {
-  const r = await openFormDialog({ title: 'Upload a free song', message: 'Audio file up to ~8 MB.', fields: [{ id: 'name', label: 'Song name', maxlength: 80 }, { id: 'artist', label: 'Artist', maxlength: 80 }, { id: 'bpm', label: 'BPM (optional)', type: 'number' }, { id: 'file', label: 'Audio file', type: 'file', accept: 'audio/*' }], okText: 'Upload' });
-  if (!r) return;
-  const f = r.fileFile;
-  if (!f || !r.name.trim()) { toast('Pick a file and give it a name.', 'bad'); return; }
-  if (f.size > 8 * 1048576) { toast('That file is over 8 MB.', 'bad'); return; }
-  try {
-    toast('Uploading…');
-    await apiRequest('/api/admin/songs', { method: 'POST', auth: true, timeout: 120000, body: { name: r.name.trim(), artist: r.artist.trim(), bpm: Number(r.bpm) || null, data: await fileToDataUrl(f) } });
-    toast('Song added.', 'good'); loadSongs();
-  } catch (e) { toast(e.message, 'bad'); }
-}
-async function deleteSong(id) {
-  if (!(await uiConfirm('Remove this song from the library? Levels using it will play without music.', 'Delete', true))) return;
-  try { await apiRequest('/api/admin/songs/' + id, { method: 'DELETE', auth: true }); loadSongs(); } catch (e) { toast(e.message, 'bad'); }
-}
-
-// ---------------------------------------------------------------------------
 // Cloud copies of My Levels (lets admins see + publish unpublished levels)
 // ---------------------------------------------------------------------------
 const syncHashes = new Map(), syncTimers = new Map();
@@ -1232,7 +1174,7 @@ function renderImpBar() {
 // boot
 // ---------------------------------------------------------------------------
 function extrasBoot() {
-  ensureOverlay('news-menu'); ensureOverlay('songs-menu');
+  ensureOverlay('news-menu');
   injectNewsButton(); if (typeof injectLiveButton === 'function') injectLiveButton(); if (typeof refreshLive === 'function') refreshLive(); renderImpBar();
   fetchNews();
   setInterval(() => { if (!document.getElementById('main-menu').classList.contains('hidden')) fetchNews(); }, 120000);
