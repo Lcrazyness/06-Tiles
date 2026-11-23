@@ -50,7 +50,7 @@ function decorVideoEl(sha) {
   e = decorVideos[sha] = document.createElement('video');
   e.muted = true; e.playsInline = true; e.preload = 'auto'; e.crossOrigin = 'anonymous'; e.loop = true; e._ok = false;
   e.onerror = () => { e._bad = true; };
-  VidDB.get(sha).then(b => { e.src = b ? URL.createObjectURL(b) : (API_BASE_URL ? API_BASE_URL + '/api/videos/' + sha : ''); e._ok = true; });
+  VidDB.get(sha).then(b => { e.src = b ? URL.createObjectURL(b) : (API_BASE_URL && !(typeof OFFLINE_MODE !== 'undefined' && OFFLINE_MODE) ? API_BASE_URL + '/api/videos/' + sha : ''); e._ok = true; });
   return e;
 }
 function videoRunning() {
