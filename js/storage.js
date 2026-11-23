@@ -78,6 +78,8 @@ function refreshProfileButton() {
 // ---------------------------------------------------------------------------
 // Server access. One helper so every screen reports problems the same way.
 // ---------------------------------------------------------------------------
+// thumbnails etc. come from the server as relative paths
+const mediaUrl = u => (typeof u === 'string' && u.startsWith('/') && typeof API_BASE_URL !== 'undefined') ? API_BASE_URL + u : u;
 async function apiRequest(path, { method = 'GET', body, auth = false, timeout = 45000 } = {}) {
   if (!API_BASE_URL) throw new Error('The online server is not configured.');
   const headers = {};
@@ -87,7 +89,7 @@ async function apiRequest(path, { method = 'GET', body, auth = false, timeout = 
   const timer = setTimeout(() => ctrl.abort(), timeout);
   let res;
   try {
-    res = await fetch(API_BASE_URL + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctrl.signal, cache: 'no-store' });
+    res = await fetch(API_BASE_URL + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctrl.signal, cache: (method === 'GET' && !auth) ? 'no-cache' : 'no-store' });
   } catch (e) {
     throw new Error(e.name === 'AbortError'
       ? 'The server took too long to answer. It may be waking up - try again in a moment.'
@@ -369,9 +371,10 @@ function dataUrlToBlob(url) {
   return new Blob([arr], { type: mime });
 }
 const blobToDataUrl = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+const MAX_SONG_BYTES = 3 * 1024 * 1024;
 async function audioDataUrl(quiet) {
   if (!currentAudioBlob || currentSongId) return null;      // library songs are referenced by id, not uploaded
-  if (currentAudioBlob.size > 6 * 1024 * 1024) { if (!quiet) toast('Your song is over 6 MB, so it is published without music.', 'bad'); return null; }
+  if (currentAudioBlob.size > MAX_SONG_BYTES) { if (!quiet) toast('Your song is over 3 MB, so it is published without music. Shorten or compress it (an MP3 around 96 kbps) to keep it.', 'bad'); return null; }
   return blobToDataUrl(currentAudioBlob);
 }
 async function withAudio(level, quiet) { level.audio = await audioDataUrl(quiet); return level; }
