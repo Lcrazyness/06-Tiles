@@ -1,7 +1,7 @@
 // offline.js - OFFLINE MODE. Downloads levels (+ music, + videos) once into this browser, then plays them with the network switched OFF,
 // so playing them never uses the server's data. Online features (battle, ranks, accounts, comments...) are unavailable while it is on.
 let OFFLINE_MODE = false;
-const OFF = { tab: 'library', q: '', diff: '', sort: 'name', idx: [], busy: false, cancel: false, plan: null, scope: 'rated', music: true, video: false, log: [], prog: null };
+const OFF = { tab: 'library', q: '', diff: '', sort: 'name', idx: [], busy: false, cancel: false, plan: null, scope: 'rated', music: true, video: true, log: [], prog: null };
 
 // ---- storage (IndexedDB) ---------------------------------------------------
 const OffDB = {
@@ -157,7 +157,8 @@ async function offDownload() {
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   OFF.busy = true; OFF.cancel = false; let done = 0, failed = 0, got = 0, stopMsg = '';
   const queue = plan.levels.slice(), total = queue.length;
-  const fetchBlob = async path => { const r = await _offFetchNet(API_BASE_URL + path); if (!r.ok) { let m = ''; try { m = (await r.json()).message; } catch (e) {} const e = new Error(m || ('Server error ' + r.status)); e.saver = r.status === 503; throw e; } return r.blob(); };
+  let mediaStop = '', mediaMiss = 0;
+  const fetchBlob = async path => { const r = await _offFetchNet(API_BASE_URL + path); if (!r.ok) { let m = ''; try { m = (await r.json()).message; } catch (e) {} const e = new Error(m || ('Server error ' + r.status)); e.status = r.status; throw e; } return r.blob(); };
   const worker = async () => {
     while (queue.length && !OFF.cancel && !stopMsg) {
       const { r, changed, wantA, wantV } = queue.shift();
@@ -166,18 +167,24 @@ async function offDownload() {
         let level = changed ? null : await OffDB.get('levels', r.id);
         if (!level) { level = await offApi('/api/levels/' + r.id + '?lite=1'); delete level.audio; await OffDB.put('levels', level); got += r.dataBytes; }
         const rec = { id: r.id, name: r.name, author: r.author, difficulty: r.difficulty, stars: r.stars, rated: r.rated, listPos: r.listPos, listPoints: r.listPoints, tiles: r.tiles, songId: r.songId, ver: r.ver, saved: old.saved || Date.now(), audio: !!old.audio, vids: [], vidsOk: true };
-        if (wantA || (!changed && old.audio)) {
+        // music + videos are best-effort: if the server says "slow down" (hourly limit / data-saving mode) the LEVEL is still saved, and the media is picked up next time
+        if ((wantA || old.audio || r.songId || r.hasAudio) && OFF.music) {
           const key = offAudioKey(r);
-          if (!(await OffDB.get('blobs', key))) { const b = await fetchBlob(r.songId ? '/api/songs/' + r.songId + '/audio' : '/api/levels/' + r.id + '/audio'); await OffDB.put('blobs', b, key); got += b.size; }
-          rec.audio = true;
+          if (await OffDB.get('blobs', key)) rec.audio = true;
+          else if (wantA && !mediaStop) {
+            try { const b = await fetchBlob(r.songId ? '/api/songs/' + r.songId + '/audio' : '/api/levels/' + r.id + '/audio'); await OffDB.put('blobs', b, key); got += b.size; rec.audio = true; }
+            catch (e) { mediaMiss++; if (e.status === 429 || e.status === 503) mediaStop = e.message; }
+          } else if (wantA) mediaMiss++;
         }
         const vids = [...new Set(((level.decor && level.decor.objects) || []).filter(o => o.kind === 'video' && o.vid).map(o => o.vid))];
         rec.vids = vids;
         for (const sha of vids) {
           if (await VidDB.get(sha)) continue;
-          if (!wantV) { rec.vidsOk = false; continue; }
-          const b = await fetchBlob('/api/videos/' + sha); await VidDB.put(sha, b); got += b.size;
-          const have = (await OffDB.get('meta', 'vids')) || []; if (!have.includes(sha)) { have.push(sha); await OffDB.put('meta', have, 'vids'); }
+          if (!OFF.video || mediaStop) { rec.vidsOk = false; if (OFF.video) mediaMiss++; continue; }
+          try {
+            const b = await fetchBlob('/api/videos/' + sha); await VidDB.put(sha, b); got += b.size;
+            const have = (await OffDB.get('meta', 'vids')) || []; if (!have.includes(sha)) { have.push(sha); await OffDB.put('meta', have, 'vids'); }
+          } catch (e) { rec.vidsOk = false; mediaMiss++; if (e.status === 429 || e.status === 503) mediaStop = e.message; }
         }
         await OffDB.put('idx', rec);
         OFF.idx = OFF.idx.filter(x => x.id !== r.id).concat(rec);
@@ -188,7 +195,7 @@ async function offDownload() {
   await Promise.all([worker(), worker(), worker()]);
   await OffDB.put('meta', Date.now(), 'last');
   OFF.busy = false; OFF.plan = null;
-  OFF.prog = { done: 1, total: 1, text: (OFF.cancel ? 'Stopped. ' : stopMsg ? stopMsg + ' ' : 'Done. ') + 'Saved ' + done + ' levels' + (failed ? ', ' + failed + ' failed (run it again to retry)' : '') + '.' };
+  OFF.prog = { done: 1, total: 1, text: (OFF.cancel ? 'Stopped. ' : stopMsg ? stopMsg + ' ' : 'Done. ') + 'Saved ' + done + ' levels' + (failed ? ', ' + failed + ' failed (run it again to retry)' : '') + '.' + (mediaMiss ? ' ' + mediaMiss + ' music/video file(s) were skipped' + (mediaStop ? ' (' + mediaStop + ')' : '') + ' - wait a bit, then press Check and Download again to get them.' : '') };
   renderOffline();
 }
 
