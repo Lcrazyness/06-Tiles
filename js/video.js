@@ -1,9 +1,9 @@
 // ============================================================================
-// Video decor objects: an MP4 (max 150 MB, max 3 minutes) that plays like a square.
+// Video decor objects: an MP4 (max 40 MB) that plays like a square.
 // The file lives in this browser (IndexedDB) while you edit, and is uploaded in small pieces when you publish.
 // Videos are always muted - the level's own music keeps playing.
 // ============================================================================
-const VIDEO_MAX_BYTES = 300 * 1024 * 1024, VIDEO_CHUNK = 2 * 1024 * 1024;   // any video format your browser can play, any length
+const VIDEO_MAX_BYTES = 40 * 1024 * 1024, VIDEO_CHUNK = 2 * 1024 * 1024;   // any video format your browser can play, any length
 
 const VidDB = {
   db: null,
@@ -24,7 +24,7 @@ const VidDB = {
 // checks a chosen file and stores it locally; returns { sha, dur, w, h }
 async function videoFromFile(file) {
   if (!/^video\//i.test(file.type) && !/\.(mp4|m4v|mov|webm|mkv|ogv|avi|3gp)$/i.test(file.name)) throw new Error('Please choose a video file.');
-  if (file.size > VIDEO_MAX_BYTES) throw new Error('That video is over 300 MB.');
+  if (file.size > VIDEO_MAX_BYTES) throw new Error('That video is over 40 MB (the server has a limited data budget). Trim or compress it first.');
   const url = URL.createObjectURL(file);
   try {
     const meta = await new Promise((res, rej) => {
@@ -101,33 +101,6 @@ async function uploadLevelVideos(decor, silent, library) {
       }
       if (!ok) throw new Error(err);
     }
-    await apiRequest('/api/videos/' + sha + '/finish', { method: 'POST', auth: true, body: { dur: meta.vdur, w: meta.vw, h: meta.vh, mime: blob.type || 'video/mp4', name: meta.vname || '', library: !!library }, timeout: 300000 });
+    await apiRequest('/api/videos/' + sha + '/finish', { method: 'POST', auth: true, body: { dur: meta.vdur, w: meta.vw, h: meta.vh, mime: blob.type || 'video/mp4', name: meta.vname || '', library: false }, timeout: 300000 });
   }
-}
-
-// ---- shared video library (admins add videos once, every editor can use them without uploading anything) ----
-async function pickVideoDialog() {
-  let list = [];
-  if (getAuthToken() && API_BASE_URL) { try { list = (await apiRequest('/api/videos', { auth: true })).videos || []; } catch (e) {} }
-  return new Promise(resolve => {
-    const admin = typeof getAuthUser === 'function' && getAuthUser() && getAuthUser().isAdmin;
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px';
-    const fmt = b => b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB';
-    const fmtT = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
-    wrap.innerHTML = '<div style="background:#16161d;color:#fff;border-radius:14px;padding:16px;max-width:420px;width:100%;max-height:80vh;overflow:auto"><div style="font-weight:700;margin-bottom:8px">🎬 Add a video</div>' +
-      '<button class="btn" id="vp-file" style="width:100%;margin-bottom:10px">Choose a file from this device</button>' +
-      (list.length ? '<div style="font-size:12px;opacity:.7;margin:6px 0">SHARED LIBRARY (no upload needed)</div>' + list.map((v, i) => '<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #333"><div style="flex:1;min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(v.name || 'Video') + '</div><div style="font-size:12px;opacity:.65">' + fmtT(v.dur) + ' · ' + fmt(v.size) + '</div></div><button class="btn small" data-use="' + i + '">Use</button>' + (admin ? '<button class="btn small btn-ghost" data-del="' + i + '">🗑</button>' : '') + '</div>').join('') : '<div style="font-size:12px;opacity:.6">The shared library is empty.' + (admin ? ' Add a video from your device and choose to share it.' : '') + '</div>') +
-      '<button class="btn btn-ghost" id="vp-cancel" style="width:100%;margin-top:10px">Cancel</button></div>';
-    const done = r => { wrap.remove(); resolve(r); };
-    document.body.appendChild(wrap);
-    wrap.querySelector('#vp-file').onclick = () => done({ file: true });
-    wrap.querySelector('#vp-cancel').onclick = () => done(null);
-    wrap.querySelectorAll('[data-use]').forEach(b => b.onclick = () => done({ lib: list[Number(b.dataset.use)] }));
-    wrap.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
-      const v = list[Number(b.dataset.del)];
-      if (!(await uiConfirm('Delete "' + (v.name || 'this video') + '" from the library? Levels using it will show an empty box.', 'Delete'))) return;
-      try { await apiRequest('/api/videos/' + v.sha, { method: 'DELETE', auth: true }); toast('Deleted.', 'good'); done(null); } catch (e) { toast(e.message, 'bad'); }
-    });
-  });
 }
