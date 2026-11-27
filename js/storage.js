@@ -72,6 +72,7 @@ function refreshProfileButton() {
     const icon = user ? user.profileIcon : localStorage.getItem('et_guestIcon');
     avatar.innerHTML = icon ? '<img src="' + escapeHtml(icon) + '" alt="">' : escapeHtml(currentProfile.slice(0, 1).toUpperCase());
     avatar.style.background = icon ? '' : artGradient(currentProfile);
+    avatar.classList.toggle('tg-turkey', hasTurkey(user));
   }
 }
 
