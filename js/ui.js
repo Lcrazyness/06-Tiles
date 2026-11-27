@@ -321,6 +321,7 @@ async function loadAppSettings() {
     maxBpm = d.maxBpm || 500;
     const bpmIn = document.getElementById('edit-bpm'); if (bpmIn) bpmIn.max = maxBpm;
     showAnnouncement(d.announcement);
+    if (typeof applyEvent === 'function') applyEvent(d.event);
   } catch (e) {}
 }
 function showAnnouncement(text, force) {
