@@ -257,6 +257,7 @@ async function publishLevel() {
     return;
   }
   if (!levelVerified) { const mine = myLevels.find(l => l.id === currentEditingId); if (mine && mine.verifiedHash && mine.verifiedHash === levelDataHash()) levelVerified = true; }
+  if (!levelVerified && currentEditingOnlineId && typeof isAdminUser === 'function' && isAdminUser()) levelVerified = true;   // admins editing a public level don't have to beat it first
   if (!levelVerified && isNerfUpdate()) { levelVerified = true; nerfUpdate = true; toast('Only tiles removed / music changed - no need to beat it again.', 'good'); }
   if (!levelVerified) {
     pendingPublishAfterVerification = true;
