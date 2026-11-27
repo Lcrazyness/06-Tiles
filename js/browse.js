@@ -186,7 +186,7 @@ function renderLevelCardBase(level, source) {
   row.innerHTML = `
     <div class="song-art" style="${level.icon || level.thumb ? '' : 'background:' + artGradient(level.name)}">${level.icon || level.thumb ? '<img src="' + escapeHtml(mediaUrl(level.icon || level.thumb)) + '" alt="">' : '♪'}<span class="speaker">🔊</span></div>
     <div class="song-info">
-      <div class="song-title">${escapeHtml(level.name)}</div>
+      <div class="song-title">${tgIcon(level)}${escapeHtml(level.name)}</div>
       <div class="song-sub">${escapeHtml(level.author || 'You')}</div>
       ${level.description ? '<div class="level-desc">' + escapeHtml(level.description) + '</div>' : ''}
       <div class="song-meta"><span class="diff-badge ${difficultyBadgeClass(diff)}">${diff}</span><span>★ ${avg ? avg.toFixed(1) : '—'}</span><span>▶ ${level.plays || 0}</span>${level.featured ? '<span class="feat">★ ' + (level.ratedStars || 0) + ' RATED</span>' : ''}${level.listPosition ? '<span class="feat list">#' + level.listPosition + ' · ' + level.listPoints + ' EP</span>' : ''}</div>
@@ -497,7 +497,7 @@ function renderLevelCard(level, source) {
 }
 
 function levelFilterHtml() {
-  const tags = ['speed', 'chords', 'holds', 'memory', 'tech', 'long', 'short', 'jumps', 'streams', 'strict', 'beginner'];
+  const tags = ['thanksgiving', 'speed', 'chords', 'holds', 'memory', 'tech', 'long', 'short', 'jumps', 'streams', 'strict', 'beginner'];
   return '<div class="level-filters"><select onchange="browseDiff=this.value;renderBrowseLevels()"><option value="">All difficulties</option>' +
     ['Easy', 'Normal', 'Hard', 'Harder', 'Insane', 'Extreme'].map(d => '<option' + (browseDiff === d ? ' selected' : '') + '>' + d + '</option>').join('') + '</select>' +
     '<select onchange="browseTag=this.value;renderBrowseLevels()"><option value="">All tags</option>' + tags.map(t => '<option' + (browseTag === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>';
