@@ -233,6 +233,7 @@ function openLevelDetail(level, source, fromAdmin = false) {
     ${source === 'mine-online' ? '<button class="btn btn-ghost" id="detail-versions">⏪ Versions / roll back</button>' : ''}
     ${source === 'local' && level.verifiedHash ? '<button class="btn btn-ghost" id="detail-unverify">✔ Verified - clear verification</button>' : ''}
     ${source === 'local' ? '<button class="btn btn-ghost" id="detail-edit">✎ Edit</button><button class="btn btn-danger" id="detail-del">Delete from device</button>' : ''}
+    ${source !== 'mine-online' && isAdminUser() && /^[0-9a-f-]{36}$/i.test(String(level.id)) ? '<button class="btn btn-ghost" id="detail-edit-online">🛠 Admin edit (updates it for everyone)</button>' : ''}
     ${source === 'mine-online' ? '<button class="btn btn-ghost" id="detail-edit-online">✎ Edit (updates it publicly)</button><button class="btn btn-danger" id="detail-unpub">Remove from Browse</button>' : ''}
     ${isAdminUser() && source !== 'local' ? '<div class="section-title">ADMIN</div><button class="btn btn-ghost" id="detail-admin-rate">★ Rate / edit rating</button><button class="btn btn-ghost" id="detail-admin-list">🏆 Set list position</button>' : ''}`;
   document.getElementById('level-detail-menu').innerHTML = screenHtml('LEVEL', 'closeLevelDetail()', body);
