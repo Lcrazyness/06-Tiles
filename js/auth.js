@@ -177,7 +177,8 @@ async function finishStatsGame(completed) {
   const before = getAuthUser();
   try {
     const data = await apiRequest('/api/stats/game', { method: 'POST', auth: true, body: { levelId: lvl.id, started: true, completed: !!completed, score: Math.floor(score), notesHit: notesHitThisGame,
-      pct: Math.max(0, Math.min(100, Math.floor(customPlayTime / Math.max(1, levelLastNoteTime) * 100))), elapsed: (performance.now() - runStartedAt) / 1000 } });
+      pct: Math.max(0, Math.min(100, Math.floor(customPlayTime / Math.max(1, levelLastNoteTime) * 100))), elapsed: (performance.now() - runStartedAt) / 1000, flawless: !!completed && currentLives === maxLives } });
+    (data.newBadges || []).forEach(b => ACH_INFO[b] && toast('🍂 New badge: ' + ACH_INFO[b][0] + '!', 'good'));
     if (data.dailyBonus) toast('Daily level bonus: +' + data.dailyBonus + ' ★', 'good');
     if (typeof loadMyProgress === 'function') loadMyProgress();
     if (data.user) {
@@ -230,7 +231,7 @@ async function openStatsModal() {
     toggleMenu('stats-modal');
     return;
   }
-  const draw = u => screenHtml('PLAYER STATS', null, `<div class="panel profile-hero"><div class="avatar big">${u.profileIcon ? '<img src="' + escapeHtml(u.profileIcon) + '" alt="">' : escapeHtml(u.username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(u.username)}</div><div class="hero-sub">Online account</div></div></div>` + statsGridHtml(u.statistics || {}, u));
+  const draw = u => screenHtml('PLAYER STATS', null, `<div class="panel profile-hero"><div class="avatar big ${hasTurkey(u) ? 'tg-turkey' : ''}">${u.profileIcon ? '<img src="' + escapeHtml(u.profileIcon) + '" alt="">' : escapeHtml(u.username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(u.username)}</div><div class="hero-sub">Online account</div></div></div>` + statsGridHtml(u.statistics || {}, u));
   modal.innerHTML = draw(user);
   toggleMenu('stats-modal');
   try {
@@ -323,14 +324,16 @@ const ACH_INFO = {
   first_clear: ['First Clear', 'Complete a level'], rated_clear: ['Rated!', 'Beat a rated level'], insane: ['Insane', 'Beat an Insane rated level'], extreme: ['Extreme', 'Beat an Extreme rated level'],
   notes_1k: ['1,000 Notes', 'Hit 1,000 notes'], notes_10k: ['10,000 Notes', 'Hit 10,000 notes'], win_1: ['First Blood', 'Win a battle'], win_10: ['Duelist', 'Win 10 battles'],
   creator_1: ['Creator', 'Have a level rated'], list_1: ['On the List', 'Beat a List level'], stars_25: ['25 Stars', 'Earn 25 stars'], stars_100: ['100 Stars', 'Earn 100 stars'],
-  ep_500: ['500 EP', 'Earn 500 Extreme Points'], level_10: ['Level 10', 'Reach player level 10'], elo_1200: ['Rated 1200', 'Reach 1200 battle rating']
+  ep_500: ['500 EP', 'Earn 500 Extreme Points'], level_10: ['Level 10', 'Reach player level 10'], elo_1200: ['Rated 1200', 'Reach 1200 battle rating'],
+  tg_feast: ['Feast Starter', 'Beat a Thanksgiving level (event)'], tg_banquet: ['Full Banquet', 'Beat every Thanksgiving level (event)'], tg_thankful: ['Thankful', 'Play on 3 different days during Thanksgiving'], tg_gratitude: ['Gratitude', 'Beat a level without losing a heart (Thanksgiving)']
 };
 const COSMETIC_INFO = {
   tile: { default: ['Classic', ''], ice: ['Ice', '5 stars'], gold: ['Gold', '25 stars'], neon: ['Neon', '100 Extreme Points'], royal: ['Royal', 'Have a level rated'] },
   fx: { default: ['Cyan', ''], sparkle: ['Sparkle', '10 stars'], fire: ['Fire', '250 Extreme Points'], confetti: ['Confetti', '5 battle wins'] },
-  frame: { none: ['None', ''], bronze: ['Bronze', 'Level 5'], silver: ['Silver', 'Level 15'], gold: ['Gold', 'Level 30'], creator: ['Creator', 'Have a level rated'], list: ['List', 'Beat a List level'] }
+  frame: { none: ['None', ''], bronze: ['Bronze', 'Level 5'], silver: ['Silver', 'Level 15'], gold: ['Gold', 'Level 30'], creator: ['Creator', 'Have a level rated'], list: ['List', 'Beat a List level'], harvest: ['Harvest', 'Play 3 days of the Thanksgiving event'] }
 };
-const frameClass = u => 'frame-' + ((u && ((u.cosmetics && u.cosmetics.frame) || u.frame)) || 'none');
+const hasTurkey = u => !!(u && (u.turkey || (Array.isArray(u.achievements) && u.achievements.includes('tg_banquet'))));   // beat every Thanksgiving level
+const frameClass = u => 'frame-' + ((u && ((u.cosmetics && u.cosmetics.frame) || u.frame)) || 'none') + (hasTurkey(u) ? ' tg-turkey' : '');
 
 function xpPanelHtml(u) {
   if (!u || u.level === undefined) return '';
