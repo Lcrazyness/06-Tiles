@@ -231,7 +231,7 @@ async function openStatsModal() {
     toggleMenu('stats-modal');
     return;
   }
-  const draw = u => screenHtml('PLAYER STATS', null, `<div class="panel profile-hero"><div class="avatar big ${hasTurkey(u) ? 'tg-turkey' : ''}">${u.profileIcon ? '<img src="' + escapeHtml(u.profileIcon) + '" alt="">' : escapeHtml(u.username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(u.username)}</div><div class="hero-sub">Online account</div></div></div>` + statsGridHtml(u.statistics || {}, u));
+  const draw = u => screenHtml('PLAYER STATS', null, `<div class="panel profile-hero"><div class="avatar big ${buddyClass(u)}">${u.profileIcon ? '<img src="' + escapeHtml(u.profileIcon) + '" alt="">' : escapeHtml(u.username.slice(0, 1).toUpperCase())}</div><div><div class="hero-name">${escapeHtml(u.username)}</div><div class="hero-sub">Online account</div></div></div>` + statsGridHtml(u.statistics || {}, u));
   modal.innerHTML = draw(user);
   toggleMenu('stats-modal');
   try {
@@ -330,10 +330,13 @@ const ACH_INFO = {
 const COSMETIC_INFO = {
   tile: { default: ['Classic', ''], ice: ['Ice', '5 stars'], gold: ['Gold', '25 stars'], neon: ['Neon', '100 Extreme Points'], royal: ['Royal', 'Have a level rated'] },
   fx: { default: ['Cyan', ''], sparkle: ['Sparkle', '10 stars'], fire: ['Fire', '250 Extreme Points'], confetti: ['Confetti', '5 battle wins'] },
-  frame: { none: ['None', ''], bronze: ['Bronze', 'Level 5'], silver: ['Silver', 'Level 15'], gold: ['Gold', 'Level 30'], creator: ['Creator', 'Have a level rated'], list: ['List', 'Beat a List level'], harvest: ['Harvest', 'Play 3 days of the Thanksgiving event'] }
+  frame: { none: ['None', ''], bronze: ['Bronze', 'Level 5'], silver: ['Silver', 'Level 15'], gold: ['Gold', 'Level 30'], creator: ['Creator', 'Have a level rated'], list: ['List', 'Beat a List level'], harvest: ['Harvest', 'Play 3 days of the Thanksgiving event'] },
+  buddy: { none: ['Nothing', ''], turkey: ['Turkey 🦃', 'Beat every Thanksgiving level'] }
 };
-const hasTurkey = u => !!(u && (u.turkey || (Array.isArray(u.achievements) && u.achievements.includes('tg_banquet'))));   // beat every Thanksgiving level
-const frameClass = u => 'frame-' + ((u && ((u.cosmetics && u.cosmetics.frame) || u.frame)) || 'none') + (hasTurkey(u) ? ' tg-turkey' : '');
+const COSMETIC_TITLES = { tile: 'TILE', fx: 'FX', frame: 'FRAME', buddy: 'SIDE BUDDY' };
+// the side buddy (turkey, ...) shown next to a profile picture: the server sends `buddy` for every player
+const buddyClass = u => (u && u.buddy && u.buddy !== 'none') ? ' buddy buddy-' + u.buddy : '';
+const frameClass = u => 'frame-' + ((u && ((u.cosmetics && u.cosmetics.frame) || u.frame)) || 'none') + buddyClass(u);
 
 function xpPanelHtml(u) {
   if (!u || u.level === undefined) return '';
@@ -349,11 +352,11 @@ function achievementsHtml(u) {
 }
 function cosmeticsHtml(u) {
   if (!u || !u.unlocked) return '';
-  const row = kind => '<div class="cos-row"><span class="cos-kind">' + kind.toUpperCase() + '</span>' + Object.keys(COSMETIC_INFO[kind]).map(id => {
+  const row = kind => '<div class="cos-row"><span class="cos-kind">' + (COSMETIC_TITLES[kind] || kind.toUpperCase()) + '</span>' + Object.keys(COSMETIC_INFO[kind]).map(id => {
     const ok = u.unlocked[kind].includes(id), on = (u.cosmetics || {})[kind] === id;
     return `<button class="cos ${on ? 'on' : ''}" ${ok ? '' : 'disabled'} onclick="equipCosmetic('${kind}','${id}')" title="${ok ? '' : 'Unlock: ' + escapeHtml(COSMETIC_INFO[kind][id][1])}">${escapeHtml(COSMETIC_INFO[kind][id][0])}${ok ? '' : ' 🔒'}</button>`;
   }).join('') + '</div>';
-  return '<div class="panel"><div class="section-title">COSMETICS</div>' + row('tile') + row('fx') + row('frame') + '</div>';
+  return '<div class="panel"><div class="section-title">COSMETICS</div>' + row('tile') + row('fx') + row('frame') + row('buddy') + '</div>';
 }
 async function equipCosmetic(kind, id) {
   const u = getAuthUser(); if (!u) return;
