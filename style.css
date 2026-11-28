@@ -478,9 +478,10 @@ body.tg-theme { --bg1:#4a210c; --bg2:#8a4a14; --bg3:#2e1306; --void:#1a0e07; --b
 .tg-ico { font-size: 1.05em; }
 .frame-harvest { box-shadow: 0 0 0 3px #e8742a, 0 0 0 5px #5a2a0a, 0 0 14px #ffcf5aaa; }
 
-/* the turkey: shown next to the profile picture of everyone who beat every Thanksgiving level */
-.tg-turkey { position: relative; overflow: visible !important; }
-.tg-turkey img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
-.tg-turkey::after { content: '🦃'; position: absolute; right: -7px; bottom: -8px; font-size: 16px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); pointer-events: none; }
-.avatar.big.tg-turkey::after { font-size: 28px; right: -12px; bottom: -10px; }
-.song-art.tg-turkey::after { font-size: 22px; right: -8px; bottom: -8px; }
+/* side buddies: a little companion next to the profile picture (add a new buddy-NAME rule for each new one) */
+.buddy { position: relative; overflow: visible !important; }
+.buddy img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.buddy::after { position: absolute; right: -7px; bottom: -8px; font-size: 16px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); pointer-events: none; }
+.buddy-turkey::after { content: '🦃'; }
+.avatar.big.buddy::after { font-size: 28px; right: -12px; bottom: -10px; }
+.song-art.buddy::after { font-size: 22px; right: -8px; bottom: -8px; }
